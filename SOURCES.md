@@ -1,8 +1,10 @@
 # 🎮 Data Sources & Public APIs
 
-This file documents **all legitimate stores, aggregators, public APIs, domains and newsletters** we plan to support, plus a large reference list of third-party / grey-market keyshops (with heavy warnings).
+This file documents **all legitimate stores, aggregators, public APIs, domains and newsletters** we plan to support, plus third-party keyshops and **UK physical resellers**.
 
-**Philosophy**: Prefer official / public APIs + reputable aggregators. Never hard-scrape keyshops. Store real API keys in environment variables or Django settings (never commit them).
+**Current focus**: United Kingdom + PlayStation games (pilot title: God of War PS4).
+
+**Philosophy**: Prefer official / public APIs + reputable aggregators. Be extremely careful with any internal/unofficial endpoints (e.g. CeX). Store secrets in environment variables only.
 
 ---
 
@@ -15,172 +17,108 @@ This file documents **all legitimate stores, aggregators, public APIs, domains a
   GET https://store.steampowered.com/api/appdetails?appids={APP_ID}&cc={COUNTRY_CODE}&filters=price_overview
   ```
 - **Rate limit**: ~200 requests / 5 minutes
-- **Notes**: Best starting point. Returns `price_overview` with final/initial price in cents + discount %.
-- **API Key needed?**: No for store prices. (Steam Web API key is only needed for other endpoints)
+- **Notes**: Best starting point for PC. Returns `price_overview` with final/initial price in cents + discount %.
 - **Env placeholder**: `STEAM_API_KEY=` (optional)
-- **Docs**: https://partner.steamgames.com / community reverse-engineered docs
+
+### PlayStation Store (PSN)
+- **Website**: https://store.playstation.com/en-gb/
+- **Access**: No simple free public price API. Community wrappers and third-party services (PlatPrices, PSprices) exist.
+- **Notes**: Primary digital source for PS4/PS5. Region = GB for UK.
+- **Status**: Track via aggregators / community tools first.
 
 ### Epic Games Store
 - **Website**: https://store.epicgames.com
-- **Public / Community access**: Limited official public API. Community wrappers exist (e.g. epicstore_api Python package).
-- **Free games endpoint**: Often available via GraphQL or public endpoints.
-- **API Key needed?**: Usually no for basic catalog, but fragile.
-- **Env placeholder**: `EPIC_API_KEY=` (if using paid/partner access later)
-- **Status**: Planned – use carefully / via aggregators first.
+- **Status**: Planned – use carefully / via aggregators.
 
-### Ubisoft Connect / Ubisoft Store
-- **Website**: https://store.ubisoft.com / https://www.ubisoft.com
-- **Public API**: Very limited for third parties. Mostly internal / partner.
-- **Notes**: Better to track via aggregators (ITAD / GG.deals) than direct.
-- **Env placeholder**: `UBISOFT_API_KEY=` (partner only)
-- **Status**: Low priority – use aggregator data.
-
-### Rockstar Games Launcher / Social Club
-- **Website**: https://www.rockstargames.com
-- **Public API**: No useful public price API. Launcher uses internal endpoints.
-- **Notes**: Track Rockstar titles via Steam (many are also on Steam) or aggregators.
-- **Env placeholder**: N/A
-- **Status**: Via Steam / aggregators only.
+### Ubisoft / Rockstar
+- Better via aggregators for now.
 
 ---
 
 ## 2. Price Aggregators (Highly Recommended)
 
-These are the **smartest** way to get multi-store prices without scraping individual shops.
-
 ### GG.deals
 - **Website**: https://gg.deals
-- **API Docs**: https://gg.deals/api/
-- **Key endpoint**:
-  ```
-  GET https://api.gg.deals/v1/prices/by-steam-app-id/?ids={APP_IDS}&key={YOUR_KEY}&region={REGION}
-  ```
-- **Free tier**: Available for personal / open-source (attribution required)
-- **Rate limits**: 100 records/min, 1000/hour (free)
-- **Env placeholder**: `GGDEALS_API_KEY=your_key_here`
-- **How to get key**: Register at gg.deals → settings → generate API key
-- **Status**: ✅ Top priority after Steam
+- **API**: https://gg.deals/api/
+- **Env**: `GGDEALS_API_KEY=`
+- **Status**: ✅ Top priority
 
 ### IsThereAnyDeal (ITAD)
 - **Website**: https://isthereanydeal.com
-- **API Docs**: https://docs.isthereanydeal.com /
-- **Registration**: https://isthereanydeal.com/apps/my/
-- **Auth**: API key or OAuth
-- **Rate limit**: ~1000 requests / 5 min (verified accounts)
-- **Env placeholder**: `ITAD_API_KEY=your_key_here`
-- **Notes**: Excellent historical lows + shop list. Must follow their ToS (attribution, no competition).
+- **Docs**: https://docs.isthereanydeal.com
+- **Env**: `ITAD_API_KEY=`
 - **Status**: ✅ Strongly recommended
 
-### Other Aggregators (Future)
-- **CheapShark** – good free API for deals
-- **PSprices** – multi-platform (Steam + consoles)
-- **Hot.Game** – has a free public API for some data
-- **AllKeyShop**, **Gocdkeys**, **KrakenKeys** – comparison sites (useful for research, not primary data sources)
+### Other
+- CheapShark, PSprices (good for PlayStation), PlatPrices, Hot.Game
 
 ---
 
-## 3. Legitimate / Authorized-leaning Digital Stores
+## 3. UK Physical Resellers (New Focus)
 
-These generally source keys more cleanly (publisher / authorized distributor):
+We are starting with **physical discs** in the UK, especially PlayStation.
 
-- **Fanatical** – https://www.fanatical.com (bundles + keys, publisher partnerships)
-- **Green Man Gaming** – https://www.greenmangaming.com (authorized retailer)
-- **Humble Bundle / Humble Store** – https://www.humblebundle.com
-- **Gamesplanet** – https://gamesplanet.com
-- **WinGameStore** – https://www.wingamestore.com
-- **IndieGala** – https://www.indiegala.com
-- **GameBillet** – https://www.gamebillet.com
-- **GamersGate** – https://www.gamersgate.com
+### CeX (uk.webuy.com)
+- **Website**: https://uk.webuy.com
+- **Type**: Second-hand + some new. Excellent for cheap used PS4/PS5 games.
+- **Internal API** (community reverse-engineered):
+  - Base: `https://wss2.cex.uk.webuy.io/v3/`
+  - Search example: `/boxes?q=God+of+War&firstRecord=1&count=20`
+  - Returns sellPrice, cashPrice (trade-in), exchangePrice, stock, images, category.
+- **Important**: This is **not an official public API**. It can change or be restricted at any time. Use very politely (low volume, heavy caching, delays).
+- **Status**: Pilot target for God of War PS4.
+- **Risk**: Medium (unofficial endpoint). Do not hammer it.
 
-Almost all of the above are already covered by ITAD / GG.deals.
+### Amazon UK
+- **Website**: https://www.amazon.co.uk
+- **Access**: Official Product Advertising API (PA-API) requires Amazon Associates account with sales. Alternatives: Keepa API (paid), or careful public-page approaches.
+- **Notes**: New + used + renewed discs. Strong for comparison.
+- **Status**: Later (after CeX pilot).
 
----
+### Other major UK physical / retail
+| Shop              | URL                          | Notes                              |
+|-------------------|------------------------------|------------------------------------|
+| **GAME**          | https://www.game.co.uk      | High-street + online. New & pre-owned. |
+| Argos             | https://www.argos.co.uk     | Often competitive on new games.    |
+| Smyths Toys       | https://www.smythstoys.com  | Family-friendly pricing.           |
+| Very / Littlewoods| various                      | Occasional deals.                  |
+| eBay UK           | https://www.ebay.co.uk      | Marketplace (used + new). Higher variance. |
+| MusicMagpie / Decluttr | various                 | Trade-in focused.                  |
 
-## 4. Third-Party / Grey-Market Keyshops (USE WITH EXTREME CAUTION)
-
-> **⚠️ STRONG WARNING**  
-> These sites often sell keys significantly cheaper than Steam/Epic (example: Assassin's Creed titles for ~£4 vs £8–10 on Steam). Many users report successful activations, including from Loaded.  
-> **However**:  
-> - Keys may come from regional arbitrage, bulk purchases, or sometimes questionable sources.  
-> - Risk of key revocation, region locks, Steam account flags, or support refusal by publishers.  
-> - Marketplaces (G2A, Kinguin, Eneba, etc.) have third-party sellers — quality varies wildly.  
-> - This project will **never** scrape these sites aggressively. Prices should only be pulled via public aggregators (GG.deals / ITAD) when available.  
-> - Buying is at your own risk. Prefer official stores + authorized resellers when possible.
-
-### Direct Resellers (generally lower risk than open marketplaces)
-| Site                    | URL                              | Notes / Risk Level                  |
-|-------------------------|----------------------------------|-------------------------------------|
-| **Loaded** (ex-CDKeys) | https://www.loaded.com          | Most established direct reseller. User reports of working cheap keys (e.g. AC titles). Medium risk. |
-| Instant Gaming          | https://www.instant-gaming.com  | Popular direct reseller. Medium risk. |
-| K4G (Keys4Games)        | https://k4g.com                 | Large selection, competitive prices. Medium-High. |
-| GameBoost               | https://gameboost.com           | Key reseller. Medium-High. |
-| Difmark                 | https://difmark.com             | Higher risk reports in some communities. |
-
-### Open Marketplaces (higher risk — seller-dependent)
-| Site          | URL                         | Notes / Risk Level                     |
-|---------------|-----------------------------|----------------------------------------|
-| **G2A**       | https://www.g2a.com        | Largest marketplace. Past controversies. Use high-rated sellers + protection if available. High risk. |
-| **Eneba**     | https://www.eneba.com      | Clean UI, buyer protection. Still third-party sellers. Medium-High. |
-| **Kinguin**   | https://www.kinguin.net    | Old marketplace. Buyer protection options. Medium-High. |
-| Gamivo        | https://www.gamivo.com     | Marketplace + some direct. Medium-High. |
-| Driffle       | https://driffle.com        | Marketplace. Higher caution advised. |
-| Electronic First | https://www.electronicfirst.com | Marketplace style. |
-| HRKGame       | https://www.hrkgame.com    | Older keyshop / marketplace. |
-| MMOGA         | https://www.mmoga.com      | Long-running but mixed reputation. |
-| YuPlay        | (various regional)         | Often region-focused. |
-| LootBar       | https://www.lootbar.gg     | More known for top-ups; also keys. |
-| GameSeal      | (search current domain)    | Emerging marketplace. |
-| SCDKey / similar smaller shops | various | Many small clone sites exist — higher scam risk. |
-
-### Other / Smaller / Regional Keyshops (higher scrutiny needed)
-These appear frequently in comparisons but vary greatly in reliability:
-
-- AllKeyShop (comparison + redirects)
-- Gocdkeys / ClaveCD style comparison sites
-- PremiumCDkeys, Wyrel, and many short-lived domains
-- Various regional shops (Russia, Turkey, LATAM, Asia-focused key sites)
-- Bundle-focused or gift-card heavy sites that also sell keys
-
-**There are dozens more small or short-lived sites.** New ones appear and disappear regularly. Always:
-1. Check recent Trustpilot / Reddit feedback
-2. Prefer sites with clear buyer protection
-3. Use PayPal or credit cards that allow chargebacks when possible
-4. Never buy from unknown one-page shops
+**Strategy**: Start with CeX (interesting second-hand prices) + official PSN digital, then expand to Amazon UK and GAME.
 
 ---
 
-## 5. Newsletters & Deal Feeds (Great for alerts)
+## 4. Legitimate Digital Stores
 
-| Name                  | Website / Signup                     | Notes                              |
-|-----------------------|--------------------------------------|------------------------------------|
-| Steam                 | store.steampowered.com               | Wishlist + sale emails             |
-| Epic Games            | store.epicgames.com                  | Free game announcements            |
-| Humble Bundle         | humblebundle.com                     | Weekly deals + Choice              |
-| Fanatical             | fanatical.com                        | Bundle & sale newsletters          |
-| GG.deals              | gg.deals                             | Deal alerts                        |
-| IsThereAnyDeal        | isthereanydeal.com                   | Price alerts + waitlist            |
-| Reddit r/GameDeals    | reddit.com/r/GameDeals               | Community + bot feeds              |
-| FreeGameFindings      | reddit.com/r/FreeGameFindings        | Free keys & giveaways              |
+Fanatical, Green Man Gaming, Humble, Gamesplanet, WinGameStore, IndieGala, GameBillet, GamersGate, etc. (mostly covered by aggregators).
 
 ---
 
-## 6. Environment Variables Template
+## 5. Third-Party / Grey-Market Keyshops (USE WITH EXTREME CAUTION)
 
-Create a `.env` file (never commit it) or use Django settings:
+See previous detailed list (Loaded, G2A, Eneba, Kinguin, Instant Gaming, K4G, etc.).  
+**Never aggressively scrape**. Prefer aggregator data. Always show risk warnings in the UI.
+
+---
+
+## 6. Newsletters & Deal Feeds
+
+Steam, Epic, Humble, Fanatical, GG.deals, ITAD, r/GameDeals, r/FreeGameFindings, etc.
+
+---
+
+## 7. Environment Variables Template
 
 ```env
-# Official
+# Official / Aggregators
 STEAM_API_KEY=
-
-# Aggregators (get free keys)
 GGDEALS_API_KEY=
 ITAD_API_KEY=
 
-# Optional / Partner later
+# Optional later
 EPIC_API_KEY=
-G2A_CLIENT_ID=
-G2A_CLIENT_SECRET=
-UBISOFT_API_KEY=
+KEEP A_API_KEY=          # for Amazon price history if used
 
 # Notifications
 DISCORD_WEBHOOK_URL=
@@ -192,24 +130,23 @@ EMAIL_HOST_PASSWORD=
 
 ---
 
-## 7. Implementation Priority (Django)
+## 8. Implementation Priority (Current)
 
-1. **Steam Store API** – zero key, immediate value
-2. **GG.deals API** – multi-store prices with one call (includes many of the shops above)
-3. **IsThereAnyDeal API** – historical lows + more shops
-4. Epic free games / community wrappers
-5. Partner APIs only if needed later
-6. Direct keyshop scraping – **avoid** (high ban risk + ToS issues)
+1. Django project skeleton + models (Game, Store, PriceRecord)
+2. Pilot title: **God of War (PS4)**
+3. Manual / polite CeX lookup for that title
+4. Simple attractive comparison page (PSN digital vs CeX physical vs others)
+5. Steam + GG.deals / ITAD for broader coverage
+6. Amazon UK + more physical shops later
 
 ---
 
 ## Rules We Follow
 
-- Never scrape HTML of keyshops aggressively
-- Always respect rate limits + robots.txt
-- Cache responses (Redis / Django cache)
-- Attribute sources when required by ToS
-- Store secrets in environment variables only
-- Clearly label any grey-market prices in the UI with risk warnings
+- Prefer official & aggregator APIs
+- Any unofficial endpoint (CeX internal) = low volume + heavy caching + easy to disable
+- Never commit secrets
+- Clearly label physical vs digital and risk level in the UI
+- Start UK + PlayStation, expand later
 
-This keeps the project clean, legal, and ban-resistant while still letting users discover the cheapest available deals (including the ones you found on Loaded).
+This keeps the project focused, legal, and sustainable.
