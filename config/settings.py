@@ -71,8 +71,8 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+LANGUAGE_CODE = 'en-gb'
+TIME_ZONE = 'Europe/London'
 USE_I18N = True
 USE_TZ = True
 
@@ -82,6 +82,6 @@ STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Custom settings for price tracker
-DEFAULT_CURRENCY = os.getenv('DEFAULT_CURRENCY', 'EUR')
-DEFAULT_REGION = os.getenv('DEFAULT_REGION', 'DE')  # country code for Steam API
+# Custom settings for price tracker — UK / PlayStation pilot
+DEFAULT_CURRENCY = os.getenv('DEFAULT_CURRENCY', 'GBP')
+DEFAULT_REGION = os.getenv('DEFAULT_REGION', 'GB')  # country code
