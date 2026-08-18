@@ -50,6 +50,10 @@ No grey-market scraping. No risk of getting your IP blocked. Just reliable, lega
 | **Epic Games**      | Community wrapper | Planned       | Use carefully |
 | Key shops (G2A…)    | Partner / paid    | Later         | Only via official partner APIs |
 
+**Full details, API endpoints, rate limits, newsletters and environment-variable placeholders** are documented in:
+
+📄 **[SOURCES.md](SOURCES.md)**
+
 We start with Steam + aggregators. No direct scraping of reseller sites.
 
 ---
@@ -57,6 +61,7 @@ We start with Steam + aggregators. No direct scraping of reseller sites.
 ## Project Goals
 
 - [x] Private GitHub repo + clean README
+- [x] Comprehensive SOURCES.md (stores, APIs, newsletters)
 - [ ] Django project skeleton + models (Game, Store, PriceRecord, Watchlist)
 - [ ] Steam price client (already prototyped)
 - [ ] Admin + simple list view sorted by price
