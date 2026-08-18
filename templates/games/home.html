@@ -4,16 +4,31 @@
 
 {% block content %}
 <h1 style="font-size: 1.75rem; margin-bottom: 0.5rem;">Tracked Games</h1>
-<p style="color: var(--muted); margin-bottom: 2rem;">
-  Compare digital and physical prices. Currently focused on UK PlayStation titles.
+<p style="color: var(--muted); margin-bottom: 1.25rem;">
+  Compare digital and physical prices. UK PlayStation pilot — filter by platform below.
 </p>
+
+<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.75rem;">
+  <a href="{% url 'games:home' %}"
+     class="badge"
+     style="padding: 0.4rem 0.75rem; {% if not current_platform %}background: var(--accent); color: #fff;{% endif %}">
+    All
+  </a>
+  {% for value, label in platforms %}
+    <a href="?platform={{ value }}"
+       class="badge"
+       style="padding: 0.4rem 0.75rem; {% if current_platform == value %}background: var(--accent); color: #fff;{% endif %}">
+      {{ label }}
+    </a>
+  {% endfor %}
+</div>
 
 {% if games %}
   <div style="display: grid; gap: 1rem;">
     {% for game in games %}
       <a href="{% url 'games:compare' game.slug %}"
          style="display: block; background: var(--card); border: 1px solid var(--border);
-                border-radius: 12px; padding: 1.25rem; transition: border-color 0.15s;">
+                border-radius: 12px; padding: 1.25rem;">
         <div style="display: flex; justify-content: space-between; align-items: center;">
           <div>
             <strong style="font-size: 1.1rem; color: var(--text);">{{ game.title }}</strong>
@@ -31,10 +46,10 @@
   </div>
 {% else %}
   <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; text-align: center;">
-    <p style="color: var(--muted);">No games yet.</p>
+    <p style="color: var(--muted);">No games for this filter.</p>
     <p style="margin-top: 0.75rem; font-size: 0.9rem;">
       Run <code style="background: var(--border); padding: 0.15rem 0.4rem; border-radius: 4px;">python manage.py seed_pilot</code>
-      then refresh.
+      or switch platform above.
     </p>
   </div>
 {% endif %}
