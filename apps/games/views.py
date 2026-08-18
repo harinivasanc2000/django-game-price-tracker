@@ -1,6 +1,6 @@
+import json
 from django.shortcuts import render, get_object_or_404
-from django.db.models import Min
-from .models import Game, PriceRecord, Store
+from .models import Game, PriceRecord
 
 
 def home(request):
@@ -33,7 +33,6 @@ def game_compare(request, slug):
         .order_by("price", "-recorded_at")
     )
 
-    # Current best per store
     seen = set()
     unique_prices = []
     for p in all_prices:
@@ -43,15 +42,12 @@ def game_compare(request, slug):
 
     lowest = unique_prices[0] if unique_prices else None
 
-    # History for chart (oldest first, last 60 points)
-    history_qs = (
+    history = list(
         PriceRecord.objects.filter(game=game)
         .select_related("store")
         .order_by("recorded_at")[:60]
     )
-    history = list(history_qs)
 
-    # Price change vs previous record (same store if possible)
     change = None
     if len(history) >= 2:
         prev = history[-2]
@@ -66,12 +62,10 @@ def game_compare(request, slug):
             "currency": curr.currency,
         }
 
-    # Chart.js data
-    chart_labels = [h.recorded_at.strftime("%d %b %H:%M") for h in history]
-    chart_values = [float(h.price) for h in history]
-    chart_stores = [h.store.name for h in history]
+    chart_labels = json.dumps([h.recorded_at.strftime("%d %b %H:%M") for h in history])
+    chart_values = json.dumps([float(h.price) for h in history])
+    chart_stores = json.dumps([h.store.name for h in history])
 
-    # Sibling platforms (same title, other platforms)
     siblings = (
         Game.objects.filter(title__iexact=game.title, is_active=True)
         .exclude(pk=game.pk)
