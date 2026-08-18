@@ -1,8 +1,8 @@
 # 🎮 Data Sources & Public APIs
 
-This file documents **all legitimate stores, aggregators, public APIs, domains and newsletters** we plan to support.
+This file documents **all legitimate stores, aggregators, public APIs, domains and newsletters** we plan to support, plus a large reference list of third-party / grey-market keyshops (with heavy warnings).
 
-**Philosophy**: Prefer official / public APIs only. Never hard-scrape keyshops. Store real API keys in environment variables or Django settings (never commit them).
+**Philosophy**: Prefer official / public APIs + reputable aggregators. Never hard-scrape keyshops. Store real API keys in environment variables or Django settings (never commit them).
 
 ---
 
@@ -75,37 +75,81 @@ These are the **smartest** way to get multi-store prices without scraping indivi
 - **CheapShark** – good free API for deals
 - **PSprices** – multi-platform (Steam + consoles)
 - **Hot.Game** – has a free public API for some data
+- **AllKeyShop**, **Gocdkeys**, **KrakenKeys** – comparison sites (useful for research, not primary data sources)
 
 ---
 
-## 3. Legitimate Key / Digital Stores
+## 3. Legitimate / Authorized-leaning Digital Stores
 
-We only consider stores that source keys legally (authorized distributors / publishers).
+These generally source keys more cleanly (publisher / authorized distributor):
 
-### Loaded (formerly CDKeys)
-- **Website**: https://www.loaded.com
-- **Public API**: No public developer API for prices (as of 2026)
-- **Notes**: Claims official sources. Track via aggregators only for now.
-- **Env placeholder**: N/A (or partner later)
-- **Status**: Via GG.deals / ITAD
+- **Fanatical** – https://www.fanatical.com (bundles + keys, publisher partnerships)
+- **Green Man Gaming** – https://www.greenmangaming.com (authorized retailer)
+- **Humble Bundle / Humble Store** – https://www.humblebundle.com
+- **Gamesplanet** – https://gamesplanet.com
+- **WinGameStore** – https://www.wingamestore.com
+- **IndieGala** – https://www.indiegala.com
+- **GameBillet** – https://www.gamebillet.com
+- **GamersGate** – https://www.gamersgate.com
 
-### G2A
-- **Website**: https://www.g2a.com
-- **API**: Partner / Export API exists (OAuth) – requires approval as seller/buyer partner.
-- **Docs**: https://www.g2a.com/integration-api/
-- **Notes**: Marketplace (third-party sellers). Higher risk of grey keys. Prefer aggregators.
-- **Env placeholder**: `G2A_CLIENT_ID=` + `G2A_CLIENT_SECRET=` (partner only)
-- **Status**: Low priority / partner only
-
-### Other legitimate-leaning stores
-- Fanatical, Humble Bundle, Green Man Gaming, Gamesplanet, WinGameStore, etc.
-- Almost all are best covered by **ITAD** or **GG.deals**.
+Almost all of the above are already covered by ITAD / GG.deals.
 
 ---
 
-## 4. Newsletters & Deal Feeds (Great for alerts)
+## 4. Third-Party / Grey-Market Keyshops (USE WITH EXTREME CAUTION)
 
-These can be used for free-game / big-sale notifications:
+> **⚠️ STRONG WARNING**  
+> These sites often sell keys significantly cheaper than Steam/Epic (example: Assassin's Creed titles for ~£4 vs £8–10 on Steam). Many users report successful activations, including from Loaded.  
+> **However**:  
+> - Keys may come from regional arbitrage, bulk purchases, or sometimes questionable sources.  
+> - Risk of key revocation, region locks, Steam account flags, or support refusal by publishers.  
+> - Marketplaces (G2A, Kinguin, Eneba, etc.) have third-party sellers — quality varies wildly.  
+> - This project will **never** scrape these sites aggressively. Prices should only be pulled via public aggregators (GG.deals / ITAD) when available.  
+> - Buying is at your own risk. Prefer official stores + authorized resellers when possible.
+
+### Direct Resellers (generally lower risk than open marketplaces)
+| Site                    | URL                              | Notes / Risk Level                  |
+|-------------------------|----------------------------------|-------------------------------------|
+| **Loaded** (ex-CDKeys) | https://www.loaded.com          | Most established direct reseller. User reports of working cheap keys (e.g. AC titles). Medium risk. |
+| Instant Gaming          | https://www.instant-gaming.com  | Popular direct reseller. Medium risk. |
+| K4G (Keys4Games)        | https://k4g.com                 | Large selection, competitive prices. Medium-High. |
+| GameBoost               | https://gameboost.com           | Key reseller. Medium-High. |
+| Difmark                 | https://difmark.com             | Higher risk reports in some communities. |
+
+### Open Marketplaces (higher risk — seller-dependent)
+| Site          | URL                         | Notes / Risk Level                     |
+|---------------|-----------------------------|----------------------------------------|
+| **G2A**       | https://www.g2a.com        | Largest marketplace. Past controversies. Use high-rated sellers + protection if available. High risk. |
+| **Eneba**     | https://www.eneba.com      | Clean UI, buyer protection. Still third-party sellers. Medium-High. |
+| **Kinguin**   | https://www.kinguin.net    | Old marketplace. Buyer protection options. Medium-High. |
+| Gamivo        | https://www.gamivo.com     | Marketplace + some direct. Medium-High. |
+| Driffle       | https://driffle.com        | Marketplace. Higher caution advised. |
+| Electronic First | https://www.electronicfirst.com | Marketplace style. |
+| HRKGame       | https://www.hrkgame.com    | Older keyshop / marketplace. |
+| MMOGA         | https://www.mmoga.com      | Long-running but mixed reputation. |
+| YuPlay        | (various regional)         | Often region-focused. |
+| LootBar       | https://www.lootbar.gg     | More known for top-ups; also keys. |
+| GameSeal      | (search current domain)    | Emerging marketplace. |
+| SCDKey / similar smaller shops | various | Many small clone sites exist — higher scam risk. |
+
+### Other / Smaller / Regional Keyshops (higher scrutiny needed)
+These appear frequently in comparisons but vary greatly in reliability:
+
+- AllKeyShop (comparison + redirects)
+- Gocdkeys / ClaveCD style comparison sites
+- PremiumCDkeys, Wyrel, and many short-lived domains
+- Various regional shops (Russia, Turkey, LATAM, Asia-focused key sites)
+- Bundle-focused or gift-card heavy sites that also sell keys
+
+**There are dozens more small or short-lived sites.** New ones appear and disappear regularly. Always:
+1. Check recent Trustpilot / Reddit feedback
+2. Prefer sites with clear buyer protection
+3. Use PayPal or credit cards that allow chargebacks when possible
+4. Never buy from unknown one-page shops
+
+---
+
+## 5. Newsletters & Deal Feeds (Great for alerts)
 
 | Name                  | Website / Signup                     | Notes                              |
 |-----------------------|--------------------------------------|------------------------------------|
@@ -120,7 +164,7 @@ These can be used for free-game / big-sale notifications:
 
 ---
 
-## 5. Environment Variables Template
+## 6. Environment Variables Template
 
 Create a `.env` file (never commit it) or use Django settings:
 
@@ -148,13 +192,14 @@ EMAIL_HOST_PASSWORD=
 
 ---
 
-## 6. Implementation Priority (Django)
+## 7. Implementation Priority (Django)
 
 1. **Steam Store API** – zero key, immediate value
-2. **GG.deals API** – multi-store prices with one call
+2. **GG.deals API** – multi-store prices with one call (includes many of the shops above)
 3. **IsThereAnyDeal API** – historical lows + more shops
 4. Epic free games / community wrappers
 5. Partner APIs only if needed later
+6. Direct keyshop scraping – **avoid** (high ban risk + ToS issues)
 
 ---
 
@@ -165,5 +210,6 @@ EMAIL_HOST_PASSWORD=
 - Cache responses (Redis / Django cache)
 - Attribute sources when required by ToS
 - Store secrets in environment variables only
+- Clearly label any grey-market prices in the UI with risk warnings
 
-This keeps the project clean, legal, and ban-resistant.
+This keeps the project clean, legal, and ban-resistant while still letting users discover the cheapest available deals (including the ones you found on Loaded).
