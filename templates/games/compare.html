@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block title %}{{ game.title }} · Price Comparison{% endblock %}
+
+{% block extra_css %}
+<style>
+  .hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.75rem;
+    margin-bottom: 2rem;
+  }
+  .hero h1 { font-size: 1.85rem; margin-bottom: 0.35rem; }
+  .hero .meta { color: var(--muted); font-size: 0.95rem; }
+  .price-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.1rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+    transition: border-color 0.15s;
+  }
+  .price-card.best {
+    border-color: #22c55e;
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25);
+  }
+  .price-card .store-name { font-weight: 600; }
+  .price-card .price {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--accent2);
+    white-space: nowrap;
+  }
+  .price-card .price small { font-size: 0.75rem; color: var(--muted); font-weight: 500; }
+  .empty {
+    background: var(--card);
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 2.5rem;
+    text-align: center;
+    color: var(--muted);
+  }
+  .back { display: inline-block; margin-bottom: 1.25rem; font-size: 0.9rem; color: var(--muted); }
+  .back:hover { color: var(--accent2); }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'games:home' %}" class="back">← All games</a>
+
+<div class="hero">
+  <h1>{{ game.title }}</h1>
+  <div class="meta">
+    <span class="badge">{{ game.get_platform_display }}</span>
+    {% if game.release_year %}
+      <span class="badge" style="margin-left: 0.35rem;">{{ game.release_year }}</span>
+    {% endif %}
+    <span style="margin-left: 0.75rem;">UK price comparison</span>
+  </div>
+  {% if lowest %}
+    <p style="margin-top: 1rem; font-size: 1.05rem;">
+      Best current: <strong style="color: var(--good);">{{ lowest.price }} {{ lowest.currency }}</strong>
+      at {{ lowest.store.name }}
+      {% if lowest.is_used %}(used){% elif lowest.is_physical %}(physical){% else %}(digital){% endif %}
+    </p>
+  {% endif %}
+</div>
+
+<h2 style="font-size: 1.1rem; margin-bottom: 1rem; color: var(--muted);">All offers</h2>
+
+{% if prices %}
+  {% for p in prices %}
+    <div class="price-card {% if lowest and p.id == lowest.id %}best{% endif %}">
+      <div>
+        <div class="store-name">{{ p.store.name }}</div>
+        <div style="margin-top: 0.35rem;">
+          {% if p.is_physical %}<span class="badge physical">Physical</span>{% else %}<span class="badge digital">Digital</span>{% endif %}
+          {% if p.is_used %}<span class="badge used" style="margin-left: 0.3rem;">Used</span>{% endif %}
+          {% if lowest and p.id == lowest.id %}<span class="badge lowest" style="margin-left: 0.3rem;">Lowest</span>{% endif %}
+          {% if p.condition %}<span style="color: var(--muted); font-size: 0.8rem; margin-left: 0.4rem;">{{ p.condition }}</span>{% endif %}
+        </div>
+        {% if p.url %}
+          <div style="margin-top: 0.4rem; font-size: 0.85rem;">
+            <a href="{{ p.url }}" target="_blank" rel="noopener">View offer →</a>
+          </div>
+        {% endif %}
+      </div>
+      <div class="price">
+        {{ p.price }} <small>{{ p.currency }}</small>
+      </div>
+    </div>
+  {% endfor %}
+{% else %}
+  <div class="empty">
+    <p style="font-size: 1.05rem; margin-bottom: 0.75rem;">No prices recorded yet</p>
+    <p style="font-size: 0.9rem;">
+      Add some in <a href="/admin/">Django Admin</a> (Price records)<br>
+      or we can add a polite CeX / PSN lookup next.
+    </p>
+  </div>
+{% endif %}
+
+<p style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--muted);">
+  Physical = disc. Used = second-hand (e.g. CeX). Digital = download code / PSN.
+  Always check region and seller before buying from keyshops.
+</p>
+{% endblock %}
