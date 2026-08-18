@@ -9,7 +9,7 @@
     border: 1px solid var(--border);
     border-radius: 16px;
     padding: 1.75rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
   }
   .hero h1 { font-size: 1.85rem; margin-bottom: 0.35rem; }
   .hero .meta { color: var(--muted); font-size: 0.95rem; }
@@ -23,7 +23,6 @@
     align-items: center;
     gap: 1rem;
     margin-bottom: 0.75rem;
-    transition: border-color 0.15s;
   }
   .price-card.best {
     border-color: #22c55e;
@@ -47,7 +46,19 @@
   }
   .back { display: inline-block; margin-bottom: 1.25rem; font-size: 0.9rem; color: var(--muted); }
   .back:hover { color: var(--accent2); }
+  .change-up { color: #f87171; }
+  .change-down { color: #4ade80; }
+  .change-same { color: var(--muted); }
+  .chart-wrap {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+  }
+  .platform-switch { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.75rem; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -62,6 +73,16 @@
     {% endif %}
     <span style="margin-left: 0.75rem;">UK price comparison</span>
   </div>
+
+  {% if siblings %}
+  <div class="platform-switch">
+    <span style="color: var(--muted); font-size: 0.85rem; margin-right: 0.25rem;">Also tracked:</span>
+    {% for s in siblings %}
+      <a href="{% url 'games:compare' s.slug %}" class="badge" style="padding: 0.3rem 0.6rem;">{{ s.get_platform_display }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if lowest %}
     <p style="margin-top: 1rem; font-size: 1.05rem;">
       Best current: <strong style="color: var(--good);">{{ lowest.price }} {{ lowest.currency }}</strong>
@@ -69,7 +90,70 @@
       {% if lowest.is_used %}(used){% elif lowest.is_physical %}(physical){% else %}(digital){% endif %}
     </p>
   {% endif %}
+
+  {% if change %}
+    <p style="margin-top: 0.5rem; font-size: 0.95rem;" class="change-{{ change.direction }}">
+      {% if change.direction == "down" %}
+        ↓ Down {{ change.delta|floatformat:2 }} {{ change.currency }}
+        ({{ change.pct|floatformat:1 }}%) vs last recorded
+      {% elif change.direction == "up" %}
+        ↑ Up {{ change.delta|floatformat:2 }} {{ change.currency }}
+        ({{ change.pct|floatformat:1 }}%) vs last recorded
+      {% else %}
+        No change vs last recorded
+      {% endif %}
+    </p>
+  {% endif %}
 </div>
+
+{% if chart_values %}
+<div class="chart-wrap">
+  <h2 style="font-size: 1rem; margin-bottom: 1rem; color: var(--muted);">Price history</h2>
+  <canvas id="priceChart" height="120"></canvas>
+</div>
+<script>
+  const ctx = document.getElementById('priceChart');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: {{ chart_labels|safe }},
+      datasets: [{
+        label: 'Price',
+        data: {{ chart_values|safe }},
+        borderColor: '#00d4ff',
+        backgroundColor: 'rgba(0, 212, 255, 0.1)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            afterLabel: function(ctx) {
+              const stores = {{ chart_stores|safe }};
+              return stores[ctx.dataIndex] || '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#9a9aab', maxRotation: 45 },
+          grid: { color: '#2a2a35' }
+        },
+        y: {
+          ticks: { color: '#9a9aab' },
+          grid: { color: '#2a2a35' }
+        }
+      }
+    }
+  });
+</script>
+{% endif %}
 
 <h2 style="font-size: 1.1rem; margin-bottom: 1rem; color: var(--muted);">All offers</h2>
 
@@ -89,6 +173,9 @@
             <a href="{{ p.url }}" target="_blank" rel="noopener">View offer →</a>
           </div>
         {% endif %}
+        <div style="margin-top: 0.25rem; font-size: 0.75rem; color: var(--muted);">
+          Recorded {{ p.recorded_at|date:"d M Y H:i" }}
+        </div>
       </div>
       <div class="price">
         {{ p.price }} <small>{{ p.currency }}</small>
@@ -99,14 +186,14 @@
   <div class="empty">
     <p style="font-size: 1.05rem; margin-bottom: 0.75rem;">No prices recorded yet</p>
     <p style="font-size: 0.9rem;">
-      Add some in <a href="/admin/">Django Admin</a> (Price records)<br>
-      or we can add a polite CeX / PSN lookup next.
+      Run <code style="background: var(--border); padding: 0.15rem 0.4rem; border-radius: 4px;">python manage.py fetch_cex_gow</code><br>
+      or add prices in <a href="/admin/">Admin</a>.
     </p>
   </div>
 {% endif %}
 
 <p style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--muted);">
-  Physical = disc. Used = second-hand (e.g. CeX). Digital = download code / PSN.
-  Always check region and seller before buying from keyshops.
+  Physical = disc. Used = second-hand (e.g. CeX). Digital = download / PSN.
+  CeX uses an unofficial endpoint — used politely and rarely.
 </p>
 {% endblock %}
