@@ -69,13 +69,14 @@ class Command(BaseCommand):
                 "title": "God of War",
                 "platform": Game.Platform.PS4,
                 "release_year": 2018,
-                "cover_url": "",
                 "is_active": True,
-                "notes": "",
             },
         )
-        # notes field doesn't exist on Game yet — remove if error
         status = "Created" if created else "Updated"
         self.stdout.write(self.style.SUCCESS(f"{status} pilot game: {game}"))
 
-        self.stdout.write(self.style.SUCCESS("\nPilot data ready. Next: add prices via admin or a CeX client."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                "\nPilot data ready. Next: add prices via admin or a polite CeX client."
+            )
+        )
