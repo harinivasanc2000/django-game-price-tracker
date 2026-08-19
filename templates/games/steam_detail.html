@@ -15,51 +15,61 @@
     font-weight: 600; font-size: 0.95rem; text-decoration: none !important;
   }
   .btn-track { background: var(--accent); color: #fff; }
-  .btn-track:hover { filter: brightness(1.15); }
   .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
   .info-grid { display: grid; gap: 0.5rem; margin-top: 1rem; font-size: 0.95rem; color: var(--muted); }
   .warn-box {
     margin-top: 1rem; padding: 0.85rem 1rem; border-radius: 10px;
     background: #2a1010; border: 1px solid var(--border); color: #f0c0c0; font-size: 0.9rem;
   }
+  .note { margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }
 </style>
 {% endblock %}
 
 {% block content %}
-<a href="{% url 'games:steam_search' %}?q=" style="color: var(--muted); font-size: 0.9rem;">← Search</a>
+<a href="{% url 'games:steam_search' %}" style="color: var(--muted); font-size: 0.9rem;">← Search</a>
 
 <div class="hero" style="margin-top: 1rem;">
   {% if d.header_image %}
     <img src="{{ d.header_image }}" alt="">
   {% endif %}
   <div class="hero-body">
-    <h1 style="font-size: 1.6rem;">{{ d.name }}</h1>
+    <h1 style="font-size: 1.55rem;">{{ d.name }}</h1>
     <div style="margin-top: 0.5rem;">
       <span class="badge digital">{{ d.type }}</span>
       {% if d.is_dlc %}<span class="badge dlc" style="margin-left: 0.3rem;">DLC / Extra</span>{% endif %}
+      {% if d.coming_soon %}<span class="badge" style="margin-left: 0.3rem;">Coming soon</span>{% endif %}
       {% for p in d.platforms %}<span class="badge" style="margin-left: 0.3rem;">{{ p }}</span>{% endfor %}
       {% if d.discount %}<span class="badge lowest" style="margin-left: 0.3rem;">-{{ d.discount }}%</span>{% endif %}
     </div>
 
     <p style="margin-top: 1rem; font-size: 1.35rem;">
-      {% if d.discount and d.original %}
-        <span class="price-was">{{ d.original }} {{ d.currency }}</span>
+      {% if d.price_status == "paid" %}
+        {% if d.discount and d.original %}
+          <span class="price-was">{{ d.original }} {{ d.currency }}</span>
+        {% endif %}
+        <span class="price-now">{{ d.price }} {{ d.currency }}</span>
+      {% elif d.price_status == "free" %}
+        <span class="price-now">Free</span>
+      {% else %}
+        <span style="color: var(--muted); font-weight: 700;">Unknown</span>
       {% endif %}
-      <span class="price-now">
-        {% if d.is_free or d.price == 0 %}Free{% else %}{{ d.price }} {{ d.currency }}{% endif %}
-      </span>
     </p>
-    {% if d.discount and d.original %}
-      <p style="font-size: 0.85rem; color: var(--muted);">
-        Retail / list price as baseline: {{ d.original }} {{ d.currency }}
+
+    {% if d.price_note %}
+      <p class="note">{{ d.price_note }}</p>
+    {% endif %}
+
+    {% if d.price_status == "paid" and d.list_price %}
+      <p class="note">
+        Retail baseline (Steam list / pre-discount): <strong>{{ d.list_price }} {{ d.currency }}</strong>
       </p>
     {% endif %}
+    <p class="note">{{ d.launch_price_note }}</p>
 
     {% if d.is_dlc and d.parent_name %}
       <div class="warn-box">
-        This looks like <strong>DLC / extra content</strong>, not the full game.
+        This is <strong>DLC / extra</strong>, not the full game.
         Parent: <a href="{% url 'games:steam_detail' d.parent_app_id %}">{{ d.parent_name }}</a>
-        — open that for the main game price.
       </div>
     {% endif %}
 
@@ -76,12 +86,16 @@
 
     <div class="actions">
       <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">
-        {% if already_tracked %}Save new price snapshot{% else %}Track this price{% endif %}
+        {% if already_tracked %}Save new snapshot{% else %}Track{% endif %}
       </a>
       {% if already_tracked %}
-        <a class="btn btn-ghost" href="{% url 'games:compare' already_tracked.slug %}">Open tracked page</a>
+        <a class="btn btn-ghost" href="{% url 'games:compare' already_tracked.slug %}">Tracked page</a>
+        <form method="post" action="{% url 'games:untrack' already_tracked.slug %}" style="display:inline;" onsubmit="return confirm('Untrack this game?');">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-ghost" style="cursor:pointer; font-family:inherit;">Untrack</button>
+        </form>
       {% endif %}
-      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Open on Steam</a>
+      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
     </div>
   </div>
 </div>
