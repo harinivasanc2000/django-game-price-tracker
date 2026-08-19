@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Game, Store, PriceRecord
+from .models import Game, Store, PriceRecord, BrowseHistory
 
 
 @admin.register(Store)
@@ -21,16 +21,18 @@ class GameAdmin(admin.ModelAdmin):
 @admin.register(PriceRecord)
 class PriceRecordAdmin(admin.ModelAdmin):
     list_display = (
-        "game",
-        "store",
-        "price",
-        "currency",
-        "is_physical",
-        "is_used",
-        "in_stock",
-        "recorded_at",
+        "game", "store", "price", "original_price", "currency",
+        "is_physical", "is_used", "in_stock", "recorded_at",
     )
     list_filter = ("store", "is_physical", "is_used", "currency", "in_stock")
     search_fields = ("game__title", "store__name")
     date_hierarchy = "recorded_at"
     raw_id_fields = ("game", "store")
+
+
+@admin.register(BrowseHistory)
+class BrowseHistoryAdmin(admin.ModelAdmin):
+    list_display = ("action", "title", "query", "steam_app_id", "created_at", "session_key")
+    list_filter = ("action",)
+    search_fields = ("title", "query", "session_key")
+    date_hierarchy = "created_at"
