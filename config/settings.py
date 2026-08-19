@@ -23,7 +23,6 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Local apps
     'apps.games',
 ]
 
@@ -50,6 +49,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.games.context_processors.site_ui',
             ],
         },
     },
@@ -82,6 +82,9 @@ STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Custom settings for price tracker — UK / PlayStation pilot
 DEFAULT_CURRENCY = os.getenv('DEFAULT_CURRENCY', 'GBP')
-DEFAULT_REGION = os.getenv('DEFAULT_REGION', 'GB')  # country code
+DEFAULT_REGION = os.getenv('DEFAULT_REGION', 'GB')
+
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/'
