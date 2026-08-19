@@ -12,6 +12,18 @@
   }
   .btn-track { background: var(--accent); color: #fff; }
   .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .offer-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.55rem;
+    margin: 1rem 0 0.25rem;
+  }
+  .offer-chip {
+    background: #1a0c0c; border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.65rem 0.75rem; text-decoration: none !important; color: inherit;
+  }
+  .offer-chip:hover { border-color: var(--accent2); }
+  .offer-chip .s { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .offer-chip .p { font-weight: 700; color: var(--accent2); margin-top: 0.2rem; font-size: 1.05rem; }
+  .offer-chip.best { border-color: #2a6a3a; box-shadow: 0 0 0 1px rgba(62,207,106,0.25); }
   .deal-row {
     display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
     padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); font-size: 0.92rem;
@@ -23,15 +35,16 @@
     margin: 0.5rem 1rem 1rem; padding: 0.75rem 0.9rem; border-radius: 10px;
     background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.82rem; line-height: 1.45;
   }
-  .chart-toolbar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
-    margin: 0.5rem 0 0.85rem;
-  }
+  .chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.5rem 0 0.85rem; }
   .chart-toolbar label { font-size: 0.85rem; color: var(--muted); }
   .chart-toolbar select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 0.4rem 0.65rem; font-size: 0.9rem;
   }
+  .kind { font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px; margin-left: 0.35rem; }
+  .kind.official { background: #1a3a2a; color: #86efac; }
+  .kind.marketplace { background: #1e3a5f; color: #7dd3fc; }
+  .kind.third-party { background: #3a2a1a; color: #fcd34d; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -49,27 +62,30 @@
       {% for p in d.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
     </div>
 
-    <p style="margin-top: 1rem; font-size: 1.3rem;">
-      {% if d.price_status == "paid" %}
-        {% if d.discount and d.original %}<span class="price-was">{{ d.original }} {{ d.currency }}</span>{% endif %}
-        <span class="price-now">{{ d.price }} {{ d.currency }}</span>
-        <span style="font-size: 0.8rem; color: var(--muted);">Steam</span>
-      {% elif d.price_status == "free" %}
-        <span class="price-now">Free</span>
-      {% else %}
-        <span style="color: var(--muted); font-weight: 700;">Unknown</span>
-      {% endif %}
-    </p>
-
-    {% if best_third_party %}
-      <p style="font-size: 0.95rem; margin-top: 0.35rem;">
-        Best other PC store: <strong class="price-now">{{ best_third_party.price }} {{ best_third_party.currency }}</strong>
-        at {{ best_third_party.store_name }}
+    {% if live_offers %}
+      <div class="offer-grid">
+        {% for o in live_offers %}
+          <a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url|default:'#' }}" {% if o.url %}target="_blank" rel="noopener"{% endif %}>
+            <div class="s">{{ o.store }}{% if forloop.first %} · lowest{% endif %}</div>
+            <div class="p">{{ o.price }} {{ o.currency }}</div>
+            <span class="kind {{ o.kind }}">{{ o.kind }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p style="margin-top: 1rem;">
+        {% if d.price_status == "paid" %}
+          <span class="price-now">{{ d.price }} {{ d.currency }}</span> Steam
+        {% elif d.price_status == "free" %}
+          <span class="price-now">Free</span>
+        {% else %}
+          <span style="color: var(--muted); font-weight: 700;">Unknown</span>
+        {% endif %}
       </p>
     {% endif %}
 
     {% if launch %}
-      <p style="font-size: 0.9rem; color: var(--muted); margin-top: 0.35rem;">
+      <p style="font-size: 0.9rem; color: var(--muted); margin-top: 0.65rem;">
         Launch reference: <strong style="color: var(--text);">{{ launch }} {{ launch_currency }}</strong>
       </p>
     {% endif %}
@@ -83,7 +99,7 @@
       {% else %}
         <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">Track</a>
       {% endif %}
-      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Open Steam</a>
+      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
     </div>
   </div>
 </div>
@@ -100,9 +116,7 @@
   </div>
   <canvas id="priceChart" height="140"></canvas>
   <div class="disclaimer" style="margin: 1rem 0 0;">
-    <strong>Disclaimer:</strong> Average mixes official and third-party/key-shop prices and may mix currencies (e.g. GBP Steam vs USD deals).
-    Prefer a single seller in the dropdown for a cleaner reading.
-    Keyshops can be grey-market — verify the seller.
+    Average can mix GBP/USD and official vs keyshops. Prefer one seller for a clean reading.
   </div>
 </div>
 <script>
@@ -110,78 +124,42 @@
   const data = {{ chart_json|safe }};
   const colors = ['#e03030','#e8a838','#3ecf6a','#5b8def','#c084fc','#f472b6','#2dd4bf','#a3a3a3'];
   const select = document.getElementById('sellerSelect');
-
-  // Fill seller options
   (data.sellers || []).forEach(s => {
     const opt = document.createElement('option');
-    opt.value = s;
-    opt.textContent = s;
-    select.appendChild(opt);
+    opt.value = s; opt.textContent = s; select.appendChild(opt);
   });
-
   const ctx = document.getElementById('priceChart');
   let chart;
-
   function datasetsFor(mode) {
     const ds = [];
     if (mode === '__avg__') {
-      ds.push({
-        label: 'Average (all sellers)',
-        data: data.average,
-        borderColor: '#e03030',
-        backgroundColor: 'rgba(224,48,48,0.1)',
-        fill: true, spanGaps: true, tension: 0.25, pointRadius: 3,
-      });
+      ds.push({ label: 'Average', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
     } else if (mode === '__all__') {
       (data.sellers || []).forEach((s, i) => {
-        ds.push({
-          label: s,
-          data: data.series[s],
-          borderColor: colors[i % colors.length],
-          spanGaps: true, tension: 0.25, pointRadius: 2,
-          borderWidth: 1.5,
-        });
+        ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.25, pointRadius: 2, borderWidth: 1.5 });
       });
     } else {
-      ds.push({
-        label: mode,
-        data: data.series[mode] || [],
-        borderColor: '#e03030',
-        backgroundColor: 'rgba(224,48,48,0.1)',
-        fill: true, spanGaps: true, tension: 0.25, pointRadius: 3,
-      });
+      ds.push({ label: mode, data: data.series[mode] || [], borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
     }
-    // Always show launch reference when present
     if (data.launch && data.launch.some(v => v != null)) {
-      ds.push({
-        label: 'Launch reference',
-        data: data.launch,
-        borderColor: '#a89090',
-        borderDash: [6, 4],
-        pointRadius: 0, spanGaps: true,
-      });
+      ds.push({ label: 'Launch reference', data: data.launch, borderColor: '#a89090', borderDash: [6, 4], pointRadius: 0, spanGaps: true });
     }
     return ds;
   }
-
   function render(mode) {
-    const cfg = {
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
       type: 'line',
       data: { labels: data.labels, datasets: datasetsFor(mode) },
       options: {
-        plugins: {
-          legend: { labels: { color: '#a89090', boxWidth: 12, font: { size: 11 } } }
-        },
+        plugins: { legend: { labels: { color: '#a89090', boxWidth: 12, font: { size: 11 } } } },
         scales: {
           x: { ticks: { color: '#a89090', maxRotation: 45 }, grid: { color: '#3a1515' } },
           y: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } }
         }
       }
-    };
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, cfg);
+    });
   }
-
   select.addEventListener('change', () => render(select.value));
   render('__avg__');
 })();
@@ -189,28 +167,52 @@
 {% endif %}
 
 <div class="panel">
-  <h2>PlayStation & Amazon (UK)</h2>
-  <div class="disclaimer">
-    PSN and Amazon do <strong>not</strong> offer a free public price API for arbitrary titles.
-    Links open official search results so you can check live prices. Manual prices can be added in Admin later.
-  </div>
-  {% for link in external_links %}
-    <div class="deal-row">
-      <div>
-        <strong>{{ link.name }}</strong>
-        <div style="font-size: 0.8rem; color: var(--muted);">{{ link.note }}</div>
-        <div style="font-size: 0.8rem; margin-top: 0.2rem;"><a href="{{ link.url }}" target="_blank" rel="noopener">Open search →</a></div>
+  <h2>PlayStation Store (UK)</h2>
+  <p style="padding: 0 1rem; font-size: 0.8rem; color: var(--muted);">Public store search API · live digital prices</p>
+  {% if psn_rows %}
+    {% for row in psn_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{{ row.name }}</strong>
+          {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.35rem;">Full game</span>{% endif %}
+          {% if row.content_type %}<span style="font-size:0.75rem;color:var(--muted);margin-left:0.35rem;">{{ row.content_type }}</span>{% endif %}
+          {% for p in row.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
+          <div style="font-size:0.8rem;margin-top:0.2rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">Open on PSN →</a></div>
+        </div>
+        <div class="price-now">{{ row.display_price }}</div>
       </div>
-      <div style="color: var(--muted); font-size: 0.85rem;">Check site</div>
+    {% endfor %}
+  {% else %}
+    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No PSN matches right now.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>Amazon UK</h2>
+  {% if amazon_blocked %}
+    <div class="disclaimer">
+      Amazon blocked automated access (WAF/captcha). Open the public search instead — same results you’d see in a browser.
+      {% if amazon_search_url %}<div style="margin-top:0.4rem;"><a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Amazon UK search →</a></div>{% endif %}
     </div>
-  {% endfor %}
+  {% endif %}
+  {% if amazon_rows %}
+    {% for row in amazon_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{{ row.name }}</strong>
+          <div style="font-size:0.8rem;margin-top:0.2rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">View on Amazon →</a></div>
+        </div>
+        <div class="price-now">{{ row.price }} {{ row.currency }}</div>
+      </div>
+    {% endfor %}
+  {% elif not amazon_blocked %}
+    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No parseable Amazon results.</p>
+  {% endif %}
 </div>
 
 <div class="panel">
   <h2>Other PC digital stores</h2>
-  <div class="disclaimer">
-    May include <strong>keyshops / third-party</strong> (CheapShark). Prefer Steam, GOG, Epic, Humble when unsure.
-  </div>
+  <div class="disclaimer">May include <strong>keyshops / third-party</strong>. Prefer Steam, GOG, Epic, Humble when unsure.</div>
   {% if store_deals %}
     {% for deal in store_deals %}
       <div class="deal-row">
