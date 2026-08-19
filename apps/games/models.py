@@ -77,7 +77,13 @@ class PriceRecord(models.Model):
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="prices")
     price = models.DecimalField(max_digits=10, decimal_places=2)
     currency = models.CharField(max_length=3, default="GBP")
-    original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    original_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Retail / list price (Steam initial) — base for discount graphs",
+    )
     discount_percent = models.PositiveSmallIntegerField(null=True, blank=True)
     url = models.URLField(blank=True)
     is_physical = models.BooleanField(default=False, help_text="True for disc / physical copy")
@@ -96,3 +102,26 @@ class PriceRecord(models.Model):
     def __str__(self):
         kind = "used" if self.is_used else ("physical" if self.is_physical else "digital")
         return f"{self.game.title} @ {self.store.name}: {self.price} {self.currency} ({kind})"
+
+
+class BrowseHistory(models.Model):
+    """Browser-like history of searches and title views (session-based)."""
+
+    class Action(models.TextChoices):
+        SEARCH = "search", "Search"
+        VIEW = "view", "View title"
+        TRACK = "track", "Track price"
+
+    session_key = models.CharField(max_length=64, db_index=True)
+    action = models.CharField(max_length=10, choices=Action.choices)
+    query = models.CharField(max_length=255, blank=True)
+    steam_app_id = models.PositiveIntegerField(null=True, blank=True)
+    title = models.CharField(max_length=255, blank=True)
+    detail_url = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.action}: {self.title or self.query} @ {self.created_at}"
