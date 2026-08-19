@@ -1,91 +1,65 @@
 # Changelog — full project log
 
-Timestamps are approximate commit/session times (UTC/BST project work).
-
 ---
 
-## 2026-08-19 21:10 BST — Graph seller dropdown + PSN / Amazon UK
+## 2026-08-19 21:50 BST — Public search scrape + UI
 
 ### Added
-- Graph **dropdown**:
-  - **Average (all sellers)** — time-wise mean of available seller prices at each point (default)
-  - **All sellers (overlay)** — every series on one chart
-  - **Per seller** — Steam, Humble, Fanatical, etc. (whatever appears in deals/history)
-- Launch reference still drawn as dashed baseline
-- `apps/games/clients/external_stores.py`
-  - Registers **PlayStation Store (UK)** and **Amazon UK** store rows
-  - Deep-search links for PSN + Amazon UK (+ PS4/PS5 search hints)
-- Detail page section **PlayStation & Amazon (UK)** with open-search links
+- **PSN UK live prices** via public Chihiro tumbler search JSON
+  - `apps/games/clients/psn.py`
+  - Full-game ranking, product links, platforms
+- **Amazon UK** best-effort public search HTML parser
+  - `apps/games/clients/amazon_uk.py`
+  - When Amazon WAF blocks (common): shows search link, not fake prices
+- Detail **live offer chips** (Steam / PSN / Amazon / best PC deal) sorted lowest first
+- Refresh task also snapshots **PSN** (+ Amazon when unblocked)
+- Chart includes PSN + Amazon points when available
 
-### Honest limits
-- **PSN** and **Amazon** have no free public bulk price API → links to official search, not live scraped prices
-- Live auto-prices remain: Steam (region) + CheapShark PC stores
-- Average can mix GBP/USD — disclaimer on the graph
+### UI
+- Offer chip grid with official / marketplace / third-party tags
+- Clearer panels for PSN, Amazon, PC keystores
+
+### Limits
+- Amazon often returns captcha to servers/datacenters — browser search link fallback
+- Keyshop deals still via CheapShark (USD)
+- Be polite: no high-frequency scraping
 
 ### Still TODO
-- [ ] Amazon Product Advertising API (needs keys) for live UK prices
-- [ ] PSN product-id mapping for true digital prices
-- [ ] CeX UK for used physical
-- [ ] GBP FX normalisation on average chart
+- [ ] CeX when endpoint allows
+- [ ] GBP FX for USD deals on average chart
 - [ ] Discord/email alerts
+- [ ] Per-user watchlists
 
 ---
 
-## 2026-08-19 20:45 BST — Celery + merged graph + this log
+## 2026-08-19 21:10 BST — Graph seller dropdown + PSN/Amazon links
 
-### Added
-- `config/celery.py` — Celery app, daily beat at 06:00 Europe/London
-- `config/__init__.py` loads `celery_app`
-- `CELERY_BROKER_URL` / result backend (Redis default `redis://127.0.0.1:6379/0`)
-- `apps/games/tasks.py` — refresh Steam + best third-party
-- `python manage.py refresh_prices` (sync) / `--async` (Celery)
-- Merged chart + keyshop disclaimers
-
-### Note
-- Celery needs Redis; without it use `refresh_prices` only
+- Dropdown: Average / All / per-seller
+- PSN + Amazon deep-search links (before live scrape)
 
 ---
 
-## 2026-08-19 20:35 BST — Seed slug fix + detail multi-store + stay-on-page track
+## 2026-08-19 20:45 BST — Celery
 
-### Fixed
-- `UNIQUE constraint failed: games_game.slug` on `seed_launch_prices`
-
-### Changed
-- Title click = full detail without tracking
-- Track/Untrack stay on detail page
-- CheapShark multi-store deals
+- Daily refresh, `refresh_prices` command, Redis optional
 
 ---
 
-## 2026-08-19 20:20 BST — Clean home + popular
+## 2026-08-19 20:35 BST — Seed slug fix + multi-store detail
 
-- No track/untrack flash on home
-- Search → Tracked → Popular
-- Superuser: prefer system Terminal if VS Code crashes on password
-
----
-
-## 2026-08-19 19:55 BST — Comet wallpaper, drawer, login, launch prices
-
-- SiteSettings, AdminChangeLog, launch_price seed, tracked drawer, login/profile, comet wallpaper
+- Fixed UNIQUE slug on seed
+- Track stays on page; CheapShark deals
 
 ---
 
-## 2026-08-19 19:40 BST — Search polish
+## Earlier today
 
-- Typeahead, free vs unknown, aliases, DLC ranking, untrack
+- Clean home, popular, typeahead, free vs unknown, comet wallpaper, launch prices, drawer, login
 
----
-
-## 2026-08-19 earlier — Foundation
-
-- Django project, Steam API, models, SOURCES, pilot → generic search
-
-### Errors fixed earlier
-- `no such table` → migrate first
-- Hard-coded GoW → keyword search
-- Track-on-click → view-first
+### Errors fixed
+- Redis connection refused → use `refresh_prices` or start Redis
+- Seed slug IntegrityError
+- no such table → migrate first
 - False Free → Unknown
 
 ---
@@ -93,8 +67,7 @@ Timestamps are approximate commit/session times (UTC/BST project work).
 ## Commands
 
 ```bash
-python manage.py migrate
-python manage.py seed_launch_prices
-python manage.py refresh_prices
+git pull
 python manage.py runserver
+python manage.py refresh_prices   # Steam + PSN + CheapShark (+ Amazon if allowed)
 ```
