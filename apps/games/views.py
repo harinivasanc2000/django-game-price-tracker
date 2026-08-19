@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from decimal import Decimal
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
@@ -9,6 +10,7 @@ from django.views.decorators.http import require_POST
 from .models import Game, PriceRecord, Store, BrowseHistory
 from .clients.steam import search_store, get_app_details, suggest_store
 from .clients.cheapshark import deals_for_title
+from .clients.external_stores import external_links_for_title, ensure_uk_stores
 
 POPULAR_APP_IDS = [
     1091500, 1245620, 271590, 1174180, 1593500, 1086940,
@@ -43,6 +45,71 @@ def _unique_slug(name: str, app_id: int) -> str:
             slug = f"steam-{app_id}"
             break
     return slug[:180]
+
+
+def _build_chart_payload(already, detail, store_deals, launch):
+    """
+    Per-seller time series + average + launch.
+    series: { "Steam": [..], "Humble Store": [..], ... }
+    labels aligned across all series (nulls for gaps).
+    """
+    current = float(detail["price"]) if detail.get("price") is not None else None
+    # seller -> list of (label, price)
+    points: dict[str, list[tuple[str, float]]] = defaultdict(list)
+
+    if already:
+        history = list(
+            PriceRecord.objects.filter(game=already)
+            .select_related("store")
+            .order_by("recorded_at")[:150]
+        )
+        for h in history:
+            label = h.recorded_at.strftime("%d %b %H:%M")
+            name = h.store.name
+            points[name].append((label, float(h.price)))
+
+    # Live "Now" points
+    now = "Now"
+    if current is not None and detail.get("price_status") == "paid":
+        points["Steam"].append((now, current))
+    for deal in store_deals[:12]:
+        points[deal["store_name"]].append((now, float(deal["price"])))
+
+    # Union of time labels in order of first appearance
+    labels: list[str] = []
+    seen = set()
+    for pairs in points.values():
+        for lab, _ in pairs:
+            if lab not in seen:
+                seen.add(lab)
+                labels.append(lab)
+    if not labels:
+        labels = ["Now"]
+
+    # Map label -> price per seller (last wins)
+    series: dict[str, list] = {}
+    for seller, pairs in points.items():
+        by_lab = {}
+        for lab, price in pairs:
+            by_lab[lab] = price
+        series[seller] = [by_lab.get(lab) for lab in labels]
+
+    # Time-wise average across sellers that have a value at that label
+    avg = []
+    for i, _lab in enumerate(labels):
+        vals = [series[s][i] for s in series if series[s][i] is not None]
+        avg.append(round(sum(vals) / len(vals), 2) if vals else None)
+
+    launch_series = [launch for _ in labels] if launch is not None else [None for _ in labels]
+
+    sellers = sorted(series.keys(), key=lambda s: (s != "Steam", s.lower()))
+    return {
+        "labels": labels,
+        "series": series,
+        "average": avg,
+        "launch": launch_series,
+        "sellers": sellers,
+    }
 
 
 def home(request):
@@ -100,6 +167,7 @@ def steam_detail(request, app_id: int):
         detail_url=f"/steam/{app_id}/",
     )
 
+    ensure_uk_stores()
     already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
     catalog = Game.objects.filter(steam_app_id=app_id).first()
     store_deals = deals_for_title(detail["name"], limit=18)
@@ -108,54 +176,8 @@ def steam_detail(request, app_id: int):
     launch_currency = (catalog.launch_currency if catalog else None) or "GBP"
     launch_source = (catalog.launch_price_source if catalog else "") or ""
 
-    current = float(detail["price"]) if detail.get("price") is not None else None
-    best_tp = float(store_deals[0]["price"]) if store_deals else None
-
-    # Build merged time series from DB history (Steam vs third-party)
-    chart_labels = []
-    chart_steam = []
-    chart_third = []
-    chart_launch = []
-
-    if already:
-        history = list(
-            PriceRecord.objects.filter(game=already)
-            .select_related("store")
-            .order_by("recorded_at")[:120]
-        )
-        # Group by day label; keep last steam / last third-party per day
-        by_day: dict[str, dict] = {}
-        for h in history:
-            day = h.recorded_at.strftime("%d %b %H:%M")
-            slot = by_day.setdefault(day, {"steam": None, "third": None})
-            is_steam = h.store.slug == "steam" or h.store.store_type == Store.StoreType.OFFICIAL
-            is_tp = h.store.store_type in (
-                Store.StoreType.KEYSHOP,
-                Store.StoreType.MARKETPLACE,
-                Store.StoreType.AUTHORIZED,
-            ) or h.store.slug.startswith("cs-")
-            if is_steam:
-                slot["steam"] = float(h.price)
-            if is_tp:
-                slot["third"] = float(h.price)
-
-        for day, slot in by_day.items():
-            chart_labels.append(day)
-            chart_steam.append(slot["steam"])
-            chart_third.append(slot["third"])
-            chart_launch.append(launch)
-
-    # Always include a "now" snapshot so chart works before any track history
-    if not chart_labels:
-        chart_labels = ["Now"]
-        chart_steam = [current]
-        chart_third = [best_tp]
-        chart_launch = [launch]
-    else:
-        chart_labels.append("Now")
-        chart_steam.append(current)
-        chart_third.append(best_tp)
-        chart_launch.append(launch)
+    chart = _build_chart_payload(already, detail, store_deals, launch)
+    external = external_links_for_title(detail["name"])
 
     return render(
         request,
@@ -166,15 +188,13 @@ def steam_detail(request, app_id: int):
             "already_tracked": already,
             "catalog_game": catalog,
             "store_deals": store_deals,
+            "external_links": external,
             "launch": launch,
             "launch_currency": launch_currency,
             "launch_source": launch_source,
             "best_third_party": store_deals[0] if store_deals else None,
-            "chart_labels": json.dumps(chart_labels),
-            "chart_steam": json.dumps(chart_steam),
-            "chart_third": json.dumps(chart_third),
-            "chart_launch": json.dumps(chart_launch),
-            "has_chart": bool(chart_labels),
+            "chart_json": json.dumps(chart),
+            "has_chart": bool(chart["labels"]),
         },
     )
 
@@ -201,6 +221,7 @@ def track_steam(request, app_id: int):
         defaults["launch_price_source"] = existing.launch_price_source
 
     game, _ = Game.objects.update_or_create(steam_app_id=app_id, defaults=defaults)
+    ensure_uk_stores()
 
     store, _ = Store.objects.get_or_create(
         slug="steam",
@@ -236,7 +257,6 @@ def track_steam(request, app_id: int):
         notes=notes,
     )
 
-    # Also snapshot best third-party once on track
     try:
         from .tasks import refresh_one_game
 
