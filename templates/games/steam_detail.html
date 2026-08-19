@@ -19,6 +19,10 @@
   .deal-row:last-child { border-bottom: none; }
   .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.25rem; overflow: hidden; }
   .panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.85rem 1rem 0.35rem; }
+  .disclaimer {
+    margin: 0.5rem 1rem 1rem; padding: 0.75rem 0.9rem; border-radius: 10px;
+    background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.82rem; line-height: 1.45;
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -45,21 +49,20 @@
         <span class="price-now">Free</span>
       {% else %}
         <span style="color: var(--muted); font-weight: 700;">Unknown</span>
-        <span style="font-size: 0.75rem; color: var(--muted);">not free</span>
       {% endif %}
     </p>
+
+    {% if best_third_party %}
+      <p style="font-size: 0.95rem; margin-top: 0.35rem;">
+        Best other store: <strong class="price-now">{{ best_third_party.price }} {{ best_third_party.currency }}</strong>
+        at {{ best_third_party.store_name }}
+        <span style="font-size: 0.75rem; color: var(--muted);">(third-party feed)</span>
+      </p>
+    {% endif %}
 
     {% if launch %}
       <p style="font-size: 0.9rem; color: var(--muted); margin-top: 0.35rem;">
         Launch reference: <strong style="color: var(--text);">{{ launch }} {{ launch_currency }}</strong>
-        {% if launch_source %}<span style="font-size: 0.75rem;"> · {{ launch_source|truncatechars:60 }}</span>{% endif %}
-      </p>
-    {% endif %}
-    {% if d.price_note %}<p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem;">{{ d.price_note }}</p>{% endif %}
-
-    {% if d.is_dlc and d.parent_name %}
-      <p style="margin-top: 0.75rem; font-size: 0.9rem; color: #f0c0c0;">
-        DLC — full game: <a href="{% url 'games:steam_detail' d.parent_app_id %}">{{ d.parent_name }}</a>
       </p>
     {% endif %}
 
@@ -77,27 +80,60 @@
   </div>
 </div>
 
-{% if chart_values and chart_values != "[]" %}
+{% if has_chart %}
 <div class="panel" style="padding: 1rem;">
-  <h2 style="padding: 0;">{% if history_count %}Your snapshots{% else %}Launch vs current{% endif %}</h2>
-  <canvas id="priceChart" height="110" style="margin-top: 0.5rem;"></canvas>
+  <h2 style="padding: 0;">Price comparison graph</h2>
+  <p style="font-size: 0.8rem; color: var(--muted); margin: 0.35rem 0 0.75rem;">
+    Steam (official) vs third-party / key-store deals vs launch reference.
+  </p>
+  <canvas id="priceChart" height="130"></canvas>
+  <div class="disclaimer" style="margin: 1rem 0 0;">
+    <strong>Disclaimer:</strong> Third-party and key-seller prices come from public deal aggregators
+    (CheapShark). They may include grey-market keyshops. Keys can be region-locked or revoked.
+    Always verify the seller. Steam prices are official for your selected region ({{ country }}).
+    Launch prices are approximate public references, not live API history.
+    Currencies may differ (Steam region vs USD deals) — compare carefully.
+  </div>
 </div>
 <script>
+  const labels = {{ chart_labels|safe }};
+  const steam = {{ chart_steam|safe }};
+  const third = {{ chart_third|safe }};
+  const launch = {{ chart_launch|safe }};
   new Chart(document.getElementById('priceChart'), {
     type: 'line',
     data: {
-      labels: {{ chart_labels|safe }},
-      datasets: [{
-        data: {{ chart_values|safe }},
-        borderColor: '#e03030',
-        backgroundColor: 'rgba(224,48,48,0.1)',
-        fill: true, tension: 0.25, pointRadius: 4,
-      }]
+      labels,
+      datasets: [
+        {
+          label: 'Steam (official)',
+          data: steam,
+          borderColor: '#e03030',
+          backgroundColor: 'rgba(224,48,48,0.08)',
+          spanGaps: true, tension: 0.25, pointRadius: 3,
+        },
+        {
+          label: 'Third-party / keys (USD feed)',
+          data: third,
+          borderColor: '#e8a838',
+          borderDash: [4, 3],
+          spanGaps: true, tension: 0.25, pointRadius: 3,
+        },
+        {
+          label: 'Launch reference',
+          data: launch,
+          borderColor: '#a89090',
+          borderDash: [6, 4],
+          pointRadius: 0, spanGaps: true,
+        },
+      ]
     },
     options: {
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { labels: { color: '#a89090', boxWidth: 12, font: { size: 11 } } }
+      },
       scales: {
-        x: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } },
+        x: { ticks: { color: '#a89090', maxRotation: 45 }, grid: { color: '#3a1515' } },
         y: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } }
       }
     }
@@ -107,9 +143,10 @@
 
 <div class="panel">
   <h2>Other digital stores</h2>
-  <p style="padding: 0 1rem 0.5rem; font-size: 0.8rem; color: var(--muted);">
-    Via CheapShark public API (USD). Steam row above uses your region ({{ country }}).
-  </p>
+  <div class="disclaimer">
+    Aggregated deals may include <strong>keyshops and third-party sellers</strong>.
+    Not all are official stores. Prefer Steam / GOG / Epic / Humble when in doubt.
+  </div>
   {% if store_deals %}
     {% for deal in store_deals %}
       <div class="deal-row">
@@ -118,7 +155,7 @@
           {% if deal.savings %}<span class="badge lowest" style="margin-left: 0.35rem;">-{{ deal.savings }}%</span>{% endif %}
           {% if deal.url %}<div style="font-size: 0.8rem;"><a href="{{ deal.url }}" target="_blank" rel="noopener">Deal link</a></div>{% endif %}
         </div>
-        <div style="text-align: right; white-space: nowrap;">
+        <div style="text-align: right;">
           {% if deal.retail and deal.retail > deal.price %}
             <div class="price-was">{{ deal.retail }} {{ deal.currency }}</div>
           {% endif %}
@@ -127,11 +164,7 @@
       </div>
     {% endfor %}
   {% else %}
-    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No cross-store deals found for this title right now.</p>
+    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No cross-store deals found.</p>
   {% endif %}
 </div>
-
-{% if d.short_description %}
-  <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">{{ d.short_description|truncatewords:45 }}</p>
-{% endif %}
 {% endblock %}
