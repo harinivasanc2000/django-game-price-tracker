@@ -11,6 +11,8 @@ from .models import Game, PriceRecord, Store, BrowseHistory
 from .clients.steam import search_store, get_app_details, suggest_store
 from .clients.cheapshark import deals_for_title
 from .clients.external_stores import external_links_for_title, ensure_uk_stores
+from .clients.psn import search_psn, best_psn_deal
+from .clients.amazon_uk import search_amazon_uk
 
 POPULAR_APP_IDS = [
     1091500, 1245620, 271590, 1174180, 1593500, 1086940,
@@ -47,14 +49,8 @@ def _unique_slug(name: str, app_id: int) -> str:
     return slug[:180]
 
 
-def _build_chart_payload(already, detail, store_deals, launch):
-    """
-    Per-seller time series + average + launch.
-    series: { "Steam": [..], "Humble Store": [..], ... }
-    labels aligned across all series (nulls for gaps).
-    """
+def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows):
     current = float(detail["price"]) if detail.get("price") is not None else None
-    # seller -> list of (label, price)
     points: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
     if already:
@@ -65,17 +61,22 @@ def _build_chart_payload(already, detail, store_deals, launch):
         )
         for h in history:
             label = h.recorded_at.strftime("%d %b %H:%M")
-            name = h.store.name
-            points[name].append((label, float(h.price)))
+            points[h.store.name].append((label, float(h.price)))
 
-    # Live "Now" points
     now = "Now"
     if current is not None and detail.get("price_status") == "paid":
         points["Steam"].append((now, current))
-    for deal in store_deals[:12]:
+    for deal in store_deals[:10]:
         points[deal["store_name"]].append((now, float(deal["price"])))
+    for row in psn_rows[:3]:
+        if row.get("price") is not None and float(row["price"]) > 0:
+            points["PlayStation Store (UK)"].append((now, float(row["price"])))
+            break
+    for row in amazon_rows[:2]:
+        if row.get("price") is not None:
+            points["Amazon UK"].append((now, float(row["price"])))
+            break
 
-    # Union of time labels in order of first appearance
     labels: list[str] = []
     seen = set()
     for pairs in points.values():
@@ -86,7 +87,6 @@ def _build_chart_payload(already, detail, store_deals, launch):
     if not labels:
         labels = ["Now"]
 
-    # Map label -> price per seller (last wins)
     series: dict[str, list] = {}
     for seller, pairs in points.items():
         by_lab = {}
@@ -94,14 +94,12 @@ def _build_chart_payload(already, detail, store_deals, launch):
             by_lab[lab] = price
         series[seller] = [by_lab.get(lab) for lab in labels]
 
-    # Time-wise average across sellers that have a value at that label
     avg = []
     for i, _lab in enumerate(labels):
         vals = [series[s][i] for s in series if series[s][i] is not None]
         avg.append(round(sum(vals) / len(vals), 2) if vals else None)
 
     launch_series = [launch for _ in labels] if launch is not None else [None for _ in labels]
-
     sellers = sorted(series.keys(), key=lambda s: (s != "Steam", s.lower()))
     return {
         "labels": labels,
@@ -172,12 +170,64 @@ def steam_detail(request, app_id: int):
     catalog = Game.objects.filter(steam_app_id=app_id).first()
     store_deals = deals_for_title(detail["name"], limit=18)
 
+    # Public search scrapes / APIs
+    psn_rows = search_psn(detail["name"], limit=8)
+    amazon = search_amazon_uk(detail["name"], limit=6)
+    amazon_rows = amazon.get("results") or []
+
     launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
     launch_currency = (catalog.launch_currency if catalog else None) or "GBP"
     launch_source = (catalog.launch_price_source if catalog else "") or ""
 
-    chart = _build_chart_payload(already, detail, store_deals, launch)
+    chart = _build_chart_payload(
+        already, detail, store_deals, launch, psn_rows, amazon_rows
+    )
     external = external_links_for_title(detail["name"])
+
+    # Quick compare strip: lowest known right now
+    live_offers = []
+    if detail.get("price_status") == "paid" and detail.get("price") is not None:
+        live_offers.append(
+            {
+                "store": "Steam",
+                "price": detail["price"],
+                "currency": detail.get("currency") or "GBP",
+                "kind": "official",
+                "url": detail.get("url"),
+            }
+        )
+    best_psn = best_psn_deal(detail["name"])
+    if best_psn:
+        live_offers.append(
+            {
+                "store": "PSN UK",
+                "price": best_psn["price"],
+                "currency": "GBP",
+                "kind": "official",
+                "url": best_psn.get("url"),
+            }
+        )
+    if amazon_rows:
+        live_offers.append(
+            {
+                "store": "Amazon UK",
+                "price": amazon_rows[0]["price"],
+                "currency": "GBP",
+                "kind": "marketplace",
+                "url": amazon_rows[0].get("url"),
+            }
+        )
+    if store_deals:
+        live_offers.append(
+            {
+                "store": store_deals[0]["store_name"],
+                "price": store_deals[0]["price"],
+                "currency": store_deals[0].get("currency") or "USD",
+                "kind": "third-party",
+                "url": store_deals[0].get("url"),
+            }
+        )
+    live_offers.sort(key=lambda x: float(x["price"]))
 
     return render(
         request,
@@ -188,7 +238,12 @@ def steam_detail(request, app_id: int):
             "already_tracked": already,
             "catalog_game": catalog,
             "store_deals": store_deals,
+            "psn_rows": psn_rows,
+            "amazon_rows": amazon_rows,
+            "amazon_blocked": amazon.get("blocked", True),
+            "amazon_search_url": amazon.get("search_url"),
             "external_links": external,
+            "live_offers": live_offers,
             "launch": launch,
             "launch_currency": launch_currency,
             "launch_source": launch_source,
