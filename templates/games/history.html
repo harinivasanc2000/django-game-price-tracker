@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}History · Game Price Tracker{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Your history</h1>
+<p style="color: var(--muted); margin-bottom: 1.5rem; font-size: 0.95rem;">
+  Searches, title views and tracks from this browser session (with timestamps).
+</p>
+
+{% if items %}
+  <div style="display: grid; gap: 0.5rem;">
+    {% for i in items %}
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+        <div>
+          <span class="badge">{{ i.get_action_display }}</span>
+          {% if i.action == "search" %}
+            <a href="{% url 'games:steam_search' %}?q={{ i.query|urlencode }}" style="margin-left: 0.5rem;">{{ i.query }}</a>
+          {% elif i.steam_app_id %}
+            <a href="{% url 'games:steam_detail' i.steam_app_id %}" style="margin-left: 0.5rem;">{{ i.title|default:i.steam_app_id }}</a>
+          {% else %}
+            <span style="margin-left: 0.5rem;">{{ i.title|default:"—" }}</span>
+          {% endif %}
+        </div>
+        <span style="color: var(--muted); font-size: 0.85rem;">{{ i.created_at|date:"d M Y H:i:s" }}</span>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p style="color: var(--muted);">No history yet. Search or open a title.</p>
+{% endif %}
+{% endblock %}
