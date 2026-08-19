@@ -23,6 +23,15 @@
     margin: 0.5rem 1rem 1rem; padding: 0.75rem 0.9rem; border-radius: 10px;
     background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.82rem; line-height: 1.45;
   }
+  .chart-toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
+    margin: 0.5rem 0 0.85rem;
+  }
+  .chart-toolbar label { font-size: 0.85rem; color: var(--muted); }
+  .chart-toolbar select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.4rem 0.65rem; font-size: 0.9rem;
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -54,9 +63,8 @@
 
     {% if best_third_party %}
       <p style="font-size: 0.95rem; margin-top: 0.35rem;">
-        Best other store: <strong class="price-now">{{ best_third_party.price }} {{ best_third_party.currency }}</strong>
+        Best other PC store: <strong class="price-now">{{ best_third_party.price }} {{ best_third_party.currency }}</strong>
         at {{ best_third_party.store_name }}
-        <span style="font-size: 0.75rem; color: var(--muted);">(third-party feed)</span>
       </p>
     {% endif %}
 
@@ -82,70 +90,126 @@
 
 {% if has_chart %}
 <div class="panel" style="padding: 1rem;">
-  <h2 style="padding: 0;">Price comparison graph</h2>
-  <p style="font-size: 0.8rem; color: var(--muted); margin: 0.35rem 0 0.75rem;">
-    Steam (official) vs third-party / key-store deals vs launch reference.
-  </p>
-  <canvas id="priceChart" height="130"></canvas>
+  <h2 style="padding: 0;">Price graph</h2>
+  <div class="chart-toolbar">
+    <label for="sellerSelect">Show</label>
+    <select id="sellerSelect">
+      <option value="__avg__">Average (all sellers)</option>
+      <option value="__all__">All sellers (overlay)</option>
+    </select>
+  </div>
+  <canvas id="priceChart" height="140"></canvas>
   <div class="disclaimer" style="margin: 1rem 0 0;">
-    <strong>Disclaimer:</strong> Third-party and key-seller prices come from public deal aggregators
-    (CheapShark). They may include grey-market keyshops. Keys can be region-locked or revoked.
-    Always verify the seller. Steam prices are official for your selected region ({{ country }}).
-    Launch prices are approximate public references, not live API history.
-    Currencies may differ (Steam region vs USD deals) — compare carefully.
+    <strong>Disclaimer:</strong> Average mixes official and third-party/key-shop prices and may mix currencies (e.g. GBP Steam vs USD deals).
+    Prefer a single seller in the dropdown for a cleaner reading.
+    Keyshops can be grey-market — verify the seller.
   </div>
 </div>
 <script>
-  const labels = {{ chart_labels|safe }};
-  const steam = {{ chart_steam|safe }};
-  const third = {{ chart_third|safe }};
-  const launch = {{ chart_launch|safe }};
-  new Chart(document.getElementById('priceChart'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        {
-          label: 'Steam (official)',
-          data: steam,
-          borderColor: '#e03030',
-          backgroundColor: 'rgba(224,48,48,0.08)',
-          spanGaps: true, tension: 0.25, pointRadius: 3,
-        },
-        {
-          label: 'Third-party / keys (USD feed)',
-          data: third,
-          borderColor: '#e8a838',
-          borderDash: [4, 3],
-          spanGaps: true, tension: 0.25, pointRadius: 3,
-        },
-        {
-          label: 'Launch reference',
-          data: launch,
-          borderColor: '#a89090',
-          borderDash: [6, 4],
-          pointRadius: 0, spanGaps: true,
-        },
-      ]
-    },
-    options: {
-      plugins: {
-        legend: { labels: { color: '#a89090', boxWidth: 12, font: { size: 11 } } }
-      },
-      scales: {
-        x: { ticks: { color: '#a89090', maxRotation: 45 }, grid: { color: '#3a1515' } },
-        y: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } }
-      }
-    }
+(function () {
+  const data = {{ chart_json|safe }};
+  const colors = ['#e03030','#e8a838','#3ecf6a','#5b8def','#c084fc','#f472b6','#2dd4bf','#a3a3a3'];
+  const select = document.getElementById('sellerSelect');
+
+  // Fill seller options
+  (data.sellers || []).forEach(s => {
+    const opt = document.createElement('option');
+    opt.value = s;
+    opt.textContent = s;
+    select.appendChild(opt);
   });
+
+  const ctx = document.getElementById('priceChart');
+  let chart;
+
+  function datasetsFor(mode) {
+    const ds = [];
+    if (mode === '__avg__') {
+      ds.push({
+        label: 'Average (all sellers)',
+        data: data.average,
+        borderColor: '#e03030',
+        backgroundColor: 'rgba(224,48,48,0.1)',
+        fill: true, spanGaps: true, tension: 0.25, pointRadius: 3,
+      });
+    } else if (mode === '__all__') {
+      (data.sellers || []).forEach((s, i) => {
+        ds.push({
+          label: s,
+          data: data.series[s],
+          borderColor: colors[i % colors.length],
+          spanGaps: true, tension: 0.25, pointRadius: 2,
+          borderWidth: 1.5,
+        });
+      });
+    } else {
+      ds.push({
+        label: mode,
+        data: data.series[mode] || [],
+        borderColor: '#e03030',
+        backgroundColor: 'rgba(224,48,48,0.1)',
+        fill: true, spanGaps: true, tension: 0.25, pointRadius: 3,
+      });
+    }
+    // Always show launch reference when present
+    if (data.launch && data.launch.some(v => v != null)) {
+      ds.push({
+        label: 'Launch reference',
+        data: data.launch,
+        borderColor: '#a89090',
+        borderDash: [6, 4],
+        pointRadius: 0, spanGaps: true,
+      });
+    }
+    return ds;
+  }
+
+  function render(mode) {
+    const cfg = {
+      type: 'line',
+      data: { labels: data.labels, datasets: datasetsFor(mode) },
+      options: {
+        plugins: {
+          legend: { labels: { color: '#a89090', boxWidth: 12, font: { size: 11 } } }
+        },
+        scales: {
+          x: { ticks: { color: '#a89090', maxRotation: 45 }, grid: { color: '#3a1515' } },
+          y: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } }
+        }
+      }
+    };
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, cfg);
+  }
+
+  select.addEventListener('change', () => render(select.value));
+  render('__avg__');
+})();
 </script>
 {% endif %}
 
 <div class="panel">
-  <h2>Other digital stores</h2>
+  <h2>PlayStation & Amazon (UK)</h2>
   <div class="disclaimer">
-    Aggregated deals may include <strong>keyshops and third-party sellers</strong>.
-    Not all are official stores. Prefer Steam / GOG / Epic / Humble when in doubt.
+    PSN and Amazon do <strong>not</strong> offer a free public price API for arbitrary titles.
+    Links open official search results so you can check live prices. Manual prices can be added in Admin later.
+  </div>
+  {% for link in external_links %}
+    <div class="deal-row">
+      <div>
+        <strong>{{ link.name }}</strong>
+        <div style="font-size: 0.8rem; color: var(--muted);">{{ link.note }}</div>
+        <div style="font-size: 0.8rem; margin-top: 0.2rem;"><a href="{{ link.url }}" target="_blank" rel="noopener">Open search →</a></div>
+      </div>
+      <div style="color: var(--muted); font-size: 0.85rem;">Check site</div>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="panel">
+  <h2>Other PC digital stores</h2>
+  <div class="disclaimer">
+    May include <strong>keyshops / third-party</strong> (CheapShark). Prefer Steam, GOG, Epic, Humble when unsure.
   </div>
   {% if store_deals %}
     {% for deal in store_deals %}
@@ -164,7 +228,7 @@
       </div>
     {% endfor %}
   {% else %}
-    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No cross-store deals found.</p>
+    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No cross-store PC deals found.</p>
   {% endif %}
 </div>
 {% endblock %}
