@@ -54,7 +54,11 @@
       {% if lowest.original_price and lowest.original_price > lowest.price %}
         <span class="price-was">{{ lowest.original_price }} {{ lowest.currency }}</span>
       {% endif %}
-      <strong class="price-now">{{ lowest.price }} {{ lowest.currency }}</strong>
+      {% if lowest.notes and "unknown" in lowest.notes %}
+        <strong style="color: var(--muted);">Unknown</strong>
+      {% else %}
+        <strong class="price-now">{{ lowest.price }} {{ lowest.currency }}</strong>
+      {% endif %}
       at {{ lowest.store.name }}
     </p>
   {% endif %}
@@ -67,9 +71,13 @@
   {% endif %}
   {% if retail_baseline %}
     <p style="margin-top: 0.35rem; font-size: 0.85rem; color: var(--muted);">
-      Retail baseline on chart: {{ retail_baseline }} (list / original price)
+      Retail baseline (Steam list price, not historic launch MSRP): {{ retail_baseline }}
     </p>
   {% endif %}
+  <form method="post" action="{% url 'games:untrack' game.slug %}" style="margin-top: 1rem;" onsubmit="return confirm('Untrack {{ game.title|escapejs }}?');">
+    {% csrf_token %}
+    <button type="submit" style="background:transparent; border:1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 0.4rem 0.75rem; cursor: pointer;">Untrack</button>
+  </form>
 </div>
 
 {% if history_count %}
@@ -139,7 +147,11 @@
         {% if p.original_price and p.original_price > p.price %}
           <div class="price-was">{{ p.original_price }} {{ p.currency }}</div>
         {% endif %}
-        <div class="price-now" style="font-size:1.3rem;">{{ p.price }} {{ p.currency }}</div>
+        {% if p.notes and "unknown" in p.notes %}
+          <div style="color: var(--muted); font-weight: 700;">Unknown</div>
+        {% else %}
+          <div class="price-now" style="font-size:1.3rem;">{{ p.price }} {{ p.currency }}</div>
+        {% endif %}
       </div>
     </div>
   {% endfor %}
