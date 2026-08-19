@@ -1,88 +1,82 @@
 {% extends "base.html" %}
-
 {% block title %}Search Steam{% if q %} · {{ q }}{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
-  .search-box {
-    display: flex; gap: 0.5rem; margin-bottom: 1.5rem;
-  }
+  .search-box { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
   .search-box input[type=text] {
     flex: 1; padding: 0.75rem 1rem; border-radius: 10px;
-    border: 1px solid var(--border); background: var(--card); color: var(--text);
-    font-size: 1rem;
+    border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 1rem;
   }
   .search-box button {
     padding: 0.75rem 1.25rem; border-radius: 10px; border: none;
     background: var(--accent); color: #fff; font-weight: 600; cursor: pointer;
   }
-  .search-box button:hover { filter: brightness(1.1); }
-  .result-grid {
-    display: grid; gap: 0.75rem;
-  }
   .result-card {
     display: flex; gap: 1rem; align-items: center;
     background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 0.85rem 1rem;
+    border-radius: 12px; padding: 0.85rem 1rem; margin-bottom: 0.65rem;
   }
   .result-card img {
-    width: 120px; height: 45px; object-fit: cover; border-radius: 6px;
-    background: var(--border);
+    width: 120px; height: 45px; object-fit: cover; border-radius: 6px; background: var(--border);
   }
   .result-card .meta { flex: 1; min-width: 0; }
-  .result-card .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .result-card .price { font-weight: 700; color: var(--accent2); white-space: nowrap; }
-  .btn-track {
-    display: inline-block; margin-top: 0.35rem; font-size: 0.85rem;
-    padding: 0.25rem 0.6rem; border-radius: 6px;
-    background: #14532d; color: #86efac; text-decoration: none;
+  .result-card .name {
+    font-weight: 600; color: var(--text); display: block;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .btn-track:hover { text-decoration: none; filter: brightness(1.15); }
+  .result-card .name:hover { color: var(--accent2); }
+  .btn-track {
+    display: inline-block; margin-top: 0.35rem; font-size: 0.8rem;
+    padding: 0.25rem 0.55rem; border-radius: 6px;
+    background: var(--accent); color: #fff; text-decoration: none !important;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
-<a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.9rem;">← Home</a>
-
-<h1 style="font-size: 1.5rem; margin: 1rem 0 0.75rem;">Search Steam</h1>
-<p style="color: var(--muted); margin-bottom: 1rem; font-size: 0.95rem;">
-  Broad search (e.g. <em>Assassin's Creed</em>) shows the series. More specific titles narrow to one game and its editions.
+<h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">Search Steam</h1>
+<p style="color: var(--muted); margin-bottom: 1rem; font-size: 0.9rem;">
+  Click title or image to <strong>view</strong>. Use <strong>Track</strong> only when you want to save a price.
+  Aliases: GTA, cyberpunk, rdr2… Base games ranked above DLC.
 </p>
 
 <form class="search-box" method="get" action="{% url 'games:steam_search' %}">
-  <input type="text" name="q" value="{{ q }}" placeholder="Assassin's Creed, God of War, Elden Ring…" autofocus>
+  <input type="text" name="q" value="{{ q }}" placeholder="Cyberpunk 2077, GTA, Yakuza Kiwami…" autofocus>
   <input type="hidden" name="cc" value="{{ country|default:'GB' }}">
   <button type="submit">Search</button>
 </form>
 
-{% if error %}
-  <p style="color: #f87171;">{{ error }}</p>
-{% endif %}
+{% if error %}<p style="color: #f87171;">{{ error }}</p>{% endif %}
 
 {% if results %}
-  <p style="color: var(--muted); margin-bottom: 0.75rem;">{{ results|length }} result{{ results|length|pluralize }} for “{{ q }}”</p>
-  <div class="result-grid">
-    {% for r in results %}
-      <div class="result-card">
+  <p style="color: var(--muted); margin-bottom: 0.75rem;">{{ results|length }} result{{ results|length|pluralize }}</p>
+  {% for r in results %}
+    <div class="result-card">
+      <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}">
         {% if r.tiny_image %}
           <img src="{{ r.tiny_image }}" alt="" loading="lazy">
         {% else %}
           <div style="width:120px;height:45px;background:var(--border);border-radius:6px;"></div>
         {% endif %}
-        <div class="meta">
-          <div class="name">{{ r.name }}</div>
-          <div style="margin-top: 0.2rem;">
-            {% for p in r.platforms %}<span class="badge" style="margin-right:0.25rem;">{{ p }}</span>{% endfor %}
-            {% if r.discount %}<span class="badge lowest">-{{ r.discount }}%</span>{% endif %}
-          </div>
-          <a class="btn-track" href="{% url 'games:track_steam' r.app_id %}?cc={{ country }}">Track & save price</a>
+      </a>
+      <div class="meta">
+        <a class="name" href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}">{{ r.name }}</a>
+        <div style="margin-top: 0.25rem;">
+          {% if r.is_likely_dlc %}<span class="badge dlc">Likely DLC</span>{% endif %}
+          {% for p in r.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
+          {% if r.discount %}<span class="badge lowest" style="margin-left:0.25rem;">-{{ r.discount }}%</span>{% endif %}
         </div>
-        <div class="price">
-          {% if r.price == 0 %}Free{% else %}{{ r.price }} {{ r.currency }}{% endif %}
-        </div>
+        <a class="btn-track" href="{% url 'games:track_steam' r.app_id %}?cc={{ country }}">Track</a>
       </div>
-    {% endfor %}
-  </div>
+      <div style="text-align: right; white-space: nowrap;">
+        {% if r.discount and r.original %}
+          <div class="price-was">{{ r.original }} {{ r.currency }}</div>
+        {% endif %}
+        <div class="price-now">{% if r.price == 0 %}Free{% else %}{{ r.price }} {{ r.currency }}{% endif %}</div>
+      </div>
+    </div>
+  {% endfor %}
 {% elif q and not error %}
   <p style="color: var(--muted);">No results.</p>
 {% endif %}
