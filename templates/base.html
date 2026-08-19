@@ -3,18 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Game Price Tracker{% endblock %}</title>
+  <title>{% block title %}{% if site_settings %}{{ site_settings.site_title }}{% else %}Game Price Tracker{% endif %}{% endblock %}</title>
   <style>
     :root {
-      --bg: #0a0505;
-      --card: #140a0a;
+      --bg: #080404;
+      --card: #120808;
       --border: #3a1515;
       --text: #f0e6e6;
       --muted: #a89090;
       --accent: #8b1515;
       --accent2: #e03030;
       --good: #3ecf6a;
-      --warn: #e8a838;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -23,76 +22,192 @@
       color: var(--text);
       line-height: 1.5;
       min-height: 100vh;
-      position: relative;
     }
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      z-index: -1;
+    #bg-canvas {
+      position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%;
+      pointer-events: none;
+    }
+    .bg-gradient {
+      position: fixed; inset: 0; z-index: -2; pointer-events: none;
       background:
-        radial-gradient(ellipse 80% 50% at 20% 40%, rgba(120, 20, 20, 0.35), transparent 55%),
-        radial-gradient(ellipse 60% 40% at 80% 60%, rgba(60, 10, 10, 0.4), transparent 50%),
-        radial-gradient(ellipse 50% 30% at 50% 100%, rgba(90, 15, 15, 0.25), transparent 45%),
-        #0a0505;
-      background-size: 200% 200%;
-      animation: wallpaperShift 28s ease-in-out infinite alternate;
-    }
-    @keyframes wallpaperShift {
-      0% { background-position: 0% 40%, 100% 60%, 50% 100%; }
-      100% { background-position: 30% 60%, 70% 30%, 40% 80%; }
+        radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.3), transparent 55%),
+        radial-gradient(ellipse 50% 35% at 85% 70%, rgba(50,8,8,0.35), transparent 50%),
+        #080404;
     }
     a { color: var(--accent2); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .container { max-width: 960px; margin: 0 auto; padding: 1.5rem; position: relative; }
+    .container { max-width: 900px; margin: 0 auto; padding: 1.25rem 1.5rem; position: relative; }
     header {
       display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid var(--border);
-      padding: 1rem 0; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.75rem;
+      padding: 0.75rem 0 1rem; margin-bottom: 1.25rem;
+      border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.5rem;
     }
-    header .logo { font-weight: 700; font-size: 1.2rem; color: var(--text); }
+    header .logo { font-weight: 700; font-size: 1.15rem; color: var(--text); }
     header .logo span { color: var(--accent2); }
-    header nav a { color: var(--muted); margin-left: 1rem; font-size: 0.9rem; }
-    header nav a:hover { color: var(--accent2); }
+    header nav { display: flex; align-items: center; gap: 0.15rem; flex-wrap: wrap; }
+    header nav a, header nav button.nav-btn {
+      color: var(--muted); font-size: 0.88rem; background: none; border: none;
+      cursor: pointer; font-family: inherit; padding: 0.35rem 0.55rem; border-radius: 8px;
+    }
+    header nav a:hover, header nav button.nav-btn:hover { color: var(--accent2); text-decoration: none; background: rgba(80,20,20,0.35); }
     .badge {
-      display: inline-block; font-size: 0.7rem; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.04em;
-      padding: 0.2rem 0.5rem; border-radius: 4px;
+      display: inline-block; font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.04em; padding: 0.15rem 0.45rem; border-radius: 4px;
       background: var(--border); color: var(--muted);
     }
-    .badge.physical { background: #1e3a5f; color: #7dd3fc; }
     .badge.digital { background: #1a3a2a; color: #86efac; }
-    .badge.used { background: #3a2a1a; color: #fcd34d; }
-    .badge.lowest { background: #14532d; color: #86efac; }
     .badge.dlc { background: #3a1520; color: #f0a0a0; }
+    .badge.lowest { background: #14532d; color: #86efac; }
     .price-now { font-weight: 700; color: var(--accent2); }
-    .price-was {
-      text-decoration: line-through; color: var(--muted);
-      font-size: 0.85em; margin-right: 0.35rem;
+    .price-was { text-decoration: line-through; color: var(--muted); font-size: 0.85em; margin-right: 0.35rem; }
+    footer { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
+
+    /* Tracked side drawer */
+    .drawer-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90;
+      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
     }
-    footer {
-      margin-top: 3rem; padding-top: 1.5rem;
-      border-top: 1px solid var(--border);
-      color: var(--muted); font-size: 0.85rem;
+    .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+    .drawer {
+      position: fixed; top: 0; right: 0; width: min(340px, 92vw); height: 100%;
+      background: #100808; border-left: 1px solid var(--border); z-index: 100;
+      transform: translateX(100%); transition: transform 0.28s ease;
+      display: flex; flex-direction: column; box-shadow: -12px 0 40px rgba(0,0,0,0.4);
     }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 1rem 1.1rem; border-bottom: 1px solid var(--border);
+    }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 0.5rem; }
+    .drawer-item {
+      display: block; padding: 0.75rem 0.85rem; border-radius: 10px;
+      color: var(--text); text-decoration: none !important;
+    }
+    .drawer-item:hover { background: rgba(80,20,20,0.4); }
+    .drawer-item .t { font-weight: 600; font-size: 0.92rem; }
+    .drawer-item .s { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
   </style>
   {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body data-wallpaper="{% if site_settings %}{{ site_settings.wallpaper }}{% else %}comet{% endif %}">
+  {% if site_settings and site_settings.wallpaper == "gradient" %}
+    <div class="bg-gradient" aria-hidden="true"></div>
+  {% elif not site_settings or site_settings.wallpaper == "comet" %}
+    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+  {% endif %}
+
   <div class="container">
     <header>
-      <a href="/" class="logo">Game <span>Price</span> Tracker</a>
+      <a href="/" class="logo">{% if site_settings %}{{ site_settings.site_title|default:"Game Price Tracker" }}{% else %}Game <span>Price</span> Tracker{% endif %}</a>
       <nav>
-        <a href="/">Tracked</a>
+        <button type="button" class="nav-btn" id="openTracked" aria-label="Open tracked list">
+          Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}
+        </button>
         <a href="{% url 'games:steam_search' %}">Search</a>
         <a href="{% url 'games:history' %}">History</a>
-        <a href="/admin/">Admin</a>
+        {% if user.is_authenticated %}
+          <a href="{% url 'games:profile' %}">Profile</a>
+          {% if user.is_staff %}<a href="/admin/">Settings</a>{% endif %}
+          <a href="{% url 'logout' %}">Log out</a>
+        {% else %}
+          <a href="{% url 'login' %}">Log in</a>
+        {% endif %}
       </nav>
     </header>
+
     {% block content %}{% endblock %}
+
     <footer>
-      Dark red theme · Click a title to view — Track only when you choose.
+      {% if site_settings and site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}
     </footer>
   </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="trackedDrawer" aria-hidden="true">
+    <div class="drawer-head">
+      <strong>Tracked</strong>
+      <button type="button" class="nav-btn" id="closeTracked">Close</button>
+    </div>
+    <div class="drawer-body">
+      {% if tracked_drawer %}
+        {% for g in tracked_drawer %}
+          <a class="drawer-item" href="{% url 'games:compare' g.slug %}">
+            <div class="t">{{ g.title }}</div>
+            <div class="s">{{ g.get_platform_display }}{% if g.launch_price %} · launch {{ g.launch_price }} {{ g.launch_currency }}{% endif %}</div>
+          </a>
+        {% endfor %}
+      {% else %}
+        <p style="color: var(--muted); padding: 1rem; font-size: 0.9rem;">Nothing tracked yet. Search and Track a title.</p>
+      {% endif %}
+    </div>
+  </aside>
+
+  <script>
+  (function () {
+    const drawer = document.getElementById('trackedDrawer');
+    const backdrop = document.getElementById('drawerBackdrop');
+    function open() { drawer.classList.add('open'); backdrop.classList.add('open'); drawer.setAttribute('aria-hidden','false'); }
+    function close() { drawer.classList.remove('open'); backdrop.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
+    document.getElementById('openTracked')?.addEventListener('click', open);
+    document.getElementById('closeTracked')?.addEventListener('click', close);
+    backdrop?.addEventListener('click', close);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  })();
+  </script>
+
+  {% if not site_settings or site_settings.wallpaper == "comet" %}
+  <script>
+  (function () {
+    /* Lightweight comet rain ~8 comets, ~30fps, no images */
+    const c = document.getElementById('bg-canvas');
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    let w, h, comets = [], last = 0;
+
+    function resize() {
+      w = c.width = window.innerWidth;
+      h = c.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize, { passive: true });
+    resize();
+
+    function spawn() {
+      return {
+        x: Math.random() * w * 1.2,
+        y: -20 - Math.random() * h * 0.3,
+        len: 40 + Math.random() * 70,
+        speed: 1.2 + Math.random() * 2.2,
+        angle: Math.PI / 3.2 + Math.random() * 0.25,
+        alpha: 0.15 + Math.random() * 0.35,
+      };
+    }
+    for (let i = 0; i < 8; i++) comets.push(spawn());
+
+    function frame(t) {
+      if (t - last < 33) { requestAnimationFrame(frame); return; } // ~30fps
+      last = t;
+      ctx.clearRect(0, 0, w, h);
+      for (const m of comets) {
+        const dx = Math.cos(m.angle) * m.speed;
+        const dy = Math.sin(m.angle) * m.speed;
+        m.x += dx; m.y += dy;
+        const grad = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
+        grad.addColorStop(0, `rgba(255,120,100,${m.alpha})`);
+        grad.addColorStop(1, 'rgba(120,20,20,0)');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(m.x, m.y);
+        ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
+        ctx.stroke();
+        if (m.y > h + 40 || m.x > w + 40) Object.assign(m, spawn());
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+  </script>
+  {% endif %}
 </body>
 </html>
