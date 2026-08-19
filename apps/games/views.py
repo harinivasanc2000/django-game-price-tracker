@@ -13,10 +13,21 @@ from .clients.cheapshark import deals_for_title
 from .clients.external_stores import external_links_for_title, ensure_uk_stores
 from .clients.psn import search_psn, best_psn_deal
 from .clients.amazon_uk import search_amazon_uk
+from .clients.uk_stores import uk_search_links, try_cex_search, try_ebay_uk, platform_query
+from .clients.news import steam_news, social_news_links
 
 POPULAR_APP_IDS = [
     1091500, 1245620, 271590, 1174180, 1593500, 1086940,
     292030, 1817070, 814380, 1113000, 108710, 1145360,
+]
+
+PLATFORMS = [
+    ("", "All platforms"),
+    ("pc", "PC"),
+    ("ps4", "PS4"),
+    ("ps5", "PS5"),
+    ("xbox", "Xbox"),
+    ("switch", "Switch"),
 ]
 
 
@@ -49,7 +60,7 @@ def _unique_slug(name: str, app_id: int) -> str:
     return slug[:180]
 
 
-def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows):
+def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows, cex_rows, ebay_rows):
     current = float(detail["price"]) if detail.get("price") is not None else None
     points: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
@@ -66,16 +77,17 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
     now = "Now"
     if current is not None and detail.get("price_status") == "paid":
         points["Steam"].append((now, current))
-    for deal in store_deals[:10]:
+    for deal in store_deals[:8]:
         points[deal["store_name"]].append((now, float(deal["price"])))
-    for row in psn_rows[:3]:
-        if row.get("price") is not None and float(row["price"]) > 0:
+    for row in psn_rows[:1]:
+        if float(row.get("price") or 0) > 0:
             points["PlayStation Store (UK)"].append((now, float(row["price"])))
-            break
-    for row in amazon_rows[:2]:
-        if row.get("price") is not None:
-            points["Amazon UK"].append((now, float(row["price"])))
-            break
+    for row in amazon_rows[:1]:
+        points["Amazon UK"].append((now, float(row["price"])))
+    for row in cex_rows[:1]:
+        points["CeX"].append((now, float(row["price"])))
+    for row in ebay_rows[:1]:
+        points["eBay UK"].append((now, float(row["price"])))
 
     labels: list[str] = []
     seen = set()
@@ -89,13 +101,11 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
 
     series: dict[str, list] = {}
     for seller, pairs in points.items():
-        by_lab = {}
-        for lab, price in pairs:
-            by_lab[lab] = price
+        by_lab = {lab: price for lab, price in pairs}
         series[seller] = [by_lab.get(lab) for lab in labels]
 
     avg = []
-    for i, _lab in enumerate(labels):
+    for i, _ in enumerate(labels):
         vals = [series[s][i] for s in series if series[s][i] is not None]
         avg.append(round(sum(vals) / len(vals), 2) if vals else None)
 
@@ -112,6 +122,7 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
 
 def home(request):
     list(messages.get_messages(request))
+    platform = request.GET.get("platform", "").strip().lower()
     tracked = list(Game.objects.filter(is_active=True).order_by("title")[:12])
     tracked_ids = {g.steam_app_id for g in tracked if g.steam_app_id}
     popular = list(
@@ -123,23 +134,38 @@ def home(request):
     return render(
         request,
         "games/home.html",
-        {"tracked_home": tracked, "popular": popular},
+        {
+            "tracked_home": tracked,
+            "popular": popular,
+            "platforms": PLATFORMS,
+            "current_platform": platform,
+        },
     )
 
 
 def steam_search(request):
     q = request.GET.get("q", "").strip()
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
+    platform = request.GET.get("platform", "").strip().lower()
     results, error = [], None
     if q:
         _log_history(request, BrowseHistory.Action.SEARCH, query=q)
-        results = search_store(q, country=country, limit=40)
+        # Platform hint in Steam query improves ranking slightly
+        search_q = platform_query(q, platform) if platform else q
+        results = search_store(search_q, country=country, limit=40)
         if not results:
             error = "No close matches. Try another spelling or a fuller title."
     return render(
         request,
         "games/steam_search.html",
-        {"q": q, "results": results, "error": error, "country": country},
+        {
+            "q": q,
+            "results": results,
+            "error": error,
+            "country": country,
+            "platforms": PLATFORMS,
+            "current_platform": platform,
+        },
     )
 
 
@@ -153,6 +179,7 @@ def steam_suggest(request):
 
 def steam_detail(request, app_id: int):
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
+    platform = request.GET.get("platform", "").strip().lower()
     detail = get_app_details(app_id, country=country)
     if not detail:
         return redirect("games:steam_search")
@@ -168,23 +195,36 @@ def steam_detail(request, app_id: int):
     ensure_uk_stores()
     already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
     catalog = Game.objects.filter(steam_app_id=app_id).first()
-    store_deals = deals_for_title(detail["name"], limit=18)
+    store_deals = deals_for_title(detail["name"], limit=15)
 
-    # Public search scrapes / APIs
-    psn_rows = search_psn(detail["name"], limit=8)
-    amazon = search_amazon_uk(detail["name"], limit=6)
+    # Platform-aware queries for console / physical
+    psn_q = platform_query(detail["name"], platform or "ps5")
+    psn_rows = search_psn(psn_q if platform.startswith("ps") else detail["name"], limit=8)
+    amazon = search_amazon_uk(detail["name"], extra=platform.upper() if platform else "", limit=6)
     amazon_rows = amazon.get("results") or []
+
+    cex = try_cex_search(detail["name"], platform=platform, limit=6)
+    ebay = try_ebay_uk(detail["name"], platform=platform, limit=6)
+    uk_links = uk_search_links(detail["name"], platform=platform)
+
+    news_items = steam_news(app_id, count=5)
+    social_links = social_news_links(detail["name"])
 
     launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
     launch_currency = (catalog.launch_currency if catalog else None) or "GBP"
     launch_source = (catalog.launch_price_source if catalog else "") or ""
 
     chart = _build_chart_payload(
-        already, detail, store_deals, launch, psn_rows, amazon_rows
+        already,
+        detail,
+        store_deals,
+        launch,
+        psn_rows,
+        amazon_rows,
+        cex.get("results") or [],
+        ebay.get("results") or [],
     )
-    external = external_links_for_title(detail["name"])
 
-    # Quick compare strip: lowest known right now
     live_offers = []
     if detail.get("price_status") == "paid" and detail.get("price") is not None:
         live_offers.append(
@@ -197,7 +237,7 @@ def steam_detail(request, app_id: int):
             }
         )
     best_psn = best_psn_deal(detail["name"])
-    if best_psn:
+    if best_psn and float(best_psn.get("price") or 0) > 0:
         live_offers.append(
             {
                 "store": "PSN UK",
@@ -215,6 +255,26 @@ def steam_detail(request, app_id: int):
                 "currency": "GBP",
                 "kind": "marketplace",
                 "url": amazon_rows[0].get("url"),
+            }
+        )
+    if cex.get("results"):
+        live_offers.append(
+            {
+                "store": "CeX",
+                "price": cex["results"][0]["price"],
+                "currency": "GBP",
+                "kind": "used",
+                "url": cex.get("search_url"),
+            }
+        )
+    if ebay.get("results"):
+        live_offers.append(
+            {
+                "store": "eBay UK",
+                "price": ebay["results"][0]["price"],
+                "currency": "GBP",
+                "kind": "marketplace",
+                "url": ebay["results"][0].get("url"),
             }
         )
     if store_deals:
@@ -235,6 +295,8 @@ def steam_detail(request, app_id: int):
         {
             "d": detail,
             "country": country,
+            "platforms": PLATFORMS,
+            "current_platform": platform,
             "already_tracked": already,
             "catalog_game": catalog,
             "store_deals": store_deals,
@@ -242,7 +304,15 @@ def steam_detail(request, app_id: int):
             "amazon_rows": amazon_rows,
             "amazon_blocked": amazon.get("blocked", True),
             "amazon_search_url": amazon.get("search_url"),
-            "external_links": external,
+            "cex_rows": cex.get("results") or [],
+            "cex_blocked": cex.get("blocked", True),
+            "cex_search_url": cex.get("search_url"),
+            "ebay_rows": ebay.get("results") or [],
+            "ebay_blocked": ebay.get("blocked", True),
+            "ebay_search_url": ebay.get("search_url"),
+            "uk_links": uk_links,
+            "news_items": news_items,
+            "social_links": social_links,
             "live_offers": live_offers,
             "launch": launch,
             "launch_currency": launch_currency,
