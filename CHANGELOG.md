@@ -2,55 +2,60 @@
 
 ---
 
-## Admin-driven changes (for later data/UI updates)
+## Fixed (this pass)
 
-Controlled from **Django admin** (`/admin/`) as staff. Saves also go to **Admin change log**.
+| Issue | Fix |
+|-------|-----|
+| `UNIQUE constraint failed: games_game.slug` on `seed_launch_prices` | Seed no longer overwrites slug into a collision; updates by `steam_app_id` or creates with `title-pc-{appid}` fallback |
+| Track redirected to compare; details only after track | **Title click** loads full detail: Steam price, launch ref, chart, multi-store deals |
+| Track/Untrack changed page / home spam | Track & Untrack **stay on the same detail page**; no home flash messages |
+| Only Steam for comparison | **CheapShark** public API on detail page (Steam, GOG, Humble, Fanatical, GMG, Epic, etc. — USD) |
 
-| Area | Where | What |
-|------|--------|------|
-| Wallpaper | Site settings | comet / gradient / none |
-| Site title, footer | Site settings | Branding |
-| Launch / MSRP | Game: launch_price, currency, source | Public reference |
-| Product notes | Game: admin_notes | Free text |
-| Audit | Admin change log | Who changed what |
+---
+
+## Admin-driven changes
+
+| Area | Where |
+|------|--------|
+| Wallpaper | Site settings: comet / gradient / none |
+| Launch MSRP | Game: `launch_price`, source |
+| Product notes | Game: `admin_notes` |
+| Audit | Admin change log |
 
 ```bash
-python manage.py seed_launch_prices
+python manage.py seed_launch_prices   # safe to re-run after slug fix
 ```
 
 ---
 
-## This pass
+## Done
 
-- Light **comet rain** wallpaper (~8 comets, ~30fps)
-- Admin **Site settings** for wallpaper/UI
-- Nav: **Log in** vs **Profile / Settings**
-- **Tracked** = right-side **drawer** with titles
-- Cleaner home (search-first)
-- **Launch prices** seeded + chart baseline
-- **AdminChangeLog** for explicit admin updates
+- Clean home (search → tracked → popular)
+- Typeahead search, DLC ranking, free vs unknown
+- Comet wallpaper, tracked drawer, login/profile
+- Detail page = single place for prices + stores + track
 
 ---
 
-## Login password
+## Next (not done yet)
 
-**No default admin id/password.** Create one:
+- [ ] Daily Celery refresh of tracked Steam prices
+- [ ] Email / Discord price-drop alerts
+- [ ] GG.deals / ITAD for true multi-year history (needs keys)
+- [ ] Per-user watchlists (currently global active games)
+- [ ] CeX / Amazon UK / PSN physical + digital UK
+- [ ] Convert CheapShark USD ↔ GBP display
+- [ ] AJAX track button (no full page reload)
+- [ ] Reduced-motion / disable wallpaper toggle for users
+
+---
+
+## Login
+
+No default password. Create outside VS Code if the integrated terminal crashes:
 
 ```bash
 python manage.py createsuperuser
+# or
+python manage.py shell -c "from django.contrib.auth import get_user_model; U=get_user_model(); U.objects.create_superuser('admin','a@a.com','YourPassword')"
 ```
-
-Then `/accounts/login/` or `/admin/`.
-
----
-
-## Backlog
-
-- Daily price refresh (Celery)
-- Discord/Telegram alerts
-- GG.deals / ITAD history
-- Per-user watchlists
-- CeX / Amazon / PSN UI
-- CSV launch-price import
-- Reduced-motion option
-- Region picker in UI
