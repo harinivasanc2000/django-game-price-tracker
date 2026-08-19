@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ d.name }} · Steam{% endblock %}
+
+{% block extra_css %}
+<style>
+  .hero {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; overflow: hidden; margin-bottom: 1.5rem;
+  }
+  .hero img { width: 100%; max-height: 220px; object-fit: cover; display: block; }
+  .hero-body { padding: 1.25rem 1.5rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem; }
+  .btn {
+    display: inline-block; padding: 0.65rem 1.2rem; border-radius: 10px;
+    font-weight: 600; font-size: 0.95rem; text-decoration: none !important;
+  }
+  .btn-track { background: var(--accent); color: #fff; }
+  .btn-track:hover { filter: brightness(1.15); }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .info-grid { display: grid; gap: 0.5rem; margin-top: 1rem; font-size: 0.95rem; color: var(--muted); }
+  .warn-box {
+    margin-top: 1rem; padding: 0.85rem 1rem; border-radius: 10px;
+    background: #2a1010; border: 1px solid var(--border); color: #f0c0c0; font-size: 0.9rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'games:steam_search' %}?q=" style="color: var(--muted); font-size: 0.9rem;">← Search</a>
+
+<div class="hero" style="margin-top: 1rem;">
+  {% if d.header_image %}
+    <img src="{{ d.header_image }}" alt="">
+  {% endif %}
+  <div class="hero-body">
+    <h1 style="font-size: 1.6rem;">{{ d.name }}</h1>
+    <div style="margin-top: 0.5rem;">
+      <span class="badge digital">{{ d.type }}</span>
+      {% if d.is_dlc %}<span class="badge dlc" style="margin-left: 0.3rem;">DLC / Extra</span>{% endif %}
+      {% for p in d.platforms %}<span class="badge" style="margin-left: 0.3rem;">{{ p }}</span>{% endfor %}
+      {% if d.discount %}<span class="badge lowest" style="margin-left: 0.3rem;">-{{ d.discount }}%</span>{% endif %}
+    </div>
+
+    <p style="margin-top: 1rem; font-size: 1.35rem;">
+      {% if d.discount and d.original %}
+        <span class="price-was">{{ d.original }} {{ d.currency }}</span>
+      {% endif %}
+      <span class="price-now">
+        {% if d.is_free or d.price == 0 %}Free{% else %}{{ d.price }} {{ d.currency }}{% endif %}
+      </span>
+    </p>
+    {% if d.discount and d.original %}
+      <p style="font-size: 0.85rem; color: var(--muted);">
+        Retail / list price as baseline: {{ d.original }} {{ d.currency }}
+      </p>
+    {% endif %}
+
+    {% if d.is_dlc and d.parent_name %}
+      <div class="warn-box">
+        This looks like <strong>DLC / extra content</strong>, not the full game.
+        Parent: <a href="{% url 'games:steam_detail' d.parent_app_id %}">{{ d.parent_name }}</a>
+        — open that for the main game price.
+      </div>
+    {% endif %}
+
+    {% if d.short_description %}
+      <p style="margin-top: 1rem; color: var(--muted); font-size: 0.95rem;">{{ d.short_description|truncatewords:40 }}</p>
+    {% endif %}
+
+    <div class="info-grid">
+      {% if d.release_date %}<div>Released: {{ d.release_date }}</div>{% endif %}
+      {% if d.developers %}<div>Dev: {{ d.developers|join:", " }}</div>{% endif %}
+      {% if d.publishers %}<div>Publisher: {{ d.publishers|join:", " }}</div>{% endif %}
+      {% if d.genres %}<div>Genres: {{ d.genres|join:", " }}</div>{% endif %}
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">
+        {% if already_tracked %}Save new price snapshot{% else %}Track this price{% endif %}
+      </a>
+      {% if already_tracked %}
+        <a class="btn btn-ghost" href="{% url 'games:compare' already_tracked.slug %}">Open tracked page</a>
+      {% endif %}
+      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Open on Steam</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
