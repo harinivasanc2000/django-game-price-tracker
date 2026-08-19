@@ -8,21 +8,11 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from .models import Game, PriceRecord, Store, BrowseHistory
 from .clients.steam import search_store, get_app_details, suggest_store
+from .clients.cheapshark import deals_for_title
 
-# Well-known titles for "Popular" (steam app ids from seed_launch_prices)
 POPULAR_APP_IDS = [
-    1091500,  # Cyberpunk 2077
-    1245620,  # ELDEN RING
-    271590,   # GTA V
-    1174180,  # RDR2
-    1593500,  # God of War
-    1086940,  # Baldur's Gate 3
-    292030,   # Witcher 3
-    1817070,  # Spider-Man
-    814380,   # Sekiro
-    1113000,  # Persona 5 Royal
-    108710,   # Yakuza Kiwami
-    1145360,  # Hades
+    1091500, 1245620, 271590, 1174180, 1593500, 1086940,
+    292030, 1817070, 814380, 1113000, 108710, 1145360,
 ]
 
 
@@ -43,29 +33,32 @@ def _log_history(request, action, query="", steam_app_id=None, title="", detail_
     )
 
 
-def home(request):
-    # Consume any leftover flash messages so they never show on home
-    list(messages.get_messages(request))
+def _unique_slug(name: str, app_id: int) -> str:
+    base = slugify(f"{name}-pc")[:160] or f"steam-{app_id}"
+    slug, n = base, 1
+    while Game.objects.filter(slug=slug).exclude(steam_app_id=app_id).exists():
+        slug = f"{base}-{app_id}" if n == 1 else f"{base}-{n}"
+        n += 1
+        if n > 50:
+            slug = f"steam-{app_id}"
+            break
+    return slug[:180]
 
+
+def home(request):
+    list(messages.get_messages(request))
     tracked = list(Game.objects.filter(is_active=True).order_by("title")[:12])
     tracked_ids = {g.steam_app_id for g in tracked if g.steam_app_id}
-
     popular = list(
         Game.objects.filter(steam_app_id__in=POPULAR_APP_IDS)
         .exclude(steam_app_id__in=tracked_ids)
-        .order_by("title")
     )
-    # Keep popular order roughly as POPULAR_APP_IDS
     order = {aid: i for i, aid in enumerate(POPULAR_APP_IDS)}
     popular.sort(key=lambda g: order.get(g.steam_app_id, 999))
-
     return render(
         request,
         "games/home.html",
-        {
-            "tracked_home": tracked,
-            "popular": popular,
-        },
+        {"tracked_home": tracked, "popular": popular},
     )
 
 
@@ -94,10 +87,12 @@ def steam_suggest(request):
 
 
 def steam_detail(request, app_id: int):
+    """Full title page on click — prices, multi-store, launch vs current (no track required)."""
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
     if not detail:
         return redirect("games:steam_search")
+
     _log_history(
         request,
         BrowseHistory.Action.VIEW,
@@ -105,8 +100,49 @@ def steam_detail(request, app_id: int):
         title=detail["name"],
         detail_url=f"/steam/{app_id}/",
     )
+
     already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
     catalog = Game.objects.filter(steam_app_id=app_id).first()
+
+    # Multi-store deals (CheapShark public API — USD)
+    store_deals = deals_for_title(detail["name"], limit=18)
+
+    # Snapshot history if already tracked
+    history = []
+    if already:
+        history = list(
+            PriceRecord.objects.filter(game=already)
+            .select_related("store")
+            .order_by("recorded_at")[:90]
+        )
+
+    launch = None
+    launch_currency = "GBP"
+    launch_source = ""
+    if catalog and catalog.launch_price:
+        launch = float(catalog.launch_price)
+        launch_currency = catalog.launch_currency or "GBP"
+        launch_source = catalog.launch_price_source or ""
+
+    current = float(detail["price"]) if detail.get("price") is not None else None
+    list_price = float(detail["original"]) if detail.get("original") is not None else None
+
+    # Simple 2-point chart: launch (if any) vs current Steam
+    chart_labels = []
+    chart_values = []
+    if launch is not None:
+        chart_labels.append("Launch ref")
+        chart_values.append(launch)
+    if list_price is not None and detail.get("price_status") == "paid":
+        chart_labels.append("Steam list")
+        chart_values.append(list_price)
+    if current is not None and detail.get("price_status") == "paid":
+        chart_labels.append("Steam now")
+        chart_values.append(current)
+    if history:
+        chart_labels = [h.recorded_at.strftime("%d %b") for h in history]
+        chart_values = [float(h.price) for h in history]
+
     return render(
         request,
         "games/steam_detail.html",
@@ -115,27 +151,30 @@ def steam_detail(request, app_id: int):
             "country": country,
             "already_tracked": already,
             "catalog_game": catalog,
+            "store_deals": store_deals,
+            "launch": launch,
+            "launch_currency": launch_currency,
+            "launch_source": launch_source,
+            "chart_labels": json.dumps(chart_labels),
+            "chart_values": json.dumps(chart_values),
+            "history_count": len(history),
         },
     )
 
 
 def track_steam(request, app_id: int):
+    """Track only — stay on detail page."""
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
     if not detail:
         return redirect("games:steam_search")
 
     name = detail["name"]
-    base_slug = slugify(f"{name}-pc")[:180] or f"steam-{app_id}"
-    slug, n = base_slug, 1
-    while Game.objects.filter(slug=slug).exclude(steam_app_id=app_id).exists():
-        slug = f"{base_slug}-{n}"
-        n += 1
-
+    slug = _unique_slug(name, app_id)
     existing = Game.objects.filter(steam_app_id=app_id).first()
     defaults = {
         "title": name[:255],
-        "slug": slug,
+        "slug": existing.slug if existing else slug,
         "platform": Game.Platform.PC,
         "cover_url": detail.get("header_image") or "",
         "is_active": True,
@@ -154,15 +193,12 @@ def track_steam(request, app_id: int):
             "website": "https://store.steampowered.com",
             "store_type": Store.StoreType.OFFICIAL,
             "country": "GB",
-            "notes": "Official PC digital store",
         },
     )
 
     status = detail.get("price_status") or "unknown"
     if status == "unknown" or detail.get("price") is None:
-        price = Decimal("0.00")
-        original = None
-        discount = None
+        price, original, discount = Decimal("0.00"), None, None
         notes = f"{name[:200]} [price unknown]"
     else:
         price = detail["price"] or Decimal("0.00")
@@ -170,7 +206,6 @@ def track_steam(request, app_id: int):
         discount = detail.get("discount") or None
         notes = name[:255]
 
-    # No flash messages — silent track, go to compare page
     PriceRecord.objects.create(
         game=game,
         store=store,
@@ -190,17 +225,19 @@ def track_steam(request, app_id: int):
         BrowseHistory.Action.TRACK,
         steam_app_id=app_id,
         title=name,
-        detail_url=f"/game/{game.slug}/",
+        detail_url=f"/steam/{app_id}/",
     )
-    return redirect("games:compare", slug=game.slug)
+    return redirect("games:steam_detail", app_id=app_id)
 
 
 @require_POST
 def untrack_game(request, slug):
     game = get_object_or_404(Game, slug=slug)
+    app_id = game.steam_app_id
     game.is_active = False
     game.save(update_fields=["is_active", "updated_at"])
-    # Silent — no flash message on home
+    if app_id:
+        return redirect("games:steam_detail", app_id=app_id)
     return redirect("games:home")
 
 
@@ -220,6 +257,9 @@ def profile(request):
 
 def game_compare(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
+    if game.steam_app_id:
+        return redirect("games:steam_detail", app_id=game.steam_app_id)
+
     all_prices = (
         PriceRecord.objects.filter(game=game)
         .select_related("store")
@@ -231,45 +271,9 @@ def game_compare(request, slug):
             seen.add(p.store_id)
             unique_prices.append(p)
     lowest = unique_prices[0] if unique_prices else None
-
     history = list(
         PriceRecord.objects.filter(game=game).select_related("store").order_by("recorded_at")
     )
-    history_chart = history[-90:] if len(history) > 90 else history
-
-    change = None
-    if len(history) >= 2:
-        prev, curr = history[-2], history[-1]
-        delta = curr.price - prev.price
-        change = {
-            "delta": delta,
-            "pct": float((delta / prev.price) * 100) if prev.price else 0,
-            "direction": "down" if delta < 0 else ("up" if delta > 0 else "same"),
-            "currency": curr.currency,
-        }
-
-    chart_labels = json.dumps([h.recorded_at.strftime("%d %b %H:%M") for h in history_chart])
-    chart_values = json.dumps([float(h.price) for h in history_chart])
-    chart_stores = json.dumps([h.store.name for h in history_chart])
-
-    retail_baseline = None
-    baseline_label = "Retail baseline"
-    if game.launch_price:
-        retail_baseline = float(game.launch_price)
-        baseline_label = "Launch / MSRP reference"
-    else:
-        for h in reversed(history_chart):
-            if h.original_price and h.original_price > 0:
-                retail_baseline = float(h.original_price)
-                baseline_label = "Steam list price"
-                break
-
-    siblings = (
-        Game.objects.filter(title__iexact=game.title, is_active=True)
-        .exclude(pk=game.pk)
-        .order_by("platform")
-    )
-
     return render(
         request,
         "games/compare.html",
@@ -279,13 +283,13 @@ def game_compare(request, slug):
             "lowest": lowest,
             "history": history,
             "history_count": len(history),
-            "change": change,
-            "chart_labels": chart_labels,
-            "chart_values": chart_values,
-            "chart_stores": chart_stores,
-            "retail_baseline": retail_baseline,
-            "baseline_label": baseline_label,
-            "siblings": siblings,
+            "change": None,
+            "chart_labels": "[]",
+            "chart_values": "[]",
+            "chart_stores": "[]",
+            "retail_baseline": float(game.launch_price) if game.launch_price else None,
+            "baseline_label": "Launch",
+            "siblings": [],
             "platforms": Game.Platform.choices,
         },
     )
