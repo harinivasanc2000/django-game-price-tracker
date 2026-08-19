@@ -1,102 +1,137 @@
 {% extends "base.html" %}
-{% block title %}{{ d.name }} · Steam{% endblock %}
+{% block title %}{{ d.name }}{% endblock %}
 
 {% block extra_css %}
 <style>
-  .hero {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 16px; overflow: hidden; margin-bottom: 1.5rem;
-  }
-  .hero img { width: 100%; max-height: 220px; object-fit: cover; display: block; }
-  .hero-body { padding: 1.25rem 1.5rem; }
-  .actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem; }
+  .hero { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 1.25rem; }
+  .hero img { width: 100%; max-height: 200px; object-fit: cover; display: block; }
+  .hero-body { padding: 1.2rem 1.35rem; }
   .btn {
-    display: inline-block; padding: 0.65rem 1.2rem; border-radius: 10px;
-    font-weight: 600; font-size: 0.95rem; text-decoration: none !important;
+    display: inline-block; padding: 0.55rem 1rem; border-radius: 10px;
+    font-weight: 600; font-size: 0.9rem; text-decoration: none !important; border: none; cursor: pointer; font-family: inherit;
   }
   .btn-track { background: var(--accent); color: #fff; }
   .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
-  .info-grid { display: grid; gap: 0.5rem; margin-top: 1rem; font-size: 0.95rem; color: var(--muted); }
-  .warn-box {
-    margin-top: 1rem; padding: 0.85rem 1rem; border-radius: 10px;
-    background: #2a1010; border: 1px solid var(--border); color: #f0c0c0; font-size: 0.9rem;
+  .deal-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+    padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); font-size: 0.92rem;
   }
-  .note { margin-top: 0.5rem; font-size: 0.85rem; color: var(--muted); }
+  .deal-row:last-child { border-bottom: none; }
+  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.25rem; overflow: hidden; }
+  .panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.85rem 1rem 0.35rem; }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block content %}
-<a href="{% url 'games:steam_search' %}" style="color: var(--muted); font-size: 0.9rem;">← Search</a>
+<a href="{% url 'games:steam_search' %}" style="color: var(--muted); font-size: 0.85rem;">← Search</a>
 
-<div class="hero" style="margin-top: 1rem;">
-  {% if d.header_image %}
-    <img src="{{ d.header_image }}" alt="">
-  {% endif %}
+<div class="hero" style="margin-top: 0.85rem;">
+  {% if d.header_image %}<img src="{{ d.header_image }}" alt="">{% endif %}
   <div class="hero-body">
-    <h1 style="font-size: 1.55rem;">{{ d.name }}</h1>
-    <div style="margin-top: 0.5rem;">
+    <h1 style="font-size: 1.45rem;">{{ d.name }}</h1>
+    <div style="margin-top: 0.4rem;">
       <span class="badge digital">{{ d.type }}</span>
-      {% if d.is_dlc %}<span class="badge dlc" style="margin-left: 0.3rem;">DLC / Extra</span>{% endif %}
-      {% if d.coming_soon %}<span class="badge" style="margin-left: 0.3rem;">Coming soon</span>{% endif %}
-      {% for p in d.platforms %}<span class="badge" style="margin-left: 0.3rem;">{{ p }}</span>{% endfor %}
-      {% if d.discount %}<span class="badge lowest" style="margin-left: 0.3rem;">-{{ d.discount }}%</span>{% endif %}
+      {% if d.is_dlc %}<span class="badge dlc" style="margin-left:0.25rem;">DLC</span>{% endif %}
+      {% for p in d.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
     </div>
 
-    <p style="margin-top: 1rem; font-size: 1.35rem;">
+    <p style="margin-top: 1rem; font-size: 1.3rem;">
       {% if d.price_status == "paid" %}
-        {% if d.discount and d.original %}
-          <span class="price-was">{{ d.original }} {{ d.currency }}</span>
-        {% endif %}
+        {% if d.discount and d.original %}<span class="price-was">{{ d.original }} {{ d.currency }}</span>{% endif %}
         <span class="price-now">{{ d.price }} {{ d.currency }}</span>
+        <span style="font-size: 0.8rem; color: var(--muted);">Steam</span>
       {% elif d.price_status == "free" %}
         <span class="price-now">Free</span>
       {% else %}
         <span style="color: var(--muted); font-weight: 700;">Unknown</span>
+        <span style="font-size: 0.75rem; color: var(--muted);">not free</span>
       {% endif %}
     </p>
 
-    {% if d.price_note %}
-      <p class="note">{{ d.price_note }}</p>
-    {% endif %}
-
-    {% if d.price_status == "paid" and d.list_price %}
-      <p class="note">
-        Retail baseline (Steam list / pre-discount): <strong>{{ d.list_price }} {{ d.currency }}</strong>
+    {% if launch %}
+      <p style="font-size: 0.9rem; color: var(--muted); margin-top: 0.35rem;">
+        Launch reference: <strong style="color: var(--text);">{{ launch }} {{ launch_currency }}</strong>
+        {% if launch_source %}<span style="font-size: 0.75rem;"> · {{ launch_source|truncatechars:60 }}</span>{% endif %}
       </p>
     {% endif %}
-    <p class="note">{{ d.launch_price_note }}</p>
+    {% if d.price_note %}<p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.25rem;">{{ d.price_note }}</p>{% endif %}
 
     {% if d.is_dlc and d.parent_name %}
-      <div class="warn-box">
-        This is <strong>DLC / extra</strong>, not the full game.
-        Parent: <a href="{% url 'games:steam_detail' d.parent_app_id %}">{{ d.parent_name }}</a>
-      </div>
+      <p style="margin-top: 0.75rem; font-size: 0.9rem; color: #f0c0c0;">
+        DLC — full game: <a href="{% url 'games:steam_detail' d.parent_app_id %}">{{ d.parent_name }}</a>
+      </p>
     {% endif %}
 
-    {% if d.short_description %}
-      <p style="margin-top: 1rem; color: var(--muted); font-size: 0.95rem;">{{ d.short_description|truncatewords:40 }}</p>
-    {% endif %}
-
-    <div class="info-grid">
-      {% if d.release_date %}<div>Released: {{ d.release_date }}</div>{% endif %}
-      {% if d.developers %}<div>Dev: {{ d.developers|join:", " }}</div>{% endif %}
-      {% if d.publishers %}<div>Publisher: {{ d.publishers|join:", " }}</div>{% endif %}
-      {% if d.genres %}<div>Genres: {{ d.genres|join:", " }}</div>{% endif %}
-    </div>
-
-    <div class="actions">
-      <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">
-        {% if already_tracked %}Save new snapshot{% else %}Track{% endif %}
-      </a>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem;">
       {% if already_tracked %}
-        <a class="btn btn-ghost" href="{% url 'games:compare' already_tracked.slug %}">Tracked page</a>
-        <form method="post" action="{% url 'games:untrack' already_tracked.slug %}" style="display:inline;" onsubmit="return confirm('Untrack this game?');">
+        <form method="post" action="{% url 'games:untrack' already_tracked.slug %}">
           {% csrf_token %}
-          <button type="submit" class="btn btn-ghost" style="cursor:pointer; font-family:inherit;">Untrack</button>
+          <button type="submit" class="btn btn-ghost">Untrack</button>
         </form>
+      {% else %}
+        <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">Track</a>
       {% endif %}
-      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
+      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Open Steam</a>
     </div>
   </div>
 </div>
+
+{% if chart_values and chart_values != "[]" %}
+<div class="panel" style="padding: 1rem;">
+  <h2 style="padding: 0;">{% if history_count %}Your snapshots{% else %}Launch vs current{% endif %}</h2>
+  <canvas id="priceChart" height="110" style="margin-top: 0.5rem;"></canvas>
+</div>
+<script>
+  new Chart(document.getElementById('priceChart'), {
+    type: 'line',
+    data: {
+      labels: {{ chart_labels|safe }},
+      datasets: [{
+        data: {{ chart_values|safe }},
+        borderColor: '#e03030',
+        backgroundColor: 'rgba(224,48,48,0.1)',
+        fill: true, tension: 0.25, pointRadius: 4,
+      }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } },
+        y: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } }
+      }
+    }
+  });
+</script>
+{% endif %}
+
+<div class="panel">
+  <h2>Other digital stores</h2>
+  <p style="padding: 0 1rem 0.5rem; font-size: 0.8rem; color: var(--muted);">
+    Via CheapShark public API (USD). Steam row above uses your region ({{ country }}).
+  </p>
+  {% if store_deals %}
+    {% for deal in store_deals %}
+      <div class="deal-row">
+        <div>
+          <strong>{{ deal.store_name }}</strong>
+          {% if deal.savings %}<span class="badge lowest" style="margin-left: 0.35rem;">-{{ deal.savings }}%</span>{% endif %}
+          {% if deal.url %}<div style="font-size: 0.8rem;"><a href="{{ deal.url }}" target="_blank" rel="noopener">Deal link</a></div>{% endif %}
+        </div>
+        <div style="text-align: right; white-space: nowrap;">
+          {% if deal.retail and deal.retail > deal.price %}
+            <div class="price-was">{{ deal.retail }} {{ deal.currency }}</div>
+          {% endif %}
+          <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
+        </div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No cross-store deals found for this title right now.</p>
+  {% endif %}
+</div>
+
+{% if d.short_description %}
+  <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">{{ d.short_description|truncatewords:45 }}</p>
+{% endif %}
 {% endblock %}
