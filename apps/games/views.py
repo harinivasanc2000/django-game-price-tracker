@@ -9,6 +9,22 @@ from django.views.decorators.http import require_POST
 from .models import Game, PriceRecord, Store, BrowseHistory
 from .clients.steam import search_store, get_app_details, suggest_store
 
+# Well-known titles for "Popular" (steam app ids from seed_launch_prices)
+POPULAR_APP_IDS = [
+    1091500,  # Cyberpunk 2077
+    1245620,  # ELDEN RING
+    271590,   # GTA V
+    1174180,  # RDR2
+    1593500,  # God of War
+    1086940,  # Baldur's Gate 3
+    292030,   # Witcher 3
+    1817070,  # Spider-Man
+    814380,   # Sekiro
+    1113000,  # Persona 5 Royal
+    108710,   # Yakuza Kiwami
+    1145360,  # Hades
+]
+
 
 def _session_key(request):
     if not request.session.session_key:
@@ -28,20 +44,27 @@ def _log_history(request, action, query="", steam_app_id=None, title="", detail_
 
 
 def home(request):
-    platform = request.GET.get("platform", "").strip().lower()
-    games = Game.objects.filter(is_active=True)
-    if platform and platform in dict(Game.Platform.choices):
-        games = games.filter(platform=platform)
-    games = games.order_by("title")
-    recent = BrowseHistory.objects.filter(session_key=_session_key(request))[:6]
+    # Consume any leftover flash messages so they never show on home
+    list(messages.get_messages(request))
+
+    tracked = list(Game.objects.filter(is_active=True).order_by("title")[:12])
+    tracked_ids = {g.steam_app_id for g in tracked if g.steam_app_id}
+
+    popular = list(
+        Game.objects.filter(steam_app_id__in=POPULAR_APP_IDS)
+        .exclude(steam_app_id__in=tracked_ids)
+        .order_by("title")
+    )
+    # Keep popular order roughly as POPULAR_APP_IDS
+    order = {aid: i for i, aid in enumerate(POPULAR_APP_IDS)}
+    popular.sort(key=lambda g: order.get(g.steam_app_id, 999))
+
     return render(
         request,
         "games/home.html",
         {
-            "games": games,
-            "platforms": Game.Platform.choices,
-            "current_platform": platform,
-            "recent": recent,
+            "tracked_home": tracked,
+            "popular": popular,
         },
     )
 
@@ -74,7 +97,6 @@ def steam_detail(request, app_id: int):
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
     if not detail:
-        messages.error(request, f"Could not load Steam app {app_id}.")
         return redirect("games:steam_search")
     _log_history(
         request,
@@ -83,7 +105,7 @@ def steam_detail(request, app_id: int):
         title=detail["name"],
         detail_url=f"/steam/{app_id}/",
     )
-    already = Game.objects.filter(steam_app_id=app_id).first()
+    already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
     catalog = Game.objects.filter(steam_app_id=app_id).first()
     return render(
         request,
@@ -91,7 +113,7 @@ def steam_detail(request, app_id: int):
         {
             "d": detail,
             "country": country,
-            "already_tracked": already if already and already.is_active else None,
+            "already_tracked": already,
             "catalog_game": catalog,
         },
     )
@@ -101,7 +123,6 @@ def track_steam(request, app_id: int):
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
     if not detail:
-        messages.error(request, f"Could not fetch Steam app {app_id}.")
         return redirect("games:steam_search")
 
     name = detail["name"]
@@ -119,7 +140,6 @@ def track_steam(request, app_id: int):
         "cover_url": detail.get("header_image") or "",
         "is_active": True,
     }
-    # Keep existing launch_price if set
     if existing and existing.launch_price:
         defaults["launch_price"] = existing.launch_price
         defaults["launch_currency"] = existing.launch_currency
@@ -140,10 +160,6 @@ def track_steam(request, app_id: int):
 
     status = detail.get("price_status") or "unknown"
     if status == "unknown" or detail.get("price") is None:
-        messages.warning(
-            request,
-            f"Tracked {name} — price is unknown (not free). Check Steam.",
-        )
         price = Decimal("0.00")
         original = None
         discount = None
@@ -153,9 +169,8 @@ def track_steam(request, app_id: int):
         original = detail.get("original") or detail.get("list_price")
         discount = detail.get("discount") or None
         notes = name[:255]
-        label = "Free" if status == "free" else f"{price} {detail['currency']}"
-        messages.success(request, f"Tracked {name}: {label}")
 
+    # No flash messages — silent track, go to compare page
     PriceRecord.objects.create(
         game=game,
         store=store,
@@ -183,10 +198,9 @@ def track_steam(request, app_id: int):
 @require_POST
 def untrack_game(request, slug):
     game = get_object_or_404(Game, slug=slug)
-    title = game.title
     game.is_active = False
     game.save(update_fields=["is_active", "updated_at"])
-    messages.success(request, f"Untracked “{title}”.")
+    # Silent — no flash message on home
     return redirect("games:home")
 
 
@@ -238,7 +252,6 @@ def game_compare(request, slug):
     chart_values = json.dumps([float(h.price) for h in history_chart])
     chart_stores = json.dumps([h.store.name for h in history_chart])
 
-    # Prefer public launch_price; else Steam list/original
     retail_baseline = None
     baseline_label = "Retail baseline"
     if game.launch_price:
