@@ -6,67 +6,35 @@
   <title>{% block title %}{% if site_settings %}{{ site_settings.site_title }}{% else %}Game Price Tracker{% endif %}{% endblock %}</title>
   <style>
     :root {
-      --bg: #080404;
-      --card: #120808;
-      --border: #3a1515;
-      --text: #f0e6e6;
-      --muted: #a89090;
-      --accent: #8b1515;
-      --accent2: #e03030;
-      --good: #3ecf6a;
+      --bg: #080404; --card: #120808; --border: #3a1515;
+      --text: #f0e6e6; --muted: #a89090; --accent: #8b1515; --accent2: #e03030; --good: #3ecf6a;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      min-height: 100vh;
-    }
-    #bg-canvas {
-      position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%;
-      pointer-events: none;
-    }
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
+    #bg-canvas { position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; pointer-events: none; }
     .bg-gradient {
       position: fixed; inset: 0; z-index: -2; pointer-events: none;
-      background:
-        radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.3), transparent 55%),
-        radial-gradient(ellipse 50% 35% at 85% 70%, rgba(50,8,8,0.35), transparent 50%),
-        #080404;
+      background: radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.3), transparent 55%), radial-gradient(ellipse 50% 35% at 85% 70%, rgba(50,8,8,0.35), transparent 50%), #080404;
     }
     a { color: var(--accent2); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .container { max-width: 900px; margin: 0 auto; padding: 1.25rem 1.5rem; position: relative; }
-    header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 0.75rem 0 1rem; margin-bottom: 1.25rem;
-      border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.5rem;
-    }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0 1rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.5rem; }
     header .logo { font-weight: 700; font-size: 1.15rem; color: var(--text); }
     header .logo span { color: var(--accent2); }
     header nav { display: flex; align-items: center; gap: 0.15rem; flex-wrap: wrap; }
     header nav a, header nav button.nav-btn {
-      color: var(--muted); font-size: 0.88rem; background: none; border: none;
-      cursor: pointer; font-family: inherit; padding: 0.35rem 0.55rem; border-radius: 8px;
+      color: var(--muted); font-size: 0.88rem; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0.35rem 0.55rem; border-radius: 8px;
     }
     header nav a:hover, header nav button.nav-btn:hover { color: var(--accent2); text-decoration: none; background: rgba(80,20,20,0.35); }
-    .badge {
-      display: inline-block; font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
-      letter-spacing: 0.04em; padding: 0.15rem 0.45rem; border-radius: 4px;
-      background: var(--border); color: var(--muted);
-    }
+    .badge { display: inline-block; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.15rem 0.45rem; border-radius: 4px; background: var(--border); color: var(--muted); }
     .badge.digital { background: #1a3a2a; color: #86efac; }
     .badge.dlc { background: #3a1520; color: #f0a0a0; }
     .badge.lowest { background: #14532d; color: #86efac; }
     .price-now { font-weight: 700; color: var(--accent2); }
     .price-was { text-decoration: line-through; color: var(--muted); font-size: 0.85em; margin-right: 0.35rem; }
     footer { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
-
-    /* Tracked side drawer */
-    .drawer-backdrop {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90;
-      opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
-    }
+    .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
     .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
     .drawer {
       position: fixed; top: 0; right: 0; width: min(340px, 92vw); height: 100%;
@@ -75,15 +43,9 @@
       display: flex; flex-direction: column; box-shadow: -12px 0 40px rgba(0,0,0,0.4);
     }
     .drawer.open { transform: translateX(0); }
-    .drawer-head {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 1rem 1.1rem; border-bottom: 1px solid var(--border);
-    }
+    .drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); }
     .drawer-body { flex: 1; overflow-y: auto; padding: 0.5rem; }
-    .drawer-item {
-      display: block; padding: 0.75rem 0.85rem; border-radius: 10px;
-      color: var(--text); text-decoration: none !important;
-    }
+    .drawer-item { display: block; padding: 0.75rem 0.85rem; border-radius: 10px; color: var(--text); text-decoration: none !important; }
     .drawer-item:hover { background: rgba(80,20,20,0.4); }
     .drawer-item .t { font-weight: 600; font-size: 0.92rem; }
     .drawer-item .s { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
@@ -99,28 +61,21 @@
 
   <div class="container">
     <header>
-      <a href="/" class="logo">{% if site_settings %}{{ site_settings.site_title|default:"Game Price Tracker" }}{% else %}Game <span>Price</span> Tracker{% endif %}</a>
+      <a href="/" class="logo">{% if site_settings %}{{ site_settings.site_title }}{% else %}Game <span>Price</span> Tracker{% endif %}</a>
       <nav>
-        <button type="button" class="nav-btn" id="openTracked" aria-label="Open tracked list">
-          Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}
-        </button>
+        <button type="button" class="nav-btn" id="openTracked">Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}</button>
         <a href="{% url 'games:steam_search' %}">Search</a>
         <a href="{% url 'games:history' %}">History</a>
         {% if user.is_authenticated %}
           <a href="{% url 'games:profile' %}">Profile</a>
           {% if user.is_staff %}<a href="/admin/">Settings</a>{% endif %}
-          <a href="{% url 'logout' %}">Log out</a>
         {% else %}
           <a href="{% url 'login' %}">Log in</a>
         {% endif %}
       </nav>
     </header>
-
     {% block content %}{% endblock %}
-
-    <footer>
-      {% if site_settings and site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}
-    </footer>
+    <footer>{% if site_settings and site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}</footer>
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
@@ -138,7 +93,7 @@
           </a>
         {% endfor %}
       {% else %}
-        <p style="color: var(--muted); padding: 1rem; font-size: 0.9rem;">Nothing tracked yet. Search and Track a title.</p>
+        <p style="color: var(--muted); padding: 1rem; font-size: 0.9rem;">Nothing tracked yet.</p>
       {% endif %}
     </div>
   </aside>
@@ -147,8 +102,8 @@
   (function () {
     const drawer = document.getElementById('trackedDrawer');
     const backdrop = document.getElementById('drawerBackdrop');
-    function open() { drawer.classList.add('open'); backdrop.classList.add('open'); drawer.setAttribute('aria-hidden','false'); }
-    function close() { drawer.classList.remove('open'); backdrop.classList.remove('open'); drawer.setAttribute('aria-hidden','true'); }
+    const open = () => { drawer.classList.add('open'); backdrop.classList.add('open'); };
+    const close = () => { drawer.classList.remove('open'); backdrop.classList.remove('open'); };
     document.getElementById('openTracked')?.addEventListener('click', open);
     document.getElementById('closeTracked')?.addEventListener('click', close);
     backdrop?.addEventListener('click', close);
@@ -159,48 +114,27 @@
   {% if not site_settings or site_settings.wallpaper == "comet" %}
   <script>
   (function () {
-    /* Lightweight comet rain ~8 comets, ~30fps, no images */
     const c = document.getElementById('bg-canvas');
     if (!c) return;
     const ctx = c.getContext('2d');
     let w, h, comets = [], last = 0;
-
-    function resize() {
-      w = c.width = window.innerWidth;
-      h = c.height = window.innerHeight;
-    }
+    function resize() { w = c.width = window.innerWidth; h = c.height = window.innerHeight; }
     window.addEventListener('resize', resize, { passive: true });
     resize();
-
     function spawn() {
-      return {
-        x: Math.random() * w * 1.2,
-        y: -20 - Math.random() * h * 0.3,
-        len: 40 + Math.random() * 70,
-        speed: 1.2 + Math.random() * 2.2,
-        angle: Math.PI / 3.2 + Math.random() * 0.25,
-        alpha: 0.15 + Math.random() * 0.35,
-      };
+      return { x: Math.random() * w * 1.2, y: -20 - Math.random() * h * 0.3, len: 40 + Math.random() * 70,
+        speed: 1.2 + Math.random() * 2.2, angle: Math.PI / 3.2 + Math.random() * 0.25, alpha: 0.15 + Math.random() * 0.35 };
     }
     for (let i = 0; i < 8; i++) comets.push(spawn());
-
     function frame(t) {
-      if (t - last < 33) { requestAnimationFrame(frame); return; } // ~30fps
-      last = t;
-      ctx.clearRect(0, 0, w, h);
+      if (t - last < 33) { requestAnimationFrame(frame); return; }
+      last = t; ctx.clearRect(0, 0, w, h);
       for (const m of comets) {
-        const dx = Math.cos(m.angle) * m.speed;
-        const dy = Math.sin(m.angle) * m.speed;
-        m.x += dx; m.y += dy;
-        const grad = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
-        grad.addColorStop(0, `rgba(255,120,100,${m.alpha})`);
-        grad.addColorStop(1, 'rgba(120,20,20,0)');
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(m.x, m.y);
-        ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
-        ctx.stroke();
+        m.x += Math.cos(m.angle) * m.speed; m.y += Math.sin(m.angle) * m.speed;
+        const g = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
+        g.addColorStop(0, `rgba(255,120,100,${m.alpha})`); g.addColorStop(1, 'rgba(120,20,20,0)');
+        ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath();
+        ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len); ctx.stroke();
         if (m.y > h + 40 || m.x > w + 40) Object.assign(m, spawn());
       }
       requestAnimationFrame(frame);
