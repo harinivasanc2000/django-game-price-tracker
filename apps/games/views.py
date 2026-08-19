@@ -1,9 +1,12 @@
 import json
+from decimal import Decimal
+from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.text import slugify
 from django.contrib import messages
+from django.views.decorators.http import require_POST
 from .models import Game, PriceRecord, Store, BrowseHistory
-from .clients.steam import search_store, get_app_details
+from .clients.steam import search_store, get_app_details, suggest_store
 
 
 def _session_key(request):
@@ -29,7 +32,7 @@ def home(request):
     if platform and platform in dict(Game.Platform.choices):
         games = games.filter(platform=platform)
     games = games.order_by("title")
-    recent = BrowseHistory.objects.filter(session_key=_session_key(request))[:12]
+    recent = BrowseHistory.objects.filter(session_key=_session_key(request))[:8]
     return render(
         request,
         "games/home.html",
@@ -48,14 +51,23 @@ def steam_search(request):
     results, error = [], None
     if q:
         _log_history(request, BrowseHistory.Action.SEARCH, query=q)
-        results = search_store(q, country=country, limit=36)
+        results = search_store(q, country=country, limit=40)
         if not results:
-            error = "No Steam results. Try full name (e.g. Cyberpunk 2077) or another spelling."
+            error = "No close matches. Try another spelling or a fuller title."
     return render(
         request,
         "games/steam_search.html",
         {"q": q, "results": results, "error": error, "country": country},
     )
+
+
+def steam_suggest(request):
+    """JSON typeahead for Netflix-style dropdown."""
+    q = request.GET.get("q", "").strip()
+    country = request.GET.get("cc", "GB").strip().upper() or "GB"
+    if len(q) < 2:
+        return JsonResponse({"suggestions": []})
+    return JsonResponse({"suggestions": suggest_store(q, country=country, limit=8)})
 
 
 def steam_detail(request, app_id: int):
@@ -85,12 +97,14 @@ def track_steam(request, app_id: int):
     if not detail:
         messages.error(request, f"Could not fetch Steam app {app_id}.")
         return redirect("games:steam_search")
+
     name = detail["name"]
     base_slug = slugify(f"{name}-pc")[:180] or f"steam-{app_id}"
     slug, n = base_slug, 1
     while Game.objects.filter(slug=slug).exclude(steam_app_id=app_id).exists():
         slug = f"{base_slug}-{n}"
         n += 1
+
     game, _ = Game.objects.update_or_create(
         steam_app_id=app_id,
         defaults={
@@ -111,19 +125,42 @@ def track_steam(request, app_id: int):
             "notes": "Official PC digital store",
         },
     )
+
+    # Unknown prices: still track metadata but skip fake £0 free records
+    status = detail.get("price_status") or "unknown"
+    if status == "unknown" or detail.get("price") is None:
+        messages.warning(
+            request,
+            f"Tracked {name} — price is unknown (not listed as free). Open Steam to confirm.",
+        )
+        price = Decimal("0.00")
+        original = None
+        discount = None
+        notes = f"{name[:200]} [price unknown]"
+    else:
+        price = detail["price"] or Decimal("0.00")
+        original = detail.get("original") or detail.get("list_price")
+        discount = detail.get("discount") or None
+        notes = name[:255]
+        label = f"{price} {detail['currency']}"
+        if status == "free":
+            label = "Free"
+        messages.success(request, f"Tracked {name}: {label}")
+
     PriceRecord.objects.create(
         game=game,
         store=store,
-        price=detail["price"],
-        currency=detail["currency"],
-        original_price=detail.get("original"),
-        discount_percent=detail.get("discount") or None,
-        url=detail["url"],
+        price=price,
+        currency=detail.get("currency") or "GBP",
+        original_price=original,
+        discount_percent=discount,
+        url=detail.get("url") or "",
         is_physical=False,
         is_used=False,
         in_stock=True,
-        notes=name[:255],
+        notes=notes,
     )
+
     _log_history(
         request,
         BrowseHistory.Action.TRACK,
@@ -131,8 +168,17 @@ def track_steam(request, app_id: int):
         title=name,
         detail_url=f"/game/{game.slug}/",
     )
-    messages.success(request, f"Tracked {name}: {detail['price']} {detail['currency']}")
     return redirect("games:compare", slug=game.slug)
+
+
+@require_POST
+def untrack_game(request, slug):
+    game = get_object_or_404(Game, slug=slug)
+    title = game.title
+    game.is_active = False
+    game.save(update_fields=["is_active", "updated_at"])
+    messages.success(request, f"Untracked “{title}” (history kept in admin/DB).")
+    return redirect("games:home")
 
 
 def history_page(request):
@@ -153,10 +199,12 @@ def game_compare(request, slug):
             seen.add(p.store_id)
             unique_prices.append(p)
     lowest = unique_prices[0] if unique_prices else None
+
     history = list(
         PriceRecord.objects.filter(game=game).select_related("store").order_by("recorded_at")
     )
     history_chart = history[-90:] if len(history) > 90 else history
+
     change = None
     if len(history) >= 2:
         prev, curr = history[-2], history[-1]
@@ -167,19 +215,23 @@ def game_compare(request, slug):
             "direction": "down" if delta < 0 else ("up" if delta > 0 else "same"),
             "currency": curr.currency,
         }
+
     chart_labels = json.dumps([h.recorded_at.strftime("%d %b %H:%M") for h in history_chart])
     chart_values = json.dumps([float(h.price) for h in history_chart])
     chart_stores = json.dumps([h.store.name for h in history_chart])
+
     retail_baseline = None
     for h in reversed(history_chart):
-        if h.original_price:
+        if h.original_price and h.original_price > 0:
             retail_baseline = float(h.original_price)
             break
+
     siblings = (
         Game.objects.filter(title__iexact=game.title, is_active=True)
         .exclude(pk=game.pk)
         .order_by("platform")
     )
+
     return render(
         request,
         "games/compare.html",
