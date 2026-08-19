@@ -2,7 +2,9 @@
 Background price refresh tasks.
 
 - Steam (official, region-aware)
-- CheapShark best deal (third-party / key shops — USD, with disclaimer in UI)
+- PSN UK (public tumbler search)
+- CheapShark best deal (third-party / key shops)
+- Amazon UK when HTML is available (often blocked by WAF)
 """
 
 from __future__ import annotations
@@ -14,6 +16,8 @@ from django.utils import timezone
 from .models import Game, PriceRecord, Store, AdminChangeLog
 from .clients.steam import get_app_details
 from .clients.cheapshark import deals_for_title
+from .clients.psn import best_psn_deal
+from .clients.amazon_uk import search_amazon_uk
 
 
 def _store(slug: str, name: str, store_type: str, website: str = "", notes: str = "") -> Store:
@@ -31,22 +35,24 @@ def _store(slug: str, name: str, store_type: str, website: str = "", notes: str 
 
 
 def refresh_one_game(game: Game, country: str = "GB") -> dict:
-    """Fetch Steam + best third-party deal and write PriceRecords."""
-    result = {"game": game.title, "steam": False, "third_party": False, "errors": []}
+    result = {
+        "game": game.title,
+        "steam": False,
+        "psn": False,
+        "amazon": False,
+        "third_party": False,
+        "errors": [],
+    }
 
     if not game.steam_app_id:
         result["errors"].append("no steam_app_id")
         return result
 
-    # --- Steam ---
     detail = get_app_details(game.steam_app_id, country=country)
     if detail:
         steam = _store(
-            "steam",
-            "Steam",
-            Store.StoreType.OFFICIAL,
-            "https://store.steampowered.com",
-            "Official PC digital",
+            "steam", "Steam", Store.StoreType.OFFICIAL,
+            "https://store.steampowered.com", "Official PC digital",
         )
         status = detail.get("price_status") or "unknown"
         if status == "unknown" or detail.get("price") is None:
@@ -80,12 +86,67 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
     else:
         result["errors"].append("steam fetch failed")
 
-    # --- CheapShark best deal (third-party / keyshops) ---
+    # PSN UK
+    try:
+        psn = best_psn_deal(game.title)
+        if psn and psn.get("price") is not None and float(psn["price"]) > 0:
+            store = _store(
+                "psn-uk",
+                "PlayStation Store (UK)",
+                Store.StoreType.OFFICIAL,
+                "https://store.playstation.com/en-gb",
+                "Public Chihiro tumbler search",
+            )
+            PriceRecord.objects.create(
+                game=game,
+                store=store,
+                price=psn["price"],
+                currency="GBP",
+                original_price=None,
+                discount_percent=None,
+                url=psn.get("url") or "",
+                is_physical=False,
+                is_used=False,
+                in_stock=True,
+                notes=f"PSN {psn.get('name','')[:120]} @ {timezone.now():%Y-%m-%d}",
+            )
+            result["psn"] = True
+    except Exception as exc:  # noqa: BLE001
+        result["errors"].append(f"psn: {exc}")
+
+    # Amazon UK (often WAF-blocked)
+    try:
+        amz = search_amazon_uk(game.title, limit=3)
+        rows = amz.get("results") or []
+        if rows:
+            store = _store(
+                "amazon-uk",
+                "Amazon UK",
+                Store.StoreType.MARKETPLACE,
+                "https://www.amazon.co.uk",
+                "Public search HTML when available",
+            )
+            row = rows[0]
+            PriceRecord.objects.create(
+                game=game,
+                store=store,
+                price=row["price"],
+                currency="GBP",
+                url=row.get("url") or "",
+                is_physical=True,
+                is_used=False,
+                in_stock=True,
+                notes=f"Amazon {row.get('name','')[:100]} @ {timezone.now():%Y-%m-%d}",
+            )
+            result["amazon"] = True
+    except Exception as exc:  # noqa: BLE001
+        result["errors"].append(f"amazon: {exc}")
+
+    # CheapShark
     try:
         deals = deals_for_title(game.title, limit=5)
         if deals:
             best = deals[0]
-            # Map store name to a Store row
             slug = "cs-" + "".join(
                 c if c.isalnum() else "-" for c in best["store_name"].lower()
             )[:40].strip("-")
@@ -94,7 +155,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 best["store_name"][:120],
                 Store.StoreType.KEYSHOP,
                 best.get("url") or "https://www.cheapshark.com",
-                "Via CheapShark — may include keyshops / grey market. Verify seller.",
+                "Via CheapShark — may include keyshops. Verify seller.",
             )
             PriceRecord.objects.create(
                 game=game,
@@ -118,16 +179,16 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
 
 @shared_task(name="apps.games.tasks.refresh_all_tracked_prices")
 def refresh_all_tracked_prices(country: str = "GB") -> dict:
-    """Refresh every active tracked game (Steam + best third-party)."""
     games = list(Game.objects.filter(is_active=True, steam_app_id__isnull=False))
     summary = {"count": len(games), "ok": 0, "partial": 0, "failed": 0, "details": []}
 
     for game in games:
         r = refresh_one_game(game, country=country)
         summary["details"].append(r)
-        if r["steam"] and r["third_party"]:
+        flags = [r["steam"], r["psn"], r["amazon"], r["third_party"]]
+        if all(flags[:2]):  # steam+psn at least
             summary["ok"] += 1
-        elif r["steam"] or r["third_party"]:
+        elif any(flags):
             summary["partial"] += 1
         else:
             summary["failed"] += 1
