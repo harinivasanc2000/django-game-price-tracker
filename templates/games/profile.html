@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 1.35rem; margin-bottom: 0.5rem;">Profile</h1>
+<p style="color: var(--muted); margin-bottom: 1.25rem;">Signed in as <strong style="color: var(--text);">{{ user.username }}</strong></p>
+
+{% if user.is_staff %}
+  <p style="margin-bottom: 1rem;">
+    <a href="/admin/">Open admin (wallpaper, launch prices, product notes)</a>
+  </p>
+{% endif %}
+
+<h2 style="font-size: 1rem; color: var(--muted); margin-bottom: 0.5rem;">Your tracked list</h2>
+{% if tracked %}
+  {% for g in tracked %}
+    <a href="{% url 'games:compare' g.slug %}" style="display:block; padding:0.6rem 0; border-bottom:1px solid var(--border); color: var(--text);">
+      {{ g.title }} <span class="badge">{{ g.get_platform_display }}</span>
+    </a>
+  {% endfor %}
+{% else %}
+  <p style="color: var(--muted);">None yet.</p>
+{% endif %}
+
+<form method="post" action="{% url 'logout' %}" style="margin-top: 2rem;">
+  {% csrf_token %}
+  <button type="submit" style="padding:0.6rem 1rem; border-radius:10px; border:1px solid var(--border); background:transparent; color: var(--muted); cursor:pointer;">Log out</button>
+</form>
+{% endblock %}
