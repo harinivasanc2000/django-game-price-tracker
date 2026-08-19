@@ -1,0 +1,117 @@
+{# Netflix-style search with live suggestions #}
+<div class="search-wrap" style="position: relative; width: 100%;">
+  <form class="search-row" method="get" action="{% url 'games:steam_search' %}" id="steamSearchForm" autocomplete="off">
+    <input
+      type="text"
+      name="q"
+      id="steamSearchInput"
+      value="{{ q|default:'' }}"
+      placeholder="{{ placeholder|default:'Search games…' }}"
+      {% if autofocus %}autofocus{% endif %}
+    >
+    <button type="submit">Search</button>
+  </form>
+  <div id="suggestDropdown" class="suggest-dd" hidden></div>
+</div>
+
+<style>
+  .search-row { display: flex; gap: 0.5rem; }
+  .search-row input {
+    flex: 1; padding: 0.85rem 1rem; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-size: 1rem; outline: none;
+  }
+  .search-row input:focus { border-color: var(--accent2); }
+  .search-row button {
+    padding: 0.85rem 1.2rem; border-radius: 12px; border: none;
+    background: var(--accent); color: #fff; font-weight: 600; cursor: pointer;
+  }
+  .search-row button:hover { filter: brightness(1.12); }
+  .suggest-dd {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; max-height: 340px; overflow-y: auto;
+    z-index: 50; box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+  }
+  .suggest-item {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.65rem 0.9rem; cursor: pointer; border-bottom: 1px solid var(--border);
+    color: var(--text); text-decoration: none !important;
+  }
+  .suggest-item:last-child { border-bottom: none; }
+  .suggest-item:hover, .suggest-item.active { background: #1f0c0c; }
+  .suggest-item img {
+    width: 72px; height: 27px; object-fit: cover; border-radius: 4px; background: var(--border);
+  }
+  .suggest-item .s-name { flex: 1; font-size: 0.92rem; }
+  .suggest-item .s-meta { font-size: 0.75rem; color: var(--muted); }
+</style>
+
+<script>
+(function () {
+  const input = document.getElementById('steamSearchInput');
+  const dd = document.getElementById('suggestDropdown');
+  if (!input || !dd) return;
+
+  let timer = null;
+  let items = [];
+  let active = -1;
+
+  function hide() { dd.hidden = true; active = -1; }
+
+  function render(list) {
+    items = list || [];
+    if (!items.length) { hide(); return; }
+    dd.innerHTML = items.map((s, i) => {
+      const price = s.price_status === 'free' ? 'Free'
+        : s.price_status === 'unknown' ? 'Unknown'
+        : (s.price ? s.price + ' ' + (s.currency || '') : 'Unknown');
+      const dlc = s.is_likely_dlc ? ' · DLC?' : '';
+      const img = s.tiny_image
+        ? `<img src="${s.tiny_image}" alt="" loading="lazy">`
+        : `<div style="width:72px;height:27px;background:var(--border);border-radius:4px;"></div>`;
+      return `<a class="suggest-item" data-i="${i}" href="/steam/${s.app_id}/">
+        ${img}
+        <div class="s-name">${s.name}<div class="s-meta">${price}${dlc}</div></div>
+      </a>`;
+    }).join('');
+    dd.hidden = false;
+  }
+
+  function fetchSuggest(q) {
+    if (q.length < 2) { hide(); return; }
+    fetch(`/api/suggest/?q=${encodeURIComponent(q)}&cc=GB`)
+      .then(r => r.json())
+      .then(data => render(data.suggestions || []))
+      .catch(() => hide());
+  }
+
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    timer = setTimeout(() => fetchSuggest(q), 220);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    const nodes = dd.querySelectorAll('.suggest-item');
+    if (e.key === 'ArrowDown' && !dd.hidden && nodes.length) {
+      e.preventDefault();
+      active = Math.min(active + 1, nodes.length - 1);
+      nodes.forEach((n, i) => n.classList.toggle('active', i === active));
+    } else if (e.key === 'ArrowUp' && !dd.hidden && nodes.length) {
+      e.preventDefault();
+      active = Math.max(active - 1, 0);
+      nodes.forEach((n, i) => n.classList.toggle('active', i === active));
+    } else if (e.key === 'Enter' && active >= 0 && nodes[active]) {
+      e.preventDefault();
+      window.location = nodes[active].href;
+    } else if (e.key === 'Escape') {
+      hide();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrap')) hide();
+  });
+})();
+</script>
