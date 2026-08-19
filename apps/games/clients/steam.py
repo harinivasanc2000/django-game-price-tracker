@@ -1,8 +1,5 @@
 """
 Steam Store public API client (no key required).
-
-- Search:  GET /api/storesearch/?term=...&cc=GB
-- Details: GET /api/appdetails?appids=...&cc=GB
 """
 
 from __future__ import annotations
@@ -16,7 +13,6 @@ STORE_SEARCH = "https://store.steampowered.com/api/storesearch/"
 STORE_DETAILS = "https://store.steampowered.com/api/appdetails"
 USER_AGENT = "GamePriceTracker/0.1 (personal; polite)"
 
-# Common abbreviations / alternate search terms
 SEARCH_ALIASES: dict[str, list[str]] = {
     "gta": ["Grand Theft Auto", "GTA"],
     "gta5": ["Grand Theft Auto V", "GTA V"],
@@ -28,33 +24,19 @@ SEARCH_ALIASES: dict[str, list[str]] = {
     "rdr": ["Red Dead Redemption"],
     "ac": ["Assassin's Creed"],
     "gow": ["God of War"],
-    "tdm": ["Like a Dragon"],
     "yakuza": ["Yakuza", "Like a Dragon"],
+    "kiwami": ["Yakuza Kiwami"],
 }
 
 DLC_HINTS = (
-    "dlc",
-    "soundtrack",
-    "ost",
-    "cosmetic",
-    "skin pack",
-    "weapon pack",
-    "season pass",
-    "expansion pass",
-    "bonus content",
-    "digital artbook",
-    "art book",
-    "wallpapers",
-    "avatar",
-    "theme",
-    "upgrade",
-    "pre-order bonus",
-    "preorder",
+    "dlc", "soundtrack", "ost", "cosmetic", "skin pack", "weapon pack",
+    "season pass", "expansion pass", "bonus content", "digital artbook",
+    "art book", "wallpapers", "avatar", "theme", "upgrade",
+    "pre-order bonus", "preorder",
 )
 
 
 def expand_query(term: str) -> list[str]:
-    """Return search terms to try (alias expansions first)."""
     raw = (term or "").strip()
     if not raw:
         return []
@@ -62,10 +44,12 @@ def expand_query(term: str) -> list[str]:
     terms = []
     if key in SEARCH_ALIASES:
         terms.extend(SEARCH_ALIASES[key])
+    # partial alias match (e.g. "gta san")
+    for ak, vals in SEARCH_ALIASES.items():
+        if key.startswith(ak + " ") or key.startswith(ak):
+            terms.extend(vals)
     terms.append(raw)
-    # unique preserve order
-    seen = set()
-    out = []
+    seen, out = set(), []
     for t in terms:
         if t.lower() not in seen:
             seen.add(t.lower())
@@ -79,28 +63,82 @@ def _looks_like_dlc(name: str) -> bool:
 
 
 def _score_result(item: dict, query: str) -> int:
-    """Higher = better. Prefer full games matching the query."""
     name = (item.get("name") or "").lower()
-    q = query.lower()
+    q = query.lower().strip()
+    tokens = [t for t in q.replace(":", " ").split() if t]
     score = 0
     if _looks_like_dlc(name):
         score -= 50
-    if name == q or name.startswith(q):
-        score += 30
+    if name == q:
+        score += 80
+    elif name.startswith(q):
+        score += 40
     if q in name:
-        score += 15
-    # Prefer shorter titles (base game often shorter than "Game - Season Pass")
-    score -= min(len(name) // 10, 10)
+        score += 20
+    # multi-word: all tokens present
+    if tokens:
+        hits = sum(1 for t in tokens if t in name)
+        score += hits * 12
+        if hits == len(tokens):
+            score += 25
+    score -= min(len(name) // 12, 12)
     if item.get("price"):
-        score += 2
+        score += 3
     return score
 
 
+def _parse_price_block(price_info: dict | None, is_free_flag: bool, country: str) -> dict:
+    """
+    Normalize Steam price fields.
+    price_status: paid | free | unknown
+    - free only if Steam marks is_free OR explicit free price
+    - missing price_overview is usually region/unavailable — NOT free
+    """
+    currency = "GBP" if country.upper() == "GB" else "USD"
+    if price_info:
+        final = price_info.get("final")
+        initial = price_info.get("initial")
+        currency = price_info.get("currency") or currency
+        if final is not None:
+            price = Decimal(final) / 100
+            original = Decimal(initial) / 100 if initial is not None else price
+            discount = 0
+            if initial and initial > final and initial > 0:
+                discount = int(round((1 - final / initial) * 100))
+            if final == 0 and is_free_flag:
+                status = "free"
+            elif final == 0:
+                status = "unknown"  # zero without is_free is suspicious
+            else:
+                status = "paid"
+            return {
+                "price": price,
+                "original": original,
+                "discount": discount,
+                "currency": currency,
+                "price_status": status,
+                "is_free": status == "free",
+            }
+    if is_free_flag:
+        return {
+            "price": Decimal("0.00"),
+            "original": Decimal("0.00"),
+            "discount": 0,
+            "currency": currency,
+            "price_status": "free",
+            "is_free": True,
+        }
+    return {
+        "price": None,
+        "original": None,
+        "discount": 0,
+        "currency": currency,
+        "price_status": "unknown",
+        "is_free": False,
+    }
+
+
 def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[str, Any]]:
-    """
-    Search Steam by keyword. Expands aliases (GTA, cyberpunk…).
-    Sorts base games above DLC/extras.
-    """
     queries = expand_query(term)
     if not queries:
         return []
@@ -108,7 +146,7 @@ def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[s
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     merged: dict[int, dict] = {}
 
-    for q in queries[:3]:
+    for q in queries[:4]:
         params = {"term": q, "l": "english", "cc": country.lower()}
         try:
             r = requests.get(STORE_SEARCH, params=params, headers=headers, timeout=12)
@@ -125,32 +163,19 @@ def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[s
             if app_id in merged:
                 continue
 
-            price_info = item.get("price") or {}
-            final = price_info.get("final")
-            initial = price_info.get("initial")
-            currency = price_info.get("currency") or ("GBP" if country.upper() == "GB" else "USD")
-
-            if final is not None:
-                price = Decimal(final) / 100
-                original = Decimal(initial) / 100 if initial is not None else price
-                discount = 0
-                if initial and initial > final and initial > 0:
-                    discount = int(round((1 - final / initial) * 100))
-            else:
-                price = Decimal("0.00")
-                original = Decimal("0.00")
-                discount = 0
-
+            parsed = _parse_price_block(item.get("price"), False, country)
             name = item.get("name") or f"App {app_id}"
             plats = item.get("platforms") or {}
             merged[app_id] = {
                 "app_id": app_id,
                 "name": name,
                 "tiny_image": item.get("tiny_image") or "",
-                "price": price,
-                "original": original,
-                "discount": discount,
-                "currency": currency,
+                "price": parsed["price"],
+                "original": parsed["original"],
+                "discount": parsed["discount"],
+                "currency": parsed["currency"],
+                "price_status": parsed["price_status"],
+                "is_free": parsed["is_free"],
                 "platforms": [k for k, v in plats.items() if v],
                 "url": f"https://store.steampowered.com/app/{app_id}/",
                 "is_likely_dlc": _looks_like_dlc(name),
@@ -163,8 +188,27 @@ def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[s
     return results[:limit]
 
 
+def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[str, Any]]:
+    """Lightweight suggestions for typeahead (Netflix-style)."""
+    term = (term or "").strip()
+    if len(term) < 2:
+        return []
+    rows = search_store(term, country=country, limit=limit)
+    return [
+        {
+            "app_id": r["app_id"],
+            "name": r["name"],
+            "tiny_image": r["tiny_image"],
+            "price_status": r["price_status"],
+            "price": str(r["price"]) if r["price"] is not None else None,
+            "currency": r["currency"],
+            "is_likely_dlc": r["is_likely_dlc"],
+        }
+        for r in rows
+    ]
+
+
 def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
-    """Full appdetails: type, price, images, platforms, release, dlc list."""
     params = {"appids": app_id, "cc": country.lower()}
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
@@ -186,45 +230,48 @@ def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
     )
     app_type = (app_data.get("type") or "game").lower()
     is_dlc = app_type == "dlc" or bool(app_data.get("fullgame"))
+    is_free_flag = bool(app_data.get("is_free"))
 
     platforms = []
     plat = app_data.get("platforms") or {}
-    if plat.get("windows"):
-        platforms.append("windows")
-    if plat.get("mac"):
-        platforms.append("mac")
-    if plat.get("linux"):
-        platforms.append("linux")
+    for k in ("windows", "mac", "linux"):
+        if plat.get(k):
+            platforms.append(k)
 
     release = (app_data.get("release_date") or {}).get("date") or ""
+    coming_soon = bool((app_data.get("release_date") or {}).get("coming_soon"))
 
-    if not overview:
-        price = original = Decimal("0.00")
-        discount = 0
-        currency = "GBP" if country.upper() == "GB" else "EUR"
-        is_free = bool(app_data.get("is_free"))
+    parsed = _parse_price_block(overview, is_free_flag, country)
+    if coming_soon and parsed["price_status"] == "unknown":
+        price_note = "Coming soon — price not listed yet"
+    elif parsed["price_status"] == "unknown":
+        price_note = "Price not listed (region, package-only, or unavailable) — not necessarily free"
+    elif parsed["price_status"] == "free":
+        price_note = "Marked free on Steam"
     else:
-        price = Decimal(overview["final"]) / 100
-        original = Decimal(overview["initial"]) / 100
-        discount = int(overview.get("discount_percent") or 0)
-        currency = overview.get("currency") or "GBP"
-        is_free = False
+        price_note = ""
 
-    # Related full game if this is DLC
+    # List / sale baseline from Steam (not always historic launch MSRP)
+    list_price = parsed["original"]
+    current = parsed["price"]
+
     fullgame = app_data.get("fullgame") or {}
     parent_id = fullgame.get("appid")
-    parent_name = fullgame.get("name")
 
     return {
         "app_id": app_id,
         "name": app_data.get("name") or f"App {app_id}",
         "type": app_type,
         "is_dlc": is_dlc,
-        "price": price,
-        "original": original,
-        "discount": discount,
-        "currency": currency,
-        "is_free": is_free,
+        "price": current,
+        "original": list_price,
+        "list_price": list_price,
+        "discount": parsed["discount"],
+        "currency": parsed["currency"],
+        "price_status": parsed["price_status"],
+        "is_free": parsed["is_free"],
+        "price_note": price_note,
+        "coming_soon": coming_soon,
         "url": f"https://store.steampowered.com/app/{app_id}/",
         "header_image": header,
         "short_description": app_data.get("short_description") or "",
@@ -234,12 +281,16 @@ def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
         "publishers": app_data.get("publishers") or [],
         "dlc_ids": app_data.get("dlc") or [],
         "parent_app_id": int(parent_id) if parent_id else None,
-        "parent_name": parent_name or "",
+        "parent_name": fullgame.get("name") or "",
         "categories": [c.get("description") for c in (app_data.get("categories") or []) if c.get("description")],
         "genres": [g.get("description") for g in (app_data.get("genres") or []) if g.get("description")],
+        "launch_price_note": (
+            "Steam does not expose historic launch MSRP via public API. "
+            "We use the current list/initial price as retail baseline. "
+            "True launch price needs ITAD/GG.deals or manual entry later."
+        ),
     }
 
 
-# Backwards-compatible alias
 def get_app_price(app_id: int, country: str = "GB") -> dict[str, Any] | None:
     return get_app_details(app_id, country=country)
