@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Log in{% endblock %}
+
+{% block content %}
+<h1 style="font-size: 1.4rem; margin-bottom: 1rem;">Log in</h1>
+<p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1.25rem;">
+  Use the account you created with <code>createsuperuser</code>. There is no default password.
+</p>
+<form method="post" style="max-width: 360px;">
+  {% csrf_token %}
+  {% if form.errors %}
+    <p style="color: #f87171; margin-bottom: 0.75rem;">Invalid username or password.</p>
+  {% endif %}
+  <label style="display:block; margin-bottom:0.35rem; color: var(--muted); font-size: 0.85rem;">Username</label>
+  <input type="text" name="username" autofocus required
+         style="width:100%; padding:0.7rem; margin-bottom:0.85rem; border-radius:10px; border:1px solid var(--border); background: var(--card); color: var(--text);">
+  <label style="display:block; margin-bottom:0.35rem; color: var(--muted); font-size: 0.85rem;">Password</label>
+  <input type="password" name="password" required
+         style="width:100%; padding:0.7rem; margin-bottom:1rem; border-radius:10px; border:1px solid var(--border); background: var(--card); color: var(--text);">
+  <button type="submit" style="padding:0.7rem 1.2rem; border:none; border-radius:10px; background: var(--accent); color:#fff; font-weight:600; cursor:pointer;">Log in</button>
+</form>
+{% endblock %}
