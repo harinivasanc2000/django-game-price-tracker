@@ -1,56 +1,76 @@
 {% extends "base.html" %}
 
-{% block title %}Tracked Games · Game Price Tracker{% endblock %}
+{% block title %}Game Price Tracker{% endblock %}
+
+{% block extra_css %}
+<style>
+  .search-hero {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 1.75rem;
+  }
+  .search-hero form { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+  .search-hero input[type=text] {
+    flex: 1; padding: 0.8rem 1rem; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1rem;
+  }
+  .search-hero button {
+    padding: 0.8rem 1.25rem; border-radius: 10px; border: none;
+    background: var(--accent); color: #fff; font-weight: 600; cursor: pointer;
+  }
+</style>
+{% endblock %}
 
 {% block content %}
-<h1 style="font-size: 1.75rem; margin-bottom: 0.5rem;">Tracked Games</h1>
-<p style="color: var(--muted); margin-bottom: 1.25rem;">
-  Compare digital and physical prices. UK PlayStation pilot — filter by platform below.
-</p>
+{% if messages %}
+  {% for message in messages %}
+    <p style="margin-bottom: 1rem; color: {% if message.tags == 'error' %}#f87171{% else %}#86efac{% endif %};">{{ message }}</p>
+  {% endfor %}
+{% endif %}
 
-<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.75rem;">
-  <a href="{% url 'games:home' %}"
-     class="badge"
-     style="padding: 0.4rem 0.75rem; {% if not current_platform %}background: var(--accent); color: #fff;{% endif %}">
-    All
-  </a>
+<div class="search-hero">
+  <h1 style="font-size: 1.5rem;">Find a game on Steam</h1>
+  <p style="color: var(--muted); font-size: 0.95rem; margin-top: 0.25rem;">
+    Search any title — series (Assassin's Creed) or exact game (Assassin's Creed Brotherhood).
+  </p>
+  <form method="get" action="{% url 'games:steam_search' %}">
+    <input type="text" name="q" placeholder="Search Steam…" value="">
+    <button type="submit">Search</button>
+  </form>
+</div>
+
+<h2 style="font-size: 1.15rem; margin-bottom: 0.75rem;">Your tracked games</h2>
+
+<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem;">
+  <a href="{% url 'games:home' %}" class="badge" style="padding: 0.4rem 0.75rem; {% if not current_platform %}background: var(--accent); color: #fff;{% endif %}">All</a>
   {% for value, label in platforms %}
-    <a href="?platform={{ value }}"
-       class="badge"
-       style="padding: 0.4rem 0.75rem; {% if current_platform == value %}background: var(--accent); color: #fff;{% endif %}">
-      {{ label }}
-    </a>
+    <a href="?platform={{ value }}" class="badge" style="padding: 0.4rem 0.75rem; {% if current_platform == value %}background: var(--accent); color: #fff;{% endif %}">{{ label }}</a>
   {% endfor %}
 </div>
 
 {% if games %}
-  <div style="display: grid; gap: 1rem;">
+  <div style="display: grid; gap: 0.75rem;">
     {% for game in games %}
       <a href="{% url 'games:compare' game.slug %}"
-         style="display: block; background: var(--card); border: 1px solid var(--border);
-                border-radius: 12px; padding: 1.25rem;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div>
-            <strong style="font-size: 1.1rem; color: var(--text);">{{ game.title }}</strong>
-            <div style="margin-top: 0.35rem;">
-              <span class="badge">{{ game.get_platform_display }}</span>
-              {% if game.release_year %}
-                <span class="badge" style="margin-left: 0.35rem;">{{ game.release_year }}</span>
-              {% endif %}
-            </div>
+         style="display: flex; gap: 1rem; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.1rem;">
+        {% if game.cover_url %}
+          <img src="{{ game.cover_url }}" alt="" style="width: 100px; height: 38px; object-fit: cover; border-radius: 6px;" loading="lazy">
+        {% endif %}
+        <div style="flex: 1;">
+          <strong style="color: var(--text);">{{ game.title }}</strong>
+          <div style="margin-top: 0.25rem;">
+            <span class="badge">{{ game.get_platform_display }}</span>
           </div>
-          <span style="color: var(--accent2); font-size: 0.9rem;">Compare prices →</span>
         </div>
+        <span style="color: var(--accent2); font-size: 0.9rem;">Compare →</span>
       </a>
     {% endfor %}
   </div>
 {% else %}
-  <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; text-align: center;">
-    <p style="color: var(--muted);">No games for this filter.</p>
-    <p style="margin-top: 0.75rem; font-size: 0.9rem;">
-      Run <code style="background: var(--border); padding: 0.15rem 0.4rem; border-radius: 4px;">python manage.py seed_pilot</code>
-      or switch platform above.
-    </p>
+  <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; text-align: center; color: var(--muted);">
+    Nothing tracked yet. Use the search bar above to find a game on Steam and click <strong>Track & save price</strong>.
   </div>
 {% endif %}
 {% endblock %}
