@@ -1,4 +1,4 @@
-{# Netflix-style search with live suggestions #}
+{# Search + platform filter + live suggestions #}
 <div class="search-wrap" style="position: relative; width: 100%;">
   <form class="search-row" method="get" action="{% url 'games:steam_search' %}" id="steamSearchForm" autocomplete="off">
     <input
@@ -9,19 +9,32 @@
       placeholder="{{ placeholder|default:'Search games…' }}"
       {% if autofocus %}autofocus{% endif %}
     >
+    <select name="platform" id="platformSelect" title="Platform">
+      <option value="" {% if not current_platform %}selected{% endif %}>All</option>
+      <option value="pc" {% if current_platform == 'pc' %}selected{% endif %}>PC</option>
+      <option value="ps4" {% if current_platform == 'ps4' %}selected{% endif %}>PS4</option>
+      <option value="ps5" {% if current_platform == 'ps5' %}selected{% endif %}>PS5</option>
+      <option value="xbox" {% if current_platform == 'xbox' %}selected{% endif %}>Xbox</option>
+      <option value="switch" {% if current_platform == 'switch' %}selected{% endif %}>Switch</option>
+    </select>
     <button type="submit">Search</button>
   </form>
   <div id="suggestDropdown" class="suggest-dd" hidden></div>
 </div>
 
 <style>
-  .search-row { display: flex; gap: 0.5rem; }
+  .search-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
   .search-row input {
-    flex: 1; padding: 0.85rem 1rem; border-radius: 12px;
+    flex: 1; min-width: 140px; padding: 0.85rem 1rem; border-radius: 12px;
     border: 1px solid var(--border); background: var(--bg); color: var(--text);
     font-size: 1rem; outline: none;
   }
   .search-row input:focus { border-color: var(--accent2); }
+  .search-row select {
+    padding: 0.85rem 0.75rem; border-radius: 12px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+    font-size: 0.9rem;
+  }
   .search-row button {
     padding: 0.85rem 1.2rem; border-radius: 12px; border: none;
     background: var(--accent); color: #fff; font-weight: 600; cursor: pointer;
@@ -62,6 +75,7 @@
   function render(list) {
     items = list || [];
     if (!items.length) { hide(); return; }
+    const plat = (document.getElementById('platformSelect') || {}).value || '';
     dd.innerHTML = items.map((s, i) => {
       const price = s.price_status === 'free' ? 'Free'
         : s.price_status === 'unknown' ? 'Unknown'
@@ -70,7 +84,8 @@
       const img = s.tiny_image
         ? `<img src="${s.tiny_image}" alt="" loading="lazy">`
         : `<div style="width:72px;height:27px;background:var(--border);border-radius:4px;"></div>`;
-      return `<a class="suggest-item" data-i="${i}" href="/steam/${s.app_id}/">
+      const href = `/steam/${s.app_id}/${plat ? '?platform=' + encodeURIComponent(plat) : ''}`;
+      return `<a class="suggest-item" data-i="${i}" href="${href}">
         ${img}
         <div class="s-name">${s.name}<div class="s-meta">${price}${dlc}</div></div>
       </a>`;
