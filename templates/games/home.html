@@ -1,33 +1,46 @@
 {% extends "base.html" %}
-{% block title %}{% if site_settings %}{{ site_settings.site_title }}{% else %}Search{% endif %}{% endblock %}
+{% block title %}{% if site_settings %}{{ site_settings.site_title }}{% else %}Home{% endif %}{% endblock %}
 
 {% block content %}
-{% if messages %}
-  {% for message in messages %}
-    <p style="margin-bottom: 0.85rem; font-size: 0.9rem; color: {% if 'error' in message.tags %}#f87171{% elif 'warning' in message.tags %}#fcd34d{% else %}#86efac{% endif %};">{{ message }}</p>
-  {% endfor %}
-{% endif %}
-
-<section style="margin: 1.5rem 0 2rem;">
+<section style="margin: 2rem 0 2.5rem;">
   {% include "games/_search_box.html" with placeholder="Search Steam…" autofocus=True %}
 </section>
 
-{% if recent %}
-  <div style="display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 1.5rem;">
-    {% for i in recent %}
-      {% if i.action == "search" %}
-        <a class="badge" href="{% url 'games:steam_search' %}?q={{ i.query|urlencode }}">{{ i.query|truncatechars:20 }}</a>
-      {% elif i.steam_app_id %}
-        <a class="badge" href="{% url 'games:steam_detail' i.steam_app_id %}">{{ i.title|truncatechars:22 }}</a>
-      {% endif %}
+{% if tracked_home %}
+<section style="margin-bottom: 2.25rem;">
+  <h2 style="font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem;">Tracked</h2>
+  <div style="display: grid; gap: 0.4rem;">
+    {% for game in tracked_home %}
+      <a href="{% url 'games:compare' game.slug %}"
+         style="display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 10px; background: var(--card); border: 1px solid var(--border); color: var(--text); text-decoration: none;">
+        {% if game.cover_url %}
+          <img src="{{ game.cover_url }}" alt="" style="width: 88px; height: 33px; object-fit: cover; border-radius: 5px;" loading="lazy">
+        {% endif %}
+        <span style="font-weight: 500; font-size: 0.95rem;">{{ game.title }}</span>
+      </a>
     {% endfor %}
   </div>
+</section>
 {% endif %}
 
-<p style="color: var(--muted); font-size: 0.9rem;">
-  Use <strong style="color: var(--text); font-weight: 500;">Tracked</strong> in the menu for your list.
-  {% if not user.is_authenticated %}
-    <a href="{% url 'login' %}">Log in</a> to manage settings if you are staff.
+<section>
+  <h2 style="font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem;">Popular</h2>
+  {% if popular %}
+    <div style="display: grid; gap: 0.4rem;">
+      {% for game in popular %}
+        <a href="{% if game.steam_app_id %}{% url 'games:steam_detail' game.steam_app_id %}{% else %}{% url 'games:steam_search' %}?q={{ game.title|urlencode }}{% endif %}"
+           style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 10px; background: transparent; border: 1px solid var(--border); color: var(--text); text-decoration: none;">
+          <span style="font-size: 0.95rem;">{{ game.title }}</span>
+          {% if game.launch_price %}
+            <span style="font-size: 0.8rem; color: var(--muted); white-space: nowrap;">launch {{ game.launch_price }} {{ game.launch_currency }}</span>
+          {% endif %}
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p style="color: var(--muted); font-size: 0.9rem;">
+      Run <code style="background: var(--border); padding: 0.1rem 0.35rem; border-radius: 4px;">python manage.py seed_launch_prices</code> to load popular titles.
+    </p>
   {% endif %}
-</p>
+</section>
 {% endblock %}
