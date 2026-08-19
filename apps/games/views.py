@@ -87,7 +87,6 @@ def steam_suggest(request):
 
 
 def steam_detail(request, app_id: int):
-    """Full title page on click — prices, multi-store, launch vs current (no track required)."""
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
     if not detail:
@@ -103,45 +102,60 @@ def steam_detail(request, app_id: int):
 
     already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
     catalog = Game.objects.filter(steam_app_id=app_id).first()
-
-    # Multi-store deals (CheapShark public API — USD)
     store_deals = deals_for_title(detail["name"], limit=18)
 
-    # Snapshot history if already tracked
-    history = []
+    launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
+    launch_currency = (catalog.launch_currency if catalog else None) or "GBP"
+    launch_source = (catalog.launch_price_source if catalog else "") or ""
+
+    current = float(detail["price"]) if detail.get("price") is not None else None
+    best_tp = float(store_deals[0]["price"]) if store_deals else None
+
+    # Build merged time series from DB history (Steam vs third-party)
+    chart_labels = []
+    chart_steam = []
+    chart_third = []
+    chart_launch = []
+
     if already:
         history = list(
             PriceRecord.objects.filter(game=already)
             .select_related("store")
-            .order_by("recorded_at")[:90]
+            .order_by("recorded_at")[:120]
         )
+        # Group by day label; keep last steam / last third-party per day
+        by_day: dict[str, dict] = {}
+        for h in history:
+            day = h.recorded_at.strftime("%d %b %H:%M")
+            slot = by_day.setdefault(day, {"steam": None, "third": None})
+            is_steam = h.store.slug == "steam" or h.store.store_type == Store.StoreType.OFFICIAL
+            is_tp = h.store.store_type in (
+                Store.StoreType.KEYSHOP,
+                Store.StoreType.MARKETPLACE,
+                Store.StoreType.AUTHORIZED,
+            ) or h.store.slug.startswith("cs-")
+            if is_steam:
+                slot["steam"] = float(h.price)
+            if is_tp:
+                slot["third"] = float(h.price)
 
-    launch = None
-    launch_currency = "GBP"
-    launch_source = ""
-    if catalog and catalog.launch_price:
-        launch = float(catalog.launch_price)
-        launch_currency = catalog.launch_currency or "GBP"
-        launch_source = catalog.launch_price_source or ""
+        for day, slot in by_day.items():
+            chart_labels.append(day)
+            chart_steam.append(slot["steam"])
+            chart_third.append(slot["third"])
+            chart_launch.append(launch)
 
-    current = float(detail["price"]) if detail.get("price") is not None else None
-    list_price = float(detail["original"]) if detail.get("original") is not None else None
-
-    # Simple 2-point chart: launch (if any) vs current Steam
-    chart_labels = []
-    chart_values = []
-    if launch is not None:
-        chart_labels.append("Launch ref")
-        chart_values.append(launch)
-    if list_price is not None and detail.get("price_status") == "paid":
-        chart_labels.append("Steam list")
-        chart_values.append(list_price)
-    if current is not None and detail.get("price_status") == "paid":
-        chart_labels.append("Steam now")
-        chart_values.append(current)
-    if history:
-        chart_labels = [h.recorded_at.strftime("%d %b") for h in history]
-        chart_values = [float(h.price) for h in history]
+    # Always include a "now" snapshot so chart works before any track history
+    if not chart_labels:
+        chart_labels = ["Now"]
+        chart_steam = [current]
+        chart_third = [best_tp]
+        chart_launch = [launch]
+    else:
+        chart_labels.append("Now")
+        chart_steam.append(current)
+        chart_third.append(best_tp)
+        chart_launch.append(launch)
 
     return render(
         request,
@@ -155,15 +169,17 @@ def steam_detail(request, app_id: int):
             "launch": launch,
             "launch_currency": launch_currency,
             "launch_source": launch_source,
+            "best_third_party": store_deals[0] if store_deals else None,
             "chart_labels": json.dumps(chart_labels),
-            "chart_values": json.dumps(chart_values),
-            "history_count": len(history),
+            "chart_steam": json.dumps(chart_steam),
+            "chart_third": json.dumps(chart_third),
+            "chart_launch": json.dumps(chart_launch),
+            "has_chart": bool(chart_labels),
         },
     )
 
 
 def track_steam(request, app_id: int):
-    """Track only — stay on detail page."""
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
     if not detail:
@@ -220,6 +236,14 @@ def track_steam(request, app_id: int):
         notes=notes,
     )
 
+    # Also snapshot best third-party once on track
+    try:
+        from .tasks import refresh_one_game
+
+        refresh_one_game(game, country=country)
+    except Exception:
+        pass
+
     _log_history(
         request,
         BrowseHistory.Action.TRACK,
@@ -259,37 +283,4 @@ def game_compare(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
     if game.steam_app_id:
         return redirect("games:steam_detail", app_id=game.steam_app_id)
-
-    all_prices = (
-        PriceRecord.objects.filter(game=game)
-        .select_related("store")
-        .order_by("price", "-recorded_at")
-    )
-    seen, unique_prices = set(), []
-    for p in all_prices:
-        if p.store_id not in seen:
-            seen.add(p.store_id)
-            unique_prices.append(p)
-    lowest = unique_prices[0] if unique_prices else None
-    history = list(
-        PriceRecord.objects.filter(game=game).select_related("store").order_by("recorded_at")
-    )
-    return render(
-        request,
-        "games/compare.html",
-        {
-            "game": game,
-            "prices": unique_prices,
-            "lowest": lowest,
-            "history": history,
-            "history_count": len(history),
-            "change": None,
-            "chart_labels": "[]",
-            "chart_values": "[]",
-            "chart_stores": "[]",
-            "retail_baseline": float(game.launch_price) if game.launch_price else None,
-            "baseline_label": "Launch",
-            "siblings": [],
-            "platforms": Game.Platform.choices,
-        },
-    )
+    return redirect("games:home")
