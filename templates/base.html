@@ -11,7 +11,7 @@
       --border: #2a2a35;
       --text: #e8e8ed;
       --muted: #9a9aab;
-      --accent: #0070d1;      /* PS blue-ish */
+      --accent: #0070d1;
       --accent2: #00d4ff;
       --good: #22c55e;
       --warn: #f59e0b;
@@ -26,18 +26,18 @@
     }
     a { color: var(--accent2); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    .container { max-width: 920px; margin: 0 auto; padding: 1.5rem; }
     header {
+      display: flex; justify-content: space-between; align-items: center;
       border-bottom: 1px solid var(--border);
       padding: 1rem 0;
-      margin-bottom: 2rem;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap; gap: 0.75rem;
     }
-    header .logo {
-      font-weight: 700;
-      font-size: 1.25rem;
-      color: var(--text);
-    }
+    header .logo { font-weight: 700; font-size: 1.2rem; color: var(--text); }
     header .logo span { color: var(--accent2); }
+    header nav a { color: var(--muted); margin-left: 1rem; font-size: 0.9rem; }
+    header nav a:hover { color: var(--accent2); }
     .badge {
       display: inline-block;
       font-size: 0.7rem;
@@ -66,15 +66,20 @@
 <body>
   <div class="container">
     <header>
-      <a href="/" class="logo">Game <span>Price</span> Tracker</a>
-      <p style="color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem;">UK · PlayStation pilot</p>
+      <div>
+        <a href="/" class="logo">Game <span>Price</span> Tracker</a>
+      </div>
+      <nav>
+        <a href="/">Tracked</a>
+        <a href="{% url 'games:steam_search' %}">Search Steam</a>
+        <a href="/admin/">Admin</a>
+      </nav>
     </header>
 
     {% block content %}{% endblock %}
 
     <footer>
-      Public APIs + careful sources only. Grey-market prices (if shown) carry risk warnings.
-      Pilot: God of War PS4 · CeX · PSN · Amazon UK
+      Steam public API + careful sources. Price history is built from your own snapshots (not Steam's historical API).
     </footer>
   </div>
 </body>
