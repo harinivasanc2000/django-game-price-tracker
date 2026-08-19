@@ -1,79 +1,68 @@
 {% extends "base.html" %}
 {% block title %}Game Price Tracker{% endblock %}
 
-{% block extra_css %}
-<style>
-  .search-hero {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem;
-  }
-  .search-hero form { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
-  .search-hero input[type=text] {
-    flex: 1; padding: 0.8rem 1rem; border-radius: 10px;
-    border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 1rem;
-  }
-  .search-hero button {
-    padding: 0.8rem 1.25rem; border-radius: 10px; border: none;
-    background: var(--accent); color: #fff; font-weight: 600; cursor: pointer;
-  }
-</style>
-{% endblock %}
-
 {% block content %}
 {% if messages %}
   {% for message in messages %}
-    <p style="margin-bottom: 1rem; color: {% if message.tags == 'error' %}#f87171{% else %}#86efac{% endif %};">{{ message }}</p>
+    <p style="margin-bottom: 1rem; color: {% if 'error' in message.tags %}#f87171{% elif 'warning' in message.tags %}#fcd34d{% else %}#86efac{% endif %};">{{ message }}</p>
   {% endfor %}
 {% endif %}
 
-<div class="search-hero">
-  <h1 style="font-size: 1.5rem;">Find a game</h1>
-  <p style="color: var(--muted); font-size: 0.95rem;">Steam search · click a title to view · Track only when you want</p>
-  <form method="get" action="{% url 'games:steam_search' %}">
-    <input type="text" name="q" placeholder="GTA, Cyberpunk 2077, Yakuza Kiwami…">
-    <button type="submit">Search</button>
-  </form>
-</div>
+<section style="margin-bottom: 2rem;">
+  <h1 style="font-size: 1.4rem; font-weight: 600; margin-bottom: 0.35rem;">Search</h1>
+  <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 0.85rem;">Type for suggestions · Enter or Search for full results</p>
+  {% include "games/_search_box.html" with placeholder="GTA, Cyberpunk, Yakuza Kiwami…" autofocus=True %}
+</section>
 
 {% if recent %}
-  <h2 style="font-size: 1rem; color: var(--muted); margin-bottom: 0.5rem;">Recent</h2>
-  <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.5rem;">
+<section style="margin-bottom: 1.75rem;">
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom: 0.5rem;">
+    <h2 style="font-size: 0.95rem; color: var(--muted); font-weight: 500;">Recent</h2>
+    <a href="{% url 'games:history' %}" style="font-size: 0.85rem; color: var(--muted);">All history</a>
+  </div>
+  <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
     {% for i in recent %}
       {% if i.action == "search" %}
-        <a class="badge" href="{% url 'games:steam_search' %}?q={{ i.query|urlencode }}">{{ i.query|truncatechars:24 }}</a>
+        <a class="badge" href="{% url 'games:steam_search' %}?q={{ i.query|urlencode }}">{{ i.query|truncatechars:22 }}</a>
       {% elif i.steam_app_id %}
-        <a class="badge" href="{% url 'games:steam_detail' i.steam_app_id %}">{{ i.title|truncatechars:28 }}</a>
+        <a class="badge" href="{% url 'games:steam_detail' i.steam_app_id %}">{{ i.title|truncatechars:26 }}</a>
       {% endif %}
     {% endfor %}
-    <a class="badge" href="{% url 'games:history' %}">Full history →</a>
   </div>
+</section>
 {% endif %}
 
-<h2 style="font-size: 1.15rem; margin-bottom: 0.75rem;">Tracked</h2>
-<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
-  <a href="{% url 'games:home' %}" class="badge" style="padding: 0.4rem 0.75rem; {% if not current_platform %}background: var(--accent); color: #fff;{% endif %}">All</a>
-  {% for value, label in platforms %}
-    <a href="?platform={{ value }}" class="badge" style="padding: 0.4rem 0.75rem; {% if current_platform == value %}background: var(--accent); color: #fff;{% endif %}">{{ label }}</a>
-  {% endfor %}
-</div>
+<section>
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+    <h2 style="font-size: 1.05rem; font-weight: 600;">Tracked</h2>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.35rem;">
+      <a href="{% url 'games:home' %}" class="badge" style="{% if not current_platform %}background: var(--accent); color: #fff;{% endif %}">All</a>
+      {% for value, label in platforms %}
+        <a href="?platform={{ value }}" class="badge" style="{% if current_platform == value %}background: var(--accent); color: #fff;{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
+  </div>
 
-{% if games %}
-  {% for game in games %}
-    <a href="{% url 'games:compare' game.slug %}"
-       style="display: flex; gap: 1rem; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.1rem; margin-bottom: 0.65rem;">
-      {% if game.cover_url %}
-        <img src="{{ game.cover_url }}" alt="" style="width: 100px; height: 38px; object-fit: cover; border-radius: 6px;" loading="lazy">
-      {% endif %}
-      <div style="flex: 1;">
-        <strong style="color: var(--text);">{{ game.title }}</strong>
-        <div style="margin-top: 0.25rem;"><span class="badge">{{ game.get_platform_display }}</span></div>
+  {% if games %}
+    {% for game in games %}
+      <div style="display: flex; gap: 0.75rem; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.5rem;">
+        <a href="{% url 'games:compare' game.slug %}" style="display: flex; gap: 0.75rem; align-items: center; flex: 1; min-width: 0; color: inherit; text-decoration: none;">
+          {% if game.cover_url %}
+            <img src="{{ game.cover_url }}" alt="" style="width: 96px; height: 36px; object-fit: cover; border-radius: 6px;" loading="lazy">
+          {% endif %}
+          <div style="min-width: 0;">
+            <div style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ game.title }}</div>
+            <span class="badge">{{ game.get_platform_display }}</span>
+          </div>
+        </a>
+        <form method="post" action="{% url 'games:untrack' game.slug %}" onsubmit="return confirm('Untrack {{ game.title|escapejs }}?');">
+          {% csrf_token %}
+          <button type="submit" style="background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 0.35rem 0.6rem; cursor: pointer; font-size: 0.8rem;">Untrack</button>
+        </form>
       </div>
-      <span style="color: var(--accent2); font-size: 0.9rem;">Compare →</span>
-    </a>
-  {% endfor %}
-{% else %}
-  <p style="color: var(--muted); padding: 1.5rem; background: var(--card); border-radius: 12px; border: 1px solid var(--border);">
-    Nothing tracked yet. Search above, open a title, then click Track.
-  </p>
-{% endif %}
+    {% endfor %}
+  {% else %}
+    <p style="color: var(--muted); font-size: 0.95rem;">Nothing tracked yet. Search, open a title, then Track.</p>
+  {% endif %}
+</section>
 {% endblock %}
