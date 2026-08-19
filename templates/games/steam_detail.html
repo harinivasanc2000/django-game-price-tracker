@@ -12,6 +12,12 @@
   }
   .btn-track { background: var(--accent); color: #fff; }
   .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .plat-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
+  .plat-row a {
+    font-size: 0.78rem; padding: 0.3rem 0.65rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); text-decoration: none !important;
+  }
+  .plat-row a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .offer-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.55rem;
     margin: 1rem 0 0.25rem;
@@ -45,6 +51,13 @@
   .kind.official { background: #1a3a2a; color: #86efac; }
   .kind.marketplace { background: #1e3a5f; color: #7dd3fc; }
   .kind.third-party { background: #3a2a1a; color: #fcd34d; }
+  .kind.used { background: #2a2a3a; color: #c4b5fd; }
+  .link-chip {
+    display: inline-block; margin: 0.25rem 0.35rem 0.25rem 0;
+    padding: 0.4rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
+    font-size: 0.82rem; color: var(--text); text-decoration: none !important;
+  }
+  .link-chip:hover { border-color: var(--accent2); }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -62,6 +75,13 @@
       {% for p in d.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
     </div>
 
+    <div class="plat-row">
+      {% for val, label in platforms %}
+        <a class="{% if current_platform == val %}on{% endif %}"
+           href="?platform={{ val }}&cc={{ country }}">{{ label }}</a>
+      {% endfor %}
+    </div>
+
     {% if live_offers %}
       <div class="offer-grid">
         {% for o in live_offers %}
@@ -72,16 +92,6 @@
           </a>
         {% endfor %}
       </div>
-    {% else %}
-      <p style="margin-top: 1rem;">
-        {% if d.price_status == "paid" %}
-          <span class="price-now">{{ d.price }} {{ d.currency }}</span> Steam
-        {% elif d.price_status == "free" %}
-          <span class="price-now">Free</span>
-        {% else %}
-          <span style="color: var(--muted); font-weight: 700;">Unknown</span>
-        {% endif %}
-      </p>
     {% endif %}
 
     {% if launch %}
@@ -115,9 +125,7 @@
     </select>
   </div>
   <canvas id="priceChart" height="140"></canvas>
-  <div class="disclaimer" style="margin: 1rem 0 0;">
-    Average can mix GBP/USD and official vs keyshops. Prefer one seller for a clean reading.
-  </div>
+  <div class="disclaimer" style="margin: 1rem 0 0;">Average may mix currencies and used vs new. Prefer one seller for clarity.</div>
 </div>
 <script>
 (function () {
@@ -168,14 +176,12 @@
 
 <div class="panel">
   <h2>PlayStation Store (UK)</h2>
-  <p style="padding: 0 1rem; font-size: 0.8rem; color: var(--muted);">Public store search API · live digital prices</p>
   {% if psn_rows %}
     {% for row in psn_rows %}
       <div class="deal-row">
         <div>
           <strong>{{ row.name }}</strong>
           {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.35rem;">Full game</span>{% endif %}
-          {% if row.content_type %}<span style="font-size:0.75rem;color:var(--muted);margin-left:0.35rem;">{{ row.content_type }}</span>{% endif %}
           {% for p in row.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
           <div style="font-size:0.8rem;margin-top:0.2rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">Open on PSN →</a></div>
         </div>
@@ -183,54 +189,107 @@
       </div>
     {% endfor %}
   {% else %}
-    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No PSN matches right now.</p>
+    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No PSN matches.</p>
   {% endif %}
+</div>
+
+<div class="panel">
+  <h2>UK physical & local</h2>
+  <div class="disclaimer">
+    CeX / eBay / high-street sites often block automated bots. We try public search; if blocked you get the same search links you’d use in a browser.
+    Facebook Marketplace is <strong>link-only</strong> (login wall — we do not scrape it).
+  </div>
+  {% if cex_rows %}
+    <p style="padding: 0 1rem; font-size: 0.8rem; color: var(--muted);">CeX results</p>
+    {% for row in cex_rows %}
+      <div class="deal-row">
+        <div><strong>{{ row.name }}</strong> <span class="kind used">used</span></div>
+        <div class="price-now">{{ row.price }} {{ row.currency }}</div>
+      </div>
+    {% endfor %}
+  {% elif cex_search_url %}
+    <p style="padding: 0.5rem 1rem; font-size: 0.9rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
+  {% endif %}
+
+  {% if ebay_rows %}
+    <p style="padding: 0 1rem; font-size: 0.8rem; color: var(--muted);">eBay UK results</p>
+    {% for row in ebay_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{{ row.name }}</strong>
+          <div style="font-size:0.8rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">View →</a></div>
+        </div>
+        <div class="price-now">{{ row.price }} {{ row.currency }}</div>
+      </div>
+    {% endfor %}
+  {% elif ebay_search_url %}
+    <p style="padding: 0.5rem 1rem; font-size: 0.9rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK →</a></p>
+  {% endif %}
+
+  <div style="padding: 0.75rem 1rem 1rem;">
+    {% for link in uk_links %}
+      <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.name }}</a>
+    {% endfor %}
+  </div>
 </div>
 
 <div class="panel">
   <h2>Amazon UK</h2>
   {% if amazon_blocked %}
-    <div class="disclaimer">
-      Amazon blocked automated access (WAF/captcha). Open the public search instead — same results you’d see in a browser.
-      {% if amazon_search_url %}<div style="margin-top:0.4rem;"><a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Amazon UK search →</a></div>{% endif %}
+    <div class="disclaimer">Amazon blocked automated access. Use public search:
+      {% if amazon_search_url %}<a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Amazon UK →</a>{% endif %}
     </div>
   {% endif %}
-  {% if amazon_rows %}
-    {% for row in amazon_rows %}
-      <div class="deal-row">
-        <div>
-          <strong>{{ row.name }}</strong>
-          <div style="font-size:0.8rem;margin-top:0.2rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">View on Amazon →</a></div>
-        </div>
-        <div class="price-now">{{ row.price }} {{ row.currency }}</div>
+  {% for row in amazon_rows %}
+    <div class="deal-row">
+      <div>
+        <strong>{{ row.name }}</strong>
+        <div style="font-size:0.8rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">View →</a></div>
       </div>
-    {% endfor %}
-  {% elif not amazon_blocked %}
-    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No parseable Amazon results.</p>
-  {% endif %}
+      <div class="price-now">{{ row.price }} {{ row.currency }}</div>
+    </div>
+  {% empty %}
+    {% if not amazon_blocked %}<p style="padding:0.85rem 1rem;color:var(--muted);font-size:0.9rem;">No Amazon rows.</p>{% endif %}
+  {% endfor %}
 </div>
 
 <div class="panel">
-  <h2>Other PC digital stores</h2>
-  <div class="disclaimer">May include <strong>keyshops / third-party</strong>. Prefer Steam, GOG, Epic, Humble when unsure.</div>
-  {% if store_deals %}
-    {% for deal in store_deals %}
+  <h2>News (Steam)</h2>
+  {% if news_items %}
+    {% for n in news_items %}
       <div class="deal-row">
         <div>
-          <strong>{{ deal.store_name }}</strong>
-          {% if deal.savings %}<span class="badge lowest" style="margin-left: 0.35rem;">-{{ deal.savings }}%</span>{% endif %}
-          {% if deal.url %}<div style="font-size: 0.8rem;"><a href="{{ deal.url }}" target="_blank" rel="noopener">Deal link</a></div>{% endif %}
-        </div>
-        <div style="text-align: right;">
-          {% if deal.retail and deal.retail > deal.price %}
-            <div class="price-was">{{ deal.retail }} {{ deal.currency }}</div>
-          {% endif %}
-          <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
+          <strong>{{ n.title }}</strong>
+          <div style="font-size:0.75rem;color:var(--muted);">{{ n.feed }}</div>
+          {% if n.url %}<div style="font-size:0.8rem;"><a href="{{ n.url }}" target="_blank" rel="noopener">Read →</a></div>{% endif %}
         </div>
       </div>
     {% endfor %}
   {% else %}
-    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No cross-store PC deals found.</p>
+    <p style="padding:0.85rem 1rem;color:var(--muted);font-size:0.9rem;">No Steam news for this app.</p>
   {% endif %}
+  <div style="padding: 0.5rem 1rem 1rem;">
+    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem;">Social & community (no automated scrape)</p>
+    {% for s in social_links %}
+      <a class="link-chip" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Other PC digital stores</h2>
+  <div class="disclaimer">May include keyshops. Prefer Steam / GOG / Epic / Humble when unsure.</div>
+  {% for deal in store_deals %}
+    <div class="deal-row">
+      <div>
+        <strong>{{ deal.store_name }}</strong>
+        {% if deal.savings %}<span class="badge lowest" style="margin-left:0.35rem;">-{{ deal.savings }}%</span>{% endif %}
+        {% if deal.url %}<div style="font-size:0.8rem;"><a href="{{ deal.url }}" target="_blank" rel="noopener">Deal link</a></div>{% endif %}
+      </div>
+      <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
+    </div>
+  {% empty %}
+    <p style="padding:0.85rem 1rem;color:var(--muted);font-size:0.9rem;">No PC store deals.</p>
+  {% endfor %}
 </div>
 {% endblock %}
