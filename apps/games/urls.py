@@ -11,5 +11,6 @@ urlpatterns = [
     path("track/steam/<int:app_id>/", views.track_steam, name="track_steam"),
     path("untrack/<slug:slug>/", views.untrack_game, name="untrack"),
     path("history/", views.history_page, name="history"),
+    path("profile/", views.profile, name="profile"),
     path("game/<slug:slug>/", views.game_compare, name="compare"),
 ]
