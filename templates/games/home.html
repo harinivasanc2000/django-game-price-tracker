@@ -1,15 +1,11 @@
 {% extends "base.html" %}
-
 {% block title %}Game Price Tracker{% endblock %}
 
 {% block extra_css %}
 <style>
   .search-hero {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 1.5rem;
-    margin-bottom: 1.75rem;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 1.5rem; margin-bottom: 1.5rem;
   }
   .search-hero form { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
   .search-hero input[type=text] {
@@ -31,19 +27,30 @@
 {% endif %}
 
 <div class="search-hero">
-  <h1 style="font-size: 1.5rem;">Find a game on Steam</h1>
-  <p style="color: var(--muted); font-size: 0.95rem; margin-top: 0.25rem;">
-    Search any title — series (Assassin's Creed) or exact game (Assassin's Creed Brotherhood).
-  </p>
+  <h1 style="font-size: 1.5rem;">Find a game</h1>
+  <p style="color: var(--muted); font-size: 0.95rem;">Steam search · click a title to view · Track only when you want</p>
   <form method="get" action="{% url 'games:steam_search' %}">
-    <input type="text" name="q" placeholder="Search Steam…" value="">
+    <input type="text" name="q" placeholder="GTA, Cyberpunk 2077, Yakuza Kiwami…">
     <button type="submit">Search</button>
   </form>
 </div>
 
-<h2 style="font-size: 1.15rem; margin-bottom: 0.75rem;">Your tracked games</h2>
+{% if recent %}
+  <h2 style="font-size: 1rem; color: var(--muted); margin-bottom: 0.5rem;">Recent</h2>
+  <div style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1.5rem;">
+    {% for i in recent %}
+      {% if i.action == "search" %}
+        <a class="badge" href="{% url 'games:steam_search' %}?q={{ i.query|urlencode }}">{{ i.query|truncatechars:24 }}</a>
+      {% elif i.steam_app_id %}
+        <a class="badge" href="{% url 'games:steam_detail' i.steam_app_id %}">{{ i.title|truncatechars:28 }}</a>
+      {% endif %}
+    {% endfor %}
+    <a class="badge" href="{% url 'games:history' %}">Full history →</a>
+  </div>
+{% endif %}
 
-<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.25rem;">
+<h2 style="font-size: 1.15rem; margin-bottom: 0.75rem;">Tracked</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
   <a href="{% url 'games:home' %}" class="badge" style="padding: 0.4rem 0.75rem; {% if not current_platform %}background: var(--accent); color: #fff;{% endif %}">All</a>
   {% for value, label in platforms %}
     <a href="?platform={{ value }}" class="badge" style="padding: 0.4rem 0.75rem; {% if current_platform == value %}background: var(--accent); color: #fff;{% endif %}">{{ label }}</a>
@@ -51,26 +58,22 @@
 </div>
 
 {% if games %}
-  <div style="display: grid; gap: 0.75rem;">
-    {% for game in games %}
-      <a href="{% url 'games:compare' game.slug %}"
-         style="display: flex; gap: 1rem; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.1rem;">
-        {% if game.cover_url %}
-          <img src="{{ game.cover_url }}" alt="" style="width: 100px; height: 38px; object-fit: cover; border-radius: 6px;" loading="lazy">
-        {% endif %}
-        <div style="flex: 1;">
-          <strong style="color: var(--text);">{{ game.title }}</strong>
-          <div style="margin-top: 0.25rem;">
-            <span class="badge">{{ game.get_platform_display }}</span>
-          </div>
-        </div>
-        <span style="color: var(--accent2); font-size: 0.9rem;">Compare →</span>
-      </a>
-    {% endfor %}
-  </div>
+  {% for game in games %}
+    <a href="{% url 'games:compare' game.slug %}"
+       style="display: flex; gap: 1rem; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem 1.1rem; margin-bottom: 0.65rem;">
+      {% if game.cover_url %}
+        <img src="{{ game.cover_url }}" alt="" style="width: 100px; height: 38px; object-fit: cover; border-radius: 6px;" loading="lazy">
+      {% endif %}
+      <div style="flex: 1;">
+        <strong style="color: var(--text);">{{ game.title }}</strong>
+        <div style="margin-top: 0.25rem;"><span class="badge">{{ game.get_platform_display }}</span></div>
+      </div>
+      <span style="color: var(--accent2); font-size: 0.9rem;">Compare →</span>
+    </a>
+  {% endfor %}
 {% else %}
-  <div style="background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 2rem; text-align: center; color: var(--muted);">
-    Nothing tracked yet. Use the search bar above to find a game on Steam and click <strong>Track & save price</strong>.
-  </div>
+  <p style="color: var(--muted); padding: 1.5rem; background: var(--card); border-radius: 12px; border: 1px solid var(--border);">
+    Nothing tracked yet. Search above, open a title, then click Track.
+  </p>
 {% endif %}
 {% endblock %}
