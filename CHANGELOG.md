@@ -2,23 +2,24 @@
 
 ---
 
-## 2026-08-20 18:25 BST — Continue batch
+## 2026-08-20 19:10 BST — UI & feature batch
 
-### Fixed earlier
-- Disclaimer **Continue** button (CSS `display:flex` overrode `hidden`)
+### Search
+- Sort: relevance / price ↑↓ / biggest discount / name
+- **Hide likely DLC** toggle (on by default)
+- Cleaner result cards
 
-### Added
-- **Recently viewed** on home (from session browse history)
-- Nav **Deals** → `/deals/`
-- Press **`/`** anywhere to focus search
-- Toast helper (`showToast`) for future copy/share actions
-- Home quick links + safety tips + first-visit disclaimer
+### Deals
+- **Export JSON** at `/export/tracked.json`
+- Link from Best deals page
+
+### Detail (partial)
+- `_detail_actions.html` partial: **Copy link**, **Share**, savings badge
+  (wire into steam_detail by including where Track buttons are)
+
+### Earlier still active
+- Recently viewed, `/` search focus, disclaimer, platform AJAX, deal news filter
 
 ```bash
 git pull && python manage.py runserver
 ```
-
-### Still useful next
-- [ ] Copy link / share on detail page
-- [ ] Per-user watchlists (not global track)
-- [ ] Discord webhook alerts
