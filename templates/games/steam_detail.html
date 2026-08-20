@@ -29,6 +29,7 @@
   .offer-chip:hover { border-color: var(--accent2); }
   .offer-chip .s { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
   .offer-chip .p { font-weight: 700; color: var(--accent2); margin-top: 0.2rem; font-size: 1.05rem; }
+  .offer-chip .g { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
   .offer-chip.best { border-color: #2a6a3a; box-shadow: 0 0 0 1px rgba(62,207,106,0.25); }
   .deal-row {
     display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
@@ -58,6 +59,14 @@
     font-size: 0.82rem; color: var(--text); text-decoration: none !important;
   }
   .link-chip:hover { border-color: var(--accent2); }
+  .watch-box {
+    margin-top: 1rem; padding: 0.85rem; border-radius: 12px; border: 1px solid var(--border);
+    background: #120808;
+  }
+  .watch-box input {
+    width: 6rem; padding: 0.4rem 0.5rem; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -86,8 +95,11 @@
       <div class="offer-grid">
         {% for o in live_offers %}
           <a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url|default:'#' }}" {% if o.url %}target="_blank" rel="noopener"{% endif %}>
-            <div class="s">{{ o.store }}{% if forloop.first %} · lowest{% endif %}</div>
+            <div class="s">{{ o.store }}{% if forloop.first %} · lowest (GBP){% endif %}</div>
             <div class="p">{{ o.price }} {{ o.currency }}</div>
+            {% if o.currency != 'GBP' %}
+              <div class="g">≈ £{{ o.price_gbp }}</div>
+            {% endif %}
             <span class="kind {{ o.kind }}">{{ o.kind }}</span>
           </a>
         {% endfor %}
@@ -111,21 +123,45 @@
       {% endif %}
       <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
     </div>
+
+    {% if user.is_authenticated and already_tracked %}
+      <div class="watch-box">
+        {% if is_watched %}
+          <p style="font-size:0.9rem;margin-bottom:0.5rem;">
+            Watching{% if watched.target_price %} · alert under <strong>£{{ watched.target_price }}</strong>{% endif %}
+          </p>
+          <form method="post" action="{% url 'games:unwatch' already_tracked.slug %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-ghost">Unwatch</button>
+          </form>
+        {% else %}
+          <form method="post" action="{% url 'games:watch' already_tracked.slug %}" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+            {% csrf_token %}
+            <label style="font-size:0.85rem;color:var(--muted);">Alert under £</label>
+            <input type="number" name="target_price" step="0.01" min="0" placeholder="e.g. 9.99">
+            <button type="submit" class="btn btn-track">Watch price</button>
+          </form>
+          <p style="font-size:0.75rem;color:var(--muted);margin-top:0.4rem;">Uses GBP-normalised prices. Email goes to your account email (console in local dev).</p>
+        {% endif %}
+      </div>
+    {% elif user.is_authenticated and not already_tracked %}
+      <p style="font-size:0.8rem;color:var(--muted);margin-top:0.75rem;">Track first to set a price alert.</p>
+    {% endif %}
   </div>
 </div>
 
 {% if has_chart %}
 <div class="panel" style="padding: 1rem;">
-  <h2 style="padding: 0;">Price graph</h2>
+  <h2 style="padding: 0;">Price graph (GBP)</h2>
   <div class="chart-toolbar">
     <label for="sellerSelect">Show</label>
     <select id="sellerSelect">
-      <option value="__avg__">Average (all sellers)</option>
+      <option value="__avg__">Average (all sellers, GBP)</option>
       <option value="__all__">All sellers (overlay)</option>
     </select>
   </div>
   <canvas id="priceChart" height="140"></canvas>
-  <div class="disclaimer" style="margin: 1rem 0 0;">Average may mix currencies and used vs new. Prefer one seller for clarity.</div>
+  <div class="disclaimer" style="margin: 1rem 0 0;">Values converted to GBP for comparison. Still mixes new/used and official/keyshops.</div>
 </div>
 <script>
 (function () {
@@ -141,13 +177,13 @@
   function datasetsFor(mode) {
     const ds = [];
     if (mode === '__avg__') {
-      ds.push({ label: 'Average', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
+      ds.push({ label: 'Average (GBP)', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
     } else if (mode === '__all__') {
       (data.sellers || []).forEach((s, i) => {
         ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.25, pointRadius: 2, borderWidth: 1.5 });
       });
     } else {
-      ds.push({ label: mode, data: data.series[mode] || [], borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
+      ds.push({ label: mode + ' (GBP)', data: data.series[mode] || [], borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
     }
     if (data.launch && data.launch.some(v => v != null)) {
       ds.push({ label: 'Launch reference', data: data.launch, borderColor: '#a89090', borderDash: [6, 4], pointRadius: 0, spanGaps: true });
@@ -196,11 +232,10 @@
 <div class="panel">
   <h2>UK physical & local</h2>
   <div class="disclaimer">
-    CeX / eBay / high-street sites often block automated bots. We try public search; if blocked you get the same search links you’d use in a browser.
-    Facebook Marketplace is <strong>link-only</strong> (login wall — we do not scrape it).
+    CeX / eBay / high-street often block bots. Search links always work in your browser.
+    Facebook Marketplace is link-only.
   </div>
   {% if cex_rows %}
-    <p style="padding: 0 1rem; font-size: 0.8rem; color: var(--muted);">CeX results</p>
     {% for row in cex_rows %}
       <div class="deal-row">
         <div><strong>{{ row.name }}</strong> <span class="kind used">used</span></div>
@@ -210,9 +245,7 @@
   {% elif cex_search_url %}
     <p style="padding: 0.5rem 1rem; font-size: 0.9rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
   {% endif %}
-
   {% if ebay_rows %}
-    <p style="padding: 0 1rem; font-size: 0.8rem; color: var(--muted);">eBay UK results</p>
     {% for row in ebay_rows %}
       <div class="deal-row">
         <div>
@@ -225,7 +258,6 @@
   {% elif ebay_search_url %}
     <p style="padding: 0.5rem 1rem; font-size: 0.9rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK →</a></p>
   {% endif %}
-
   <div style="padding: 0.75rem 1rem 1rem;">
     {% for link in uk_links %}
       <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.name }}</a>
@@ -236,7 +268,7 @@
 <div class="panel">
   <h2>Amazon UK</h2>
   {% if amazon_blocked %}
-    <div class="disclaimer">Amazon blocked automated access. Use public search:
+    <div class="disclaimer">Amazon blocked automated access.
       {% if amazon_search_url %}<a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Amazon UK →</a>{% endif %}
     </div>
   {% endif %}
@@ -269,7 +301,6 @@
     <p style="padding:0.85rem 1rem;color:var(--muted);font-size:0.9rem;">No Steam news for this app.</p>
   {% endif %}
   <div style="padding: 0.5rem 1rem 1rem;">
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem;">Social & community (no automated scrape)</p>
     {% for s in social_links %}
       <a class="link-chip" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a>
     {% endfor %}
