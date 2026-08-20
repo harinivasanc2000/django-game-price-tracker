@@ -67,9 +67,9 @@
 <body data-wallpaper="{% if site_settings %}{{ site_settings.wallpaper }}{% else %}comet{% endif %}">
   {% if game_wallpaper %}
     <div class="game-wallpaper" style="background-image: url('{{ game_wallpaper }}');" aria-hidden="true"></div>
-  {% elif site_settings and site_settings.wallpaper == "gradient" %}
+  {% elif site_settings.wallpaper == "gradient" %}
     <div class="bg-gradient" aria-hidden="true"></div>
-  {% elif not site_settings or site_settings.wallpaper == "comet" %}
+  {% else %}
     <canvas id="bg-canvas" aria-hidden="true"></canvas>
   {% endif %}
 
@@ -89,7 +89,7 @@
       </nav>
     </header>
     {% block content %}{% endblock %}
-    <footer>{% if site_settings and site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}</footer>
+    <footer>{% if site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}</footer>
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
@@ -125,7 +125,8 @@
   })();
   </script>
 
-  {% if not game_wallpaper and (not site_settings or site_settings.wallpaper == "comet") %}
+  {% if not game_wallpaper %}
+    {% if not site_settings.wallpaper or site_settings.wallpaper == "comet" %}
   <script>
   (function () {
     const c = document.getElementById('bg-canvas');
@@ -156,6 +157,7 @@
     requestAnimationFrame(frame);
   })();
   </script>
+    {% endif %}
   {% endif %}
   {% block extra_js %}{% endblock %}
 </body>
