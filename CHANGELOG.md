@@ -4,71 +4,49 @@
 
 ---
 
-## 2026-08-20 21:55 BST — Error hardening + features
+## 2026-08-20 22:05 BST — More digital BS4 stores + Research lab
 
-### Fixed
-- **FX conversion bug**: open.er-api rates are *GBP-base* (1 GBP = N foreign). Now inverted so USD/EUR → GBP is correct (`fx.py` cache key `v2`)
-- Detail page no longer 500s if one store scrape / CheapShark / news fails — each future is soft-caught (`views_steam_detail.py`)
-- `deal_prediction_panel` catches bad context instead of crashing the template
+### Scraping (product fields only)
+- New client `digital_stores_bs4.py`: **Humble, Fanatical, Green Man Gaming, GOG, CDKeys**
+- Always-on search chips: Epic, Eneba, AllKeyShop, GG.deals, ITAD
+- Fields: title, price, currency, URL, store name only
+- Soft-fail + cache; keyshops labelled risk
 
-### Added
-- **`/health/`** — DB + beautifulsoup/lxml diagnostics JSON
-- **Related on Steam** (`similar_games`) via public storesearch
-- `detail_helpers.empty_platform_bundle` fallback
-- Template partial `_similar_games.html` (include in sidebar)
+### Research lab (`/research/`)
+- Separate nav tab for enthusiasts & programmers
+- **No ML training on the server** — plan only
+- Data sources: APIs, Kaggle, public pages, your exports
+- Algorithms: classification, quantiles, boosting, anomaly detection
+- Feature ideas: sale calendar, wait curves, training CSV export, model cards
+- Workflow: collect → train offline → publish prediction JSON later
 
-### Template tip
-In `steam_detail.html` sidebar, add:
-```django
-{% include "games/_similar_games.html" %}
-```
-Fix AJAX esc() if still wrong:
-```js
-function esc(s) {
-  return String(s || '')
-    .replace(/&/g,'&')
-    .replace(/</g,'<')
-    .replace(/"/g,'"');
-}
-```
+### Template
+Detail page: include `{% include "games/_digital_store_links.html" %}` under PC deals if missing.
 
 ```bash
 git pull && python manage.py runserver
-# check: http://127.0.0.1:8000/health/
+# http://127.0.0.1:8000/research/
 ```
 
 ---
 
-## 2026-08-20 21:05 BST — UK local scrapes + clickable links
-
-### Added
-- CeX, eBay, GAME, Argos, Currys parallel public search
-- Always-clickable uk_links including Facebook Marketplace / Gumtree (link-only)
-
----
-
-## 2026-08-20 21:02 BST — lxml FeatureNotFound fix
+## 2026-08-20 21:55 BST — Error hardening + similar games
 
 ### Fixed
-- Fall back to `html.parser` when lxml missing
+- FX er-api inversion; soft-fail detail futures; prediction tag harden
+
+### Added
+- `/health/`; related Steam titles
 
 ---
 
-## 2026-08-20 20:35 BST — BeautifulSoup + deal prediction
+## 2026-08-20 21:05 BST — UK local scrapes
 
 ### Added
-- BS4 public product scrape; deal outlook heuristics
+- CeX, eBay, GAME, Argos, Currys + clickable links
 
 ---
 
 ## Earlier
 
-See git log for appearance settings, home grid, Celery, Steam, PSN, etc.
-
----
-
-## Backlog
-
-- [ ] Per-user track lists
-- [ ] Discord / email alerts
-- [ ] Stronger CeX when not blocked
+See git log for FX, BS4, appearance, Celery, Steam, etc.
