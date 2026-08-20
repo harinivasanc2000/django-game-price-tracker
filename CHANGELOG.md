@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-08-20 21:02 BST — Fix FeatureNotFound: lxml missing
+
+### Fixed
+- `Couldn't find a tree builder with the features you requested: lxml` on `/steam/<id>/`
+- `soup_from()` now uses **`html.parser`** (stdlib) when `lxml` is not installed
+- Optional: `pip install lxml` still preferred for speed
+
+```bash
+git pull
+# optional: pip install beautifulsoup4 lxml
+python manage.py runserver
+```
+
+---
+
 ## 2026-08-20 20:35 BST — BeautifulSoup public product scrape + deal prediction
 
 ### Scraping policy
@@ -16,7 +31,7 @@
 - `beautifulsoup4` + `lxml` in requirements
 - `clients/scrape_utils.py` shared helpers
 - CeX / eBay / GAME / Amazon UK parsers upgraded to BS4 where HTML is available
-- **Deal outlook** heuristics (`prediction.py`): buy-now score, further-drop chance, signals from launch %, Steam discount, track trend
+- **Deal outlook** heuristics (`prediction.py`)
 - Template tag `{% deal_prediction_panel %}` + `_prediction.html`
 
 ### Install
@@ -25,23 +40,14 @@ pip install -r requirements.txt
 git pull && python manage.py runserver
 ```
 
-Wire on detail template if missing:
-```django
-{% load deal_tags %}
-{% deal_prediction_panel %}
-```
-
 ---
 
 ## 2026-08-20 20:05 BST — Appearance settings, tracked icons, hot-deal ghosts
 
 ### Added
 - **Settings** nav (no login) → `/settings/`
-  - Themes: Dark red, Soft dark, Ember, Mist (dim light — not bright)
-  - Wallpapers: live comet/stars/aurora; static haze/hills/void/ocean; game art on detail
-  - Saved in `localStorage` only
-- **Tracked drawer**: capsule/cover icons
-- **On sale vs launch**: translucent cover behind chips
+- Themes + wallpapers (localStorage)
+- Tracked drawer icons; translucent hot-deal covers
 
 ---
 
@@ -49,13 +55,12 @@ Wire on detail template if missing:
 
 ### Process
 - CHANGELOG is **append-only** (prepend at top).
-- Restored entries that had been overwritten by short single-section updates.
 
 ---
 
 ## 2026-08-20 19:50 BST — Clean home (deal-site style)
 
-### Removed from home main screen
+### Removed from home
 - Recently viewed / Tracked list (drawer + History still)
 
 ### Added
@@ -66,14 +71,14 @@ Wire on detail template if missing:
 ## 2026-08-20 19:10 BST — Search sort, export, share
 
 ### Added
-- Search sort + hide DLC; `/export/tracked.json`; Copy/Share; savings badge
+- Search sort + hide DLC; export JSON; Copy/Share; savings badge
 
 ---
 
 ## 2026-08-20 18:25 BST — Nav, shortcuts, recently viewed
 
 ### Added
-- Deals nav; `/` focus search; toast; recently viewed (later removed from home)
+- Deals nav; `/` focus search; toast
 
 ---
 
@@ -198,7 +203,6 @@ Wire on detail template if missing:
 - [ ] Discord / email alerts
 - [ ] Stronger CeX when not blocked
 - [ ] True historic MSRP via ITAD if licensed
-- [ ] Confirm `{% deal_prediction_panel %}` on all detail deploys
 
 ---
 
