@@ -1,0 +1,58 @@
+{# Include after title actions on detail #}
+{% if savings_vs_launch is not None %}
+  <p style="font-size: 0.88rem; margin-top: 0.5rem;">
+    {% if savings_vs_launch > 0 %}
+      <span class="badge lowest">{{ savings_vs_launch }}% under launch</span>
+    {% elif savings_vs_launch < 0 %}
+      <span class="badge">{{ savings_vs_launch|cut:"-" }}% above launch</span>
+    {% else %}
+      <span class="badge">At launch level</span>
+    {% endif %}
+  </p>
+{% endif %}
+
+<div style="display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.95rem;">
+  {% if already_tracked %}
+    <form method="post" action="{% url 'games:untrack' already_tracked.slug %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-ghost">Untrack</button>
+    </form>
+  {% else %}
+    <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">Track</a>
+  {% endif %}
+  <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
+  <button type="button" class="btn btn-ghost" id="copyLinkBtn">Copy link</button>
+  <button type="button" class="btn btn-ghost" id="shareBtn">Share</button>
+</div>
+
+<script>
+(function () {
+  var url = window.location.href;
+  var copyBtn = document.getElementById('copyLinkBtn');
+  var shareBtn = document.getElementById('shareBtn');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () {
+          if (window.showToast) window.showToast('Link copied');
+          else copyBtn.textContent = 'Copied!';
+        });
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = url; document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); if (window.showToast) window.showToast('Link copied'); } catch (e) {}
+        document.body.removeChild(ta);
+      }
+    });
+  }
+  if (shareBtn) {
+    shareBtn.addEventListener('click', function () {
+      if (navigator.share) {
+        navigator.share({ title: document.title, url: url }).catch(function () {});
+      } else if (copyBtn) {
+        copyBtn.click();
+      }
+    });
+  }
+})();
+</script>
