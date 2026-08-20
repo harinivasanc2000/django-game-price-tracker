@@ -61,6 +61,13 @@
     .drawer-item:hover { background: rgba(80,20,20,0.4); }
     .drawer-item .t { font-weight: 600; font-size: 0.92rem; }
     .drawer-item .s { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+    #toast {
+      position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%) translateY(120%);
+      background: #1a3a2a; color: #86efac; border: 1px solid #2a6a3a;
+      padding: 0.55rem 1.1rem; border-radius: 999px; font-size: 0.88rem; z-index: 300;
+      transition: transform 0.25s ease; pointer-events: none;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); }
   </style>
   {% block extra_css %}{% endblock %}
 </head>
@@ -79,6 +86,7 @@
       <nav>
         <button type="button" class="nav-btn" id="openTracked">Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}</button>
         <a href="{% url 'games:steam_search' %}">Search</a>
+        <a href="{% url 'games:best_deals' %}">Deals</a>
         <a href="{% url 'games:history' %}">History</a>
         {% if user.is_authenticated %}
           <a href="{% url 'games:profile' %}">Profile</a>
@@ -89,7 +97,7 @@
       </nav>
     </header>
     {% block content %}{% endblock %}
-    <footer>{% if site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}</footer>
+    <footer>{% if site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %} · Press <kbd style="background:var(--border);padding:0.05rem 0.35rem;border-radius:4px;font-size:0.75rem;">/</kbd> to search</footer>
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
@@ -112,16 +120,35 @@
     </div>
   </aside>
 
+  <div id="toast" role="status" aria-live="polite"></div>
+
   <script>
+  window.showToast = function (msg) {
+    var t = document.getElementById('toast');
+    if (!t) return;
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+  };
   (function () {
-    const drawer = document.getElementById('trackedDrawer');
-    const backdrop = document.getElementById('drawerBackdrop');
-    const open = () => { drawer.classList.add('open'); backdrop.classList.add('open'); };
-    const close = () => { drawer.classList.remove('open'); backdrop.classList.remove('open'); };
-    document.getElementById('openTracked')?.addEventListener('click', open);
-    document.getElementById('closeTracked')?.addEventListener('click', close);
-    backdrop?.addEventListener('click', close);
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+    var drawer = document.getElementById('trackedDrawer');
+    var backdrop = document.getElementById('drawerBackdrop');
+    var open = function () { drawer.classList.add('open'); backdrop.classList.add('open'); };
+    var close = function () { drawer.classList.remove('open'); backdrop.classList.remove('open'); };
+    document.getElementById('openTracked') && document.getElementById('openTracked').addEventListener('click', open);
+    document.getElementById('closeTracked') && document.getElementById('closeTracked').addEventListener('click', close);
+    backdrop && backdrop.addEventListener('click', close);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') close();
+      // / focuses search unless typing in an input
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
+        var tag = (e.target && e.target.tagName) || '';
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+        var input = document.querySelector('input[name="q"], input[type="search"]');
+        if (input) { e.preventDefault(); input.focus(); input.select && input.select(); }
+      }
+    });
   })();
   </script>
 
@@ -129,10 +156,10 @@
     {% if not site_settings.wallpaper or site_settings.wallpaper == "comet" %}
   <script>
   (function () {
-    const c = document.getElementById('bg-canvas');
+    var c = document.getElementById('bg-canvas');
     if (!c) return;
-    const ctx = c.getContext('2d');
-    let w, h, comets = [], last = 0;
+    var ctx = c.getContext('2d');
+    var w, h, comets = [], last = 0;
     function resize() { w = c.width = window.innerWidth; h = c.height = window.innerHeight; }
     window.addEventListener('resize', resize, { passive: true });
     resize();
@@ -140,14 +167,15 @@
       return { x: Math.random() * w * 1.2, y: -20 - Math.random() * h * 0.3, len: 40 + Math.random() * 70,
         speed: 1.2 + Math.random() * 2.2, angle: Math.PI / 3.2 + Math.random() * 0.25, alpha: 0.15 + Math.random() * 0.35 };
     }
-    for (let i = 0; i < 8; i++) comets.push(spawn());
+    for (var i = 0; i < 8; i++) comets.push(spawn());
     function frame(t) {
       if (t - last < 33) { requestAnimationFrame(frame); return; }
       last = t; ctx.clearRect(0, 0, w, h);
-      for (const m of comets) {
+      for (var j = 0; j < comets.length; j++) {
+        var m = comets[j];
         m.x += Math.cos(m.angle) * m.speed; m.y += Math.sin(m.angle) * m.speed;
-        const g = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
-        g.addColorStop(0, `rgba(255,120,100,${m.alpha})`); g.addColorStop(1, 'rgba(120,20,20,0)');
+        var g = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
+        g.addColorStop(0, 'rgba(255,120,100,' + m.alpha + ')'); g.addColorStop(1, 'rgba(120,20,20,0)');
         ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath();
         ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len); ctx.stroke();
         if (m.y > h + 40 || m.x > w + 40) Object.assign(m, spawn());
