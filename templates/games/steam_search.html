@@ -1,10 +1,35 @@
 {% extends "base.html" %}
 {% block title %}Search{% if q %} · {{ q }}{% endif %}{% endblock %}
 
+{% block extra_css %}
+<style>
+  .result-card {
+    display: flex; gap: 1rem; align-items: center;
+    background: rgba(18,8,8,0.88); border: 1px solid var(--border);
+    border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.55rem;
+    transition: border-color 0.15s ease;
+  }
+  .result-card:hover { border-color: var(--accent2); }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center;
+    margin: 1rem 0 0.75rem; justify-content: space-between;
+  }
+  .toolbar select, .toolbar label {
+    font-size: 0.85rem; color: var(--muted);
+  }
+  .toolbar select {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.35rem 0.55rem;
+  }
+  .chk { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1 style="font-size: 1.35rem; margin-bottom: 0.35rem;">Search results</h1>
+<a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.85rem;">← Home</a>
+<h1 style="font-size: 1.35rem; margin: 0.5rem 0 0.35rem;">Search</h1>
 <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">
-  Click title to view. Track is separate. DLC is marked. Unknown ≠ free.
+  Click a title for full deals. Track is separate. Unknown ≠ free.
 </p>
 
 {% include "games/_search_box.html" with q=q placeholder="Search again…" %}
@@ -14,9 +39,29 @@
 {% endif %}
 
 {% if results %}
-  <p style="color: var(--muted); margin: 1.25rem 0 0.75rem;">{{ results|length }} close match{{ results|length|pluralize }}</p>
+  <div class="toolbar">
+    <p style="color: var(--muted); margin: 0;">{{ results|length }} match{{ results|length|pluralize }}</p>
+    <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
+      <label class="chk"><input type="checkbox" id="hideDlc" checked> Hide likely DLC</label>
+      <form method="get" style="display:flex;align-items:center;gap:0.4rem;">
+        <input type="hidden" name="q" value="{{ q }}">
+        <input type="hidden" name="cc" value="{{ country }}">
+        {% if current_platform %}<input type="hidden" name="platform" value="{{ current_platform }}">{% endif %}
+        <label for="sort">Sort</label>
+        <select name="sort" id="sort" onchange="this.form.submit()">
+          <option value="relevance" {% if sort == 'relevance' %}selected{% endif %}>Relevance</option>
+          <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>Price ↑</option>
+          <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>Price ↓</option>
+          <option value="discount" {% if sort == 'discount' %}selected{% endif %}>Biggest discount</option>
+          <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
+        </select>
+      </form>
+    </div>
+  </div>
+
+  <div id="resultsList">
   {% for r in results %}
-    <div style="display: flex; gap: 1rem; align-items: center; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.55rem;">
+    <div class="result-card" data-dlc="{% if r.is_likely_dlc %}1{% else %}0{% endif %}">
       <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}">
         {% if r.tiny_image %}
           <img src="{{ r.tiny_image }}" alt="" style="width:120px;height:45px;object-fit:cover;border-radius:6px;" loading="lazy">
@@ -46,7 +91,25 @@
       </div>
     </div>
   {% endfor %}
+  </div>
 {% elif q and not error %}
   <p style="color: var(--muted); margin-top: 1rem;">No results.</p>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var chk = document.getElementById('hideDlc');
+  if (!chk) return;
+  function apply() {
+    document.querySelectorAll('.result-card').forEach(function (el) {
+      if (chk.checked && el.getAttribute('data-dlc') === '1') el.style.display = 'none';
+      else el.style.display = '';
+    });
+  }
+  chk.addEventListener('change', apply);
+  apply();
+})();
+</script>
 {% endblock %}
