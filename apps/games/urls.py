@@ -6,6 +6,7 @@ from . import views_export
 from . import settings_view
 from . import health_view
 from . import views_steam_detail
+from . import research_view
 
 app_name = "games"
 
@@ -13,6 +14,7 @@ urlpatterns = [
     path("", home_view.home, name="home"),
     path("search/", search_view.steam_search, name="steam_search"),
     path("deals/", views.best_deals, name="best_deals"),
+    path("research/", research_view.research_lab, name="research"),
     path("settings/", settings_view.appearance_settings, name="appearance"),
     path("health/", health_view.health, name="health"),
     path("export/tracked.json", views_export.export_tracked_json, name="export_tracked"),
