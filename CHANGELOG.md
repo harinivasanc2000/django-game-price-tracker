@@ -2,24 +2,21 @@
 
 ---
 
-## 2026-08-20 19:10 BST — UI & feature batch
+## 2026-08-20 19:50 BST — Clean home (deal-site style)
 
-### Search
-- Sort: relevance / price ↑↓ / biggest discount / name
-- **Hide likely DLC** toggle (on by default)
-- Cleaner result cards
+### Removed from home main screen
+- **Recently viewed** (still in History)
+- **Tracked list** (still in right drawer + Profile)
 
-### Deals
-- **Export JSON** at `/export/tracked.json`
-- Link from Best deals page
-
-### Detail (partial)
-- `_detail_actions.html` partial: **Copy link**, **Share**, savings badge
-  (wire into steam_detail by including where Track buttons are)
-
-### Earlier still active
-- Recently viewed, `/` search focus, disclaimer, platform AJAX, deal news filter
+### Added (inspired by ITAD / GG.deals / Steam store)
+- **Hero search** only on home
+- **Popular grid** with Steam header images + live UK prices
+- Discount pills + lowest GBP when tracked multi-store exists
+- **On sale vs launch** hot strip
+- Parallel Steam detail fetch (cached) for popular IDs
 
 ```bash
 git pull && python manage.py runserver
 ```
+
+First load of popular cards may take a second while Steam prices cache.
