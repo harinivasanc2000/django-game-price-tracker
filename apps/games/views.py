@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from django.conf import settings
 from django.http import JsonResponse
@@ -32,7 +33,7 @@ POPULAR_APP_IDS = [
 ]
 
 PLATFORMS = [
-    ("", "All platforms"),
+    ("", "All"),
     ("pc", "PC"),
     ("ps4", "PS4"),
     ("ps5", "PS5"),
@@ -108,15 +109,26 @@ def _gbp_point(amount, currency="GBP") -> float | None:
     return float(v) if v is not None else None
 
 
+def _collapse_changes(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Keep first point and only points where price actually changes."""
+    if not pairs:
+        return []
+    out = [pairs[0]]
+    for lab, price in pairs[1:]:
+        if abs(price - out[-1][1]) >= 0.005:
+            out.append((lab, price))
+    return out
+
+
 def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows, cex_rows, ebay_rows):
-    """All chart values normalised to GBP for fair averages."""
+    """GBP series; only plot price *changes* (flat stretches collapse)."""
     points: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
     if already:
         history = list(
             PriceRecord.objects.filter(game=already)
             .select_related("store")
-            .order_by("recorded_at")[:150]
+            .order_by("recorded_at")[:200]
         )
         for h in history:
             label = h.recorded_at.strftime("%d %b %H:%M")
@@ -151,6 +163,10 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
         if g is not None:
             points["eBay UK"].append((now, g))
 
+    # Collapse per-seller to change points only
+    for seller in list(points.keys()):
+        points[seller] = _collapse_changes(points[seller])
+
     labels: list[str] = []
     seen = set()
     for pairs in points.values():
@@ -170,6 +186,24 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
     for i, _ in enumerate(labels):
         vals = [series[s][i] for s in series if series[s][i] is not None]
         avg.append(round(sum(vals) / len(vals), 2) if vals else None)
+    # Collapse flat average stretches too
+    avg_pairs = [(labels[i], avg[i]) for i in range(len(labels)) if avg[i] is not None]
+    avg_collapsed = _collapse_changes(avg_pairs)
+    if avg_collapsed:
+        labels = [p[0] for p in avg_collapsed]
+        avg = [p[1] for p in avg_collapsed]
+        # re-align series to collapsed labels (last known)
+        for seller in series:
+            by_lab = {}
+            last = None
+            for lab, val in zip(
+                [l for l in points[seller] and [x[0] for x in points[seller]] or []],
+                [x[1] for x in points.get(seller, [])],
+            ):
+                by_lab[lab] = val
+            # rebuild from original points list
+            by_lab = {lab: price for lab, price in points.get(seller, [])}
+            series[seller] = [by_lab.get(lab) for lab in labels]
 
     launch_series = [launch for _ in labels] if launch is not None else [None for _ in labels]
     sellers = sorted(series.keys(), key=lambda s: (s != "Steam", s.lower()))
@@ -180,7 +214,61 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
         "launch": launch_series,
         "sellers": sellers,
         "unit": "GBP",
+        "change_only": True,
     }
+
+
+def _serialize_deal_row(row: dict) -> dict:
+    out = {}
+    for k, v in row.items():
+        if isinstance(v, Decimal):
+            out[k] = float(v)
+        else:
+            out[k] = v
+    return out
+
+
+def _platform_bundle(title: str, platform: str = "") -> dict:
+    """Fetch UK / PSN / Amazon / links for a platform (parallel)."""
+    platform = (platform or "").strip().lower()
+    psn_query = platform_query(title, platform) if platform.startswith("ps") else title
+    amz_extra = platform.upper() if platform else ""
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        f_psn = pool.submit(search_psn, psn_query, 8)
+        f_amz = pool.submit(search_amazon_uk, title, amz_extra, 6)
+        f_cex = pool.submit(try_cex_search, title, platform, 6)
+        f_ebay = pool.submit(try_ebay_uk, title, platform, 6)
+        psn_rows = f_psn.result()
+        amazon = f_amz.result()
+        cex = f_cex.result()
+        ebay = f_ebay.result()
+
+    return {
+        "platform": platform,
+        "psn_rows": [_serialize_deal_row(r) for r in psn_rows],
+        "amazon_rows": [_serialize_deal_row(r) for r in (amazon.get("results") or [])],
+        "amazon_blocked": amazon.get("blocked", True),
+        "amazon_search_url": amazon.get("search_url"),
+        "cex_rows": [_serialize_deal_row(r) for r in (cex.get("results") or [])],
+        "cex_blocked": cex.get("blocked", True),
+        "cex_search_url": cex.get("search_url"),
+        "ebay_rows": [_serialize_deal_row(r) for r in (ebay.get("results") or [])],
+        "ebay_blocked": ebay.get("blocked", True),
+        "ebay_search_url": ebay.get("search_url"),
+        "uk_links": uk_search_links(title, platform=platform),
+    }
+
+
+def platform_deals_api(request, app_id: int):
+    """AJAX: swap platform without full page reload."""
+    platform = request.GET.get("platform", "").strip().lower()
+    country = request.GET.get("cc", "GB").strip().upper() or "GB"
+    detail = get_app_details(app_id, country=country)
+    if not detail:
+        return JsonResponse({"error": "not found"}, status=404)
+    data = _platform_bundle(detail["name"], platform)
+    return JsonResponse(data)
 
 
 def home(request):
@@ -257,18 +345,18 @@ def steam_detail(request, app_id: int):
     ensure_uk_stores()
     already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
     catalog = Game.objects.filter(steam_app_id=app_id).first()
-    store_deals = deals_for_title(detail["name"], limit=15)
 
-    psn_q = platform_query(detail["name"], platform or "ps5")
-    psn_rows = search_psn(psn_q if platform.startswith("ps") else detail["name"], limit=8)
-    amazon = search_amazon_uk(detail["name"], extra=platform.upper() if platform else "", limit=6)
-    amazon_rows = amazon.get("results") or []
+    # Parallel network for deals + news + platform bundle
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        f_deals = pool.submit(deals_for_title, detail["name"], 15)
+        f_news = pool.submit(steam_news, app_id, 8)
+        f_plat = pool.submit(_platform_bundle, detail["name"], platform)
+        store_deals = f_deals.result()
+        news_items = f_news.result()
+        plat = f_plat.result()
 
-    cex = try_cex_search(detail["name"], platform=platform, limit=6)
-    ebay = try_ebay_uk(detail["name"], platform=platform, limit=6)
-    uk_links = uk_search_links(detail["name"], platform=platform)
-
-    news_items = steam_news(app_id, count=5)
+    psn_rows = plat["psn_rows"]
+    amazon_rows = plat["amazon_rows"]
     social_links = social_news_links(detail["name"])
 
     launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
@@ -282,8 +370,8 @@ def steam_detail(request, app_id: int):
         launch,
         psn_rows,
         amazon_rows,
-        cex.get("results") or [],
-        ebay.get("results") or [],
+        plat["cex_rows"],
+        plat["ebay_rows"],
     )
 
     live_offers = []
@@ -298,8 +386,12 @@ def steam_detail(request, app_id: int):
                 "url": detail.get("url"),
             }
         )
-    best_psn = best_psn_deal(detail["name"])
-    if best_psn and float(best_psn.get("price") or 0) > 0:
+    best_psn = None
+    for row in psn_rows:
+        if float(row.get("price") or 0) > 0:
+            best_psn = row
+            break
+    if best_psn:
         live_offers.append(
             {
                 "store": "PSN UK",
@@ -321,26 +413,26 @@ def steam_detail(request, app_id: int):
                 "url": amazon_rows[0].get("url"),
             }
         )
-    if cex.get("results"):
+    if plat["cex_rows"]:
         live_offers.append(
             {
                 "store": "CeX",
-                "price": cex["results"][0]["price"],
-                "price_gbp": to_gbp_or_zero(cex["results"][0]["price"], "GBP"),
+                "price": plat["cex_rows"][0]["price"],
+                "price_gbp": to_gbp_or_zero(plat["cex_rows"][0]["price"], "GBP"),
                 "currency": "GBP",
                 "kind": "used",
-                "url": cex.get("search_url"),
+                "url": plat.get("cex_search_url"),
             }
         )
-    if ebay.get("results"):
+    if plat["ebay_rows"]:
         live_offers.append(
             {
                 "store": "eBay UK",
-                "price": ebay["results"][0]["price"],
-                "price_gbp": to_gbp_or_zero(ebay["results"][0]["price"], "GBP"),
+                "price": plat["ebay_rows"][0]["price"],
+                "price_gbp": to_gbp_or_zero(plat["ebay_rows"][0]["price"], "GBP"),
                 "currency": "GBP",
                 "kind": "marketplace",
-                "url": ebay["results"][0].get("url"),
+                "url": plat["ebay_rows"][0].get("url"),
             }
         )
     if store_deals:
@@ -362,6 +454,17 @@ def steam_detail(request, app_id: int):
     if request.user.is_authenticated and already:
         watched = Watch.objects.filter(user=request.user, game=already).first()
 
+    # OS platforms from Steam + store platforms always available
+    steam_os = detail.get("platforms") or []
+    store_platforms = [("pc", "PC"), ("ps4", "PS4"), ("ps5", "PS5"), ("xbox", "Xbox"), ("switch", "Switch")]
+
+    wallpaper = (
+        detail.get("library_hero")
+        or detail.get("page_background")
+        or detail.get("header_image")
+        or ""
+    )
+
     return render(
         request,
         "games/steam_detail.html",
@@ -369,21 +472,23 @@ def steam_detail(request, app_id: int):
             "d": detail,
             "country": country,
             "platforms": PLATFORMS,
+            "store_platforms": store_platforms,
+            "steam_os": steam_os,
             "current_platform": platform,
             "already_tracked": already,
             "catalog_game": catalog,
             "store_deals": store_deals,
             "psn_rows": psn_rows,
             "amazon_rows": amazon_rows,
-            "amazon_blocked": amazon.get("blocked", True),
-            "amazon_search_url": amazon.get("search_url"),
-            "cex_rows": cex.get("results") or [],
-            "cex_blocked": cex.get("blocked", True),
-            "cex_search_url": cex.get("search_url"),
-            "ebay_rows": ebay.get("results") or [],
-            "ebay_blocked": ebay.get("blocked", True),
-            "ebay_search_url": ebay.get("search_url"),
-            "uk_links": uk_links,
+            "amazon_blocked": plat.get("amazon_blocked", True),
+            "amazon_search_url": plat.get("amazon_search_url"),
+            "cex_rows": plat["cex_rows"],
+            "cex_blocked": plat.get("cex_blocked", True),
+            "cex_search_url": plat.get("cex_search_url"),
+            "ebay_rows": plat["ebay_rows"],
+            "ebay_blocked": plat.get("ebay_blocked", True),
+            "ebay_search_url": plat.get("ebay_search_url"),
+            "uk_links": plat["uk_links"],
             "news_items": news_items,
             "social_links": social_links,
             "live_offers": live_offers,
@@ -395,6 +500,10 @@ def steam_detail(request, app_id: int):
             "has_chart": bool(chart["labels"]),
             "watched": watched,
             "is_watched": watched is not None,
+            "game_wallpaper": wallpaper,
+            "screenshots": detail.get("screenshots") or [],
+            "wide_layout": True,
+            "app_id": app_id,
         },
     )
 
@@ -516,6 +625,8 @@ def profile(request):
 
 def game_compare(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
+    if game.steam_app_id:
+        return redirect("games:steam_detail", app_id=game.steam_app_id)
     prices = list(
         PriceRecord.objects.filter(game=game)
         .select_related("store")
@@ -527,44 +638,6 @@ def game_compare(request, slug):
 
     prices.sort(key=_gbp)
     lowest = prices[0] if prices else None
-
-    recent = _snapshot_since(game, hours=24)
-    change = None
-    if len(recent) >= 2:
-        first, last = recent[0], recent[-1]
-        prev_gbp, cur_gbp = to_gbp_or_zero(first.price, first.currency), _gbp(last)
-        if prev_gbp != cur_gbp:
-            change = {
-                "direction": "down" if cur_gbp < prev_gbp else "up",
-                "delta": abs(cur_gbp - prev_gbp),
-                "pct": abs((cur_gbp - prev_gbp) / prev_gbp * 100) if prev_gbp else 0,
-                "currency": settings.DEFAULT_CURRENCY,
-            }
-
-    history = list(
-        PriceRecord.objects.filter(game=game).select_related("store").order_by("recorded_at")[:150]
-    )
-    chart_labels, chart_values, chart_stores, seen_days = [], [], [], set()
-    for h in history:
-        day = h.recorded_at.strftime("%Y-%m-%d")
-        key = (h.store_id, day)
-        if key in seen_days:
-            continue
-        seen_days.add(key)
-        gbp = _gbp_point(h.price, h.currency)
-        if gbp is None:
-            continue
-        chart_labels.append(h.recorded_at.strftime("%d %b %y"))
-        chart_values.append(gbp)
-        chart_stores.append(h.store.name)
-
-    siblings = Game.objects.filter(title=game.title, is_active=True).exclude(pk=game.pk)[:6]
-    watched = (
-        Watch.objects.filter(user=request.user, game=game).first()
-        if request.user.is_authenticated
-        else None
-    )
-
     return render(
         request,
         "games/compare.html",
@@ -572,14 +645,14 @@ def game_compare(request, slug):
             "game": game,
             "prices": prices,
             "lowest": lowest,
-            "change": change,
+            "change": None,
             "retail_baseline": float(game.launch_price) if game.launch_price else None,
-            "siblings": siblings,
-            "history_count": len(history),
-            "chart_labels": json.dumps(chart_labels),
-            "chart_values": json.dumps(chart_values),
-            "chart_stores": json.dumps(chart_stores),
-            "watched": watched,
+            "siblings": [],
+            "history_count": 0,
+            "chart_labels": "[]",
+            "chart_values": "[]",
+            "chart_stores": "[]",
+            "watched": None,
         },
     )
 
