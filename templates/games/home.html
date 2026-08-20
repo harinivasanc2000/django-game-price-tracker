@@ -3,12 +3,17 @@
 
 {% block extra_css %}
 <style>
+  /* Important: author display:flex overrides [hidden] unless we force hide */
   .disclaimer-backdrop {
-    position: fixed; inset: 0; z-index: 200;
-    background: rgba(4, 2, 2, 0.55);
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    display: flex; align-items: center; justify-content: center;
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(4, 2, 2, 0.65);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    display: none;
+    align-items: center; justify-content: center;
     padding: 1.25rem;
+  }
+  .disclaimer-backdrop.is-open {
+    display: flex;
   }
   .disclaimer-box {
     width: min(420px, 100%);
@@ -23,10 +28,10 @@
   .disclaimer-box ul { margin: 0.35rem 0 0.75rem 1.1rem; color: var(--muted); font-size: 0.85rem; }
   .disclaimer-box li { margin-bottom: 0.3rem; }
   .disclaimer-box .ok {
-    width: 100%; margin-top: 0.5rem; padding: 0.65rem 1rem; border: none; border-radius: 10px;
+    width: 100%; margin-top: 0.5rem; padding: 0.7rem 1rem; border: none; border-radius: 10px;
     background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 0.95rem;
   }
-  .disclaimer-box .ok:hover { filter: brightness(1.08); }
+  .disclaimer-box .ok:hover { filter: brightness(1.1); }
   .tips {
     margin-top: 2.5rem; padding: 1rem 1.1rem; border-radius: 12px;
     border: 1px solid var(--border); background: rgba(18,8,8,0.7);
@@ -35,13 +40,30 @@
   .tips details { margin-bottom: 0.45rem; }
   .tips summary { cursor: pointer; font-size: 0.92rem; color: var(--text); padding: 0.25rem 0; }
   .tips details p { font-size: 0.85rem; color: var(--muted); margin: 0.35rem 0 0.5rem 0.1rem; line-height: 1.45; }
+  .quick-links {
+    display: flex; flex-wrap: wrap; gap: 0.45rem; margin: -0.5rem 0 1.5rem;
+  }
+  .quick-links a {
+    font-size: 0.8rem; padding: 0.35rem 0.7rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); text-decoration: none !important;
+  }
+  .quick-links a:hover { border-color: var(--accent2); color: var(--text); }
 </style>
 {% endblock %}
 
 {% block content %}
-<section style="margin: 2rem 0 2.5rem;">
+<section style="margin: 2rem 0 1.25rem;">
   {% include "games/_search_box.html" with placeholder="Search Steam…" autofocus=True %}
 </section>
+
+<nav class="quick-links" aria-label="Quick links">
+  <a href="{% url 'games:steam_search' %}">Search</a>
+  <a href="{% url 'games:best_deals' %}">Best tracked deals</a>
+  <a href="{% url 'games:history' %}">History</a>
+  <a href="{% url 'games:steam_search' %}?q=free">Free on Steam</a>
+  <a href="{% url 'games:steam_search' %}?q=assassin%27s+creed">Assassin&rsquo;s Creed</a>
+  <a href="{% url 'games:steam_search' %}?q=god+of+war">God of War</a>
+</nav>
 
 {% if tracked_home %}
 <section style="margin-bottom: 2.25rem;">
@@ -85,27 +107,27 @@
   <h2>Finding deals & staying safe</h2>
   <details open>
     <summary>How to spot a good deal</summary>
-    <p>Compare the live price to the <strong>launch / list price</strong> on this site. Prefer official stores (Steam, PSN, Xbox, Epic, Humble, GOG). A deep discount on a keyshop is not automatically better if the key is region-locked or from a risky seller.</p>
+    <p>Compare the live price to the <strong>launch / list price</strong>. Prefer official stores when the gap is small. Keyshop discounts are not always safer.</p>
   </details>
   <details>
     <summary>Protect yourself with third-party keys</summary>
-    <p>Grey-market keyshops can be cheaper but may void support, use stolen payment methods, or sell unauthorised keys. Check seller ratings, refund policy, and whether activation is for <strong>your region</strong>. When unsure, pay a bit more on Steam / PSN / Epic.</p>
+    <p>Check seller ratings, refund policy, and <strong>region</strong>. When unsure, buy on Steam / PSN / Epic.</p>
   </details>
   <details>
-    <summary>Physical & used (CeX, eBay, Marketplace)</summary>
-    <p>Used discs are often cheaper. Check condition grades, seller feedback, and return windows. Facebook Marketplace is link-only here — meet safely and prefer in-person payment methods you trust.</p>
+    <summary>Physical & used</summary>
+    <p>Check condition grades and returns. Marketplace meets should be public and payment methods you trust.</p>
   </details>
   <details>
     <summary>What this tool is not</summary>
-    <p>We do not sell games, process payments, or guarantee any listed price. Data comes from public sources and can be wrong, delayed, or blocked. Always confirm on the store before you buy.</p>
+    <p>Not a store. No guarantees. Always confirm price on the retailer before paying.</p>
   </details>
 </section>
 
-<div class="disclaimer-backdrop" id="firstVisitModal" hidden>
+<div class="disclaimer-backdrop" id="firstVisitModal" role="presentation">
   <div class="disclaimer-box" role="dialog" aria-labelledby="discTitle" aria-modal="true">
     <h2 id="discTitle">Welcome</h2>
     <p><strong style="color: var(--text);">What this is:</strong> a personal helper to compare public game prices (Steam, PSN, UK shops, aggregators) and track drops.</p>
-    <p><strong style="color: var(--text);">What this is not:</strong> a store, payment processor, or guarantee of any deal. We are not affiliated with Steam, PlayStation, Amazon, CeX, or keyshops.</p>
+    <p><strong style="color: var(--text);">What this is not:</strong> a store, payment processor, or guarantee of any deal. Not affiliated with Steam, PlayStation, Amazon, CeX, or keyshops.</p>
     <ul>
       <li>Prices may be wrong, outdated, or region-specific.</li>
       <li>Third-party / keyshop links carry risk — buy at your own judgement.</li>
@@ -120,16 +142,48 @@
 {% block extra_js %}
 <script>
 (function () {
-  const KEY = 'gpt_disclaimer_v1';
-  const modal = document.getElementById('firstVisitModal');
-  if (!modal) return;
-  try {
-    if (localStorage.getItem(KEY) === '1') return;
-  } catch (e) {}
-  modal.hidden = false;
-  document.getElementById('acceptDisclaimer')?.addEventListener('click', () => {
+  var KEY = 'gpt_disclaimer_v1';
+  var modal = document.getElementById('firstVisitModal');
+  var btn = document.getElementById('acceptDisclaimer');
+  if (!modal || !btn) return;
+
+  function closeModal() {
     try { localStorage.setItem(KEY, '1'); } catch (e) {}
-    modal.hidden = true;
+    modal.classList.remove('is-open');
+    document.body.style.overflow = '';
+  }
+
+  function openModal() {
+    modal.classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    try { btn.focus(); } catch (e) {}
+  }
+
+  var accepted = false;
+  try { accepted = localStorage.getItem(KEY) === '1'; } catch (e) {}
+
+  if (!accepted) openModal();
+
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeModal();
+  });
+
+  // Do not close by clicking the blur (force explicit accept)
+  modal.addEventListener('click', function (e) {
+    if (e.target === modal) {
+      e.preventDefault();
+      btn.focus();
+    }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (!modal.classList.contains('is-open')) return;
+    if (e.key === 'Enter' || e.key === 'Escape') {
+      e.preventDefault();
+      closeModal();
+    }
   });
 })();
 </script>
