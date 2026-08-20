@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
 
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
 from .clients.cheapshark import deals_for_title
+from .clients.digital_stores_bs4 import digital_search_links, fetch_digital_bundle
 from .clients.external_stores import ensure_uk_stores
 from .clients.news import steam_news, social_news_links
 from .clients.steam import get_app_details
@@ -15,6 +17,19 @@ from .detail_helpers import empty_platform_bundle, similar_steam_titles
 from .fx import to_gbp_or_zero
 from .models import Game, Watch
 from . import views as v
+
+
+def _flatten_digital(bundle: dict) -> list[dict]:
+    rows = []
+    for key in ("humble", "fanatical", "gmg", "gog", "cdkeys"):
+        block = bundle.get(key) or {}
+        for r in block.get("results") or []:
+            out = {}
+            for k, val in r.items():
+                out[k] = float(val) if isinstance(val, Decimal) else val
+            rows.append(out)
+    rows.sort(key=lambda x: float(x.get("price") or 9999))
+    return rows[:12]
 
 
 def platform_deals_api(request, app_id: int):
@@ -55,11 +70,13 @@ def steam_detail(request, app_id: int):
 
     store_deals, news_items, plat = [], [], empty_platform_bundle(detail["name"], platform)
     similar = []
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    digital_bundle: dict = {"digital_links": digital_search_links(detail["name"])}
+    with ThreadPoolExecutor(max_workers=7) as pool:
         f_deals = pool.submit(deals_for_title, detail["name"], 15)
         f_news = pool.submit(steam_news, app_id, 8)
         f_plat = pool.submit(v._platform_bundle, detail["name"], platform)
         f_sim = pool.submit(similar_steam_titles, detail["name"], app_id, country, 6)
+        f_dig = pool.submit(fetch_digital_bundle, detail["name"], 4)
         try:
             store_deals = f_deals.result() or []
         except Exception:
@@ -76,6 +93,13 @@ def steam_detail(request, app_id: int):
             similar = f_sim.result() or []
         except Exception:
             similar = []
+        try:
+            digital_bundle = f_dig.result() or digital_bundle
+        except Exception:
+            pass
+
+    digital_rows = _flatten_digital(digital_bundle)
+    digital_links = digital_bundle.get("digital_links") or digital_search_links(detail["name"])
 
     psn_rows = plat.get("psn_rows") or []
     amazon_rows = plat.get("amazon_rows") or []
@@ -151,6 +175,17 @@ def steam_detail(request, app_id: int):
                     "url": rows[0].get("url") or plat.get(key.replace("_rows", "_search_url")),
                 }
             )
+    for row in digital_rows[:3]:
+        live_offers.append(
+            {
+                "store": row.get("store_name") or "Digital",
+                "price": row["price"],
+                "price_gbp": to_gbp_or_zero(row["price"], row.get("currency") or "GBP"),
+                "currency": row.get("currency") or "GBP",
+                "kind": "third-party" if row.get("store_name") == "CDKeys" else "retail",
+                "url": row.get("url"),
+            }
+        )
     if store_deals:
         live_offers.append(
             {
@@ -222,6 +257,8 @@ def steam_detail(request, app_id: int):
             "currys_blocked": plat.get("currys_blocked", True),
             "currys_search_url": plat.get("currys_search_url"),
             "uk_links": plat.get("uk_links") or [],
+            "digital_rows": digital_rows,
+            "digital_links": digital_links,
             "news_items": news_items,
             "social_links": social_links,
             "live_offers": live_offers,
