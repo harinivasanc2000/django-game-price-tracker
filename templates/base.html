@@ -16,9 +16,21 @@
       position: fixed; inset: 0; z-index: -2; pointer-events: none;
       background: radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.3), transparent 55%), radial-gradient(ellipse 50% 35% at 85% 70%, rgba(50,8,8,0.35), transparent 50%), #080404;
     }
+    .game-wallpaper {
+      position: fixed; inset: 0; z-index: -3; pointer-events: none;
+      background-size: cover; background-position: center top;
+      filter: saturate(1.05) brightness(0.55);
+      transform: scale(1.02);
+    }
+    .game-wallpaper::after {
+      content: ""; position: absolute; inset: 0;
+      background: linear-gradient(180deg, rgba(8,4,4,0.55) 0%, rgba(8,4,4,0.82) 45%, rgba(8,4,4,0.95) 100%),
+                  radial-gradient(ellipse 80% 50% at 50% 0%, transparent 0%, rgba(8,4,4,0.5) 100%);
+    }
     a { color: var(--accent2); text-decoration: none; }
     a:hover { text-decoration: underline; }
     .container { max-width: 900px; margin: 0 auto; padding: 1.25rem 1.5rem; position: relative; }
+    .container.wide { max-width: 1120px; }
     header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0 1rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.5rem; }
     header .logo { font-weight: 700; font-size: 1.15rem; color: var(--text); }
     header .logo span { color: var(--accent2); }
@@ -53,13 +65,15 @@
   {% block extra_css %}{% endblock %}
 </head>
 <body data-wallpaper="{% if site_settings %}{{ site_settings.wallpaper }}{% else %}comet{% endif %}">
-  {% if site_settings and site_settings.wallpaper == "gradient" %}
+  {% if game_wallpaper %}
+    <div class="game-wallpaper" style="background-image: url('{{ game_wallpaper }}');" aria-hidden="true"></div>
+  {% elif site_settings and site_settings.wallpaper == "gradient" %}
     <div class="bg-gradient" aria-hidden="true"></div>
   {% elif not site_settings or site_settings.wallpaper == "comet" %}
     <canvas id="bg-canvas" aria-hidden="true"></canvas>
   {% endif %}
 
-  <div class="container">
+  <div class="container{% if wide_layout %} wide{% endif %}">
     <header>
       <a href="/" class="logo">{% if site_settings %}{{ site_settings.site_title }}{% else %}Game <span>Price</span> Tracker{% endif %}</a>
       <nav>
@@ -87,7 +101,7 @@
     <div class="drawer-body">
       {% if tracked_drawer %}
         {% for g in tracked_drawer %}
-          <a class="drawer-item" href="{% url 'games:compare' g.slug %}">
+          <a class="drawer-item" href="{% if g.steam_app_id %}{% url 'games:steam_detail' g.steam_app_id %}{% else %}{% url 'games:compare' g.slug %}{% endif %}">
             <div class="t">{{ g.title }}</div>
             <div class="s">{{ g.get_platform_display }}{% if g.launch_price %} · launch {{ g.launch_price }} {{ g.launch_currency }}{% endif %}</div>
           </a>
@@ -111,7 +125,7 @@
   })();
   </script>
 
-  {% if not site_settings or site_settings.wallpaper == "comet" %}
+  {% if not game_wallpaper and (not site_settings or site_settings.wallpaper == "comet") %}
   <script>
   (function () {
     const c = document.getElementById('bg-canvas');
@@ -143,5 +157,6 @@
   })();
   </script>
   {% endif %}
+  {% block extra_js %}{% endblock %}
 </body>
 </html>
