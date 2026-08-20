@@ -3,42 +3,26 @@
 
 {% block extra_css %}
 <style>
-  .hero-search {
-    text-align: center;
-    padding: 1.5rem 0 1.75rem;
-  }
+  .hero-search { text-align: center; padding: 1.5rem 0 1.75rem; }
   .hero-search h1 {
-    font-size: clamp(1.35rem, 3vw, 1.75rem);
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    margin-bottom: 0.4rem;
+    font-size: clamp(1.35rem, 3vw, 1.75rem); font-weight: 700;
+    letter-spacing: -0.02em; margin-bottom: 0.4rem;
   }
   .hero-search p {
-    color: var(--muted);
-    font-size: 0.95rem;
-    margin-bottom: 1.25rem;
-    max-width: 36rem;
-    margin-left: auto;
-    margin-right: auto;
+    color: var(--muted); font-size: 0.95rem; margin-bottom: 1.25rem;
+    max-width: 36rem; margin-left: auto; margin-right: auto;
   }
   .sec-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    gap: 0.75rem;
-    margin: 1.75rem 0 0.85rem;
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 0.75rem; margin: 1.75rem 0 0.85rem;
   }
   .sec-head h2 {
-    font-size: 0.78rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
+    font-size: 0.78rem; font-weight: 700; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--muted);
   }
   .sec-head a { font-size: 0.82rem; color: var(--muted); }
   .sec-head a:hover { color: var(--accent2); }
 
-  /* ITAD / GG.deals style card grid */
   .game-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -48,40 +32,24 @@
     .game-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
   }
   .game-card {
-    display: flex;
-    flex-direction: column;
-    background: rgba(18, 8, 8, 0.92);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    overflow: hidden;
-    text-decoration: none !important;
-    color: var(--text);
+    display: flex; flex-direction: column;
+    background: rgba(18, 8, 8, 0.92); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+    text-decoration: none !important; color: var(--text);
     transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
   }
   .game-card:hover {
-    border-color: var(--accent2);
-    transform: translateY(-2px);
+    border-color: var(--accent2); transform: translateY(-2px);
     box-shadow: 0 12px 28px rgba(0,0,0,0.35);
   }
-  .game-card .cover {
-    aspect-ratio: 460 / 215;
-    background: #1a0c0c;
-    position: relative;
-    overflow: hidden;
-  }
-  .game-card .cover img {
-    width: 100%; height: 100%; object-fit: cover; display: block;
-  }
+  .game-card .cover { aspect-ratio: 460 / 215; background: #1a0c0c; position: relative; overflow: hidden; }
+  .game-card .cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .game-card .discount-pill {
     position: absolute; top: 0.45rem; right: 0.45rem;
     background: #14532d; color: #86efac;
-    font-size: 0.72rem; font-weight: 700;
-    padding: 0.2rem 0.45rem; border-radius: 6px;
+    font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.45rem; border-radius: 6px;
   }
-  .game-card .body {
-    padding: 0.65rem 0.7rem 0.75rem;
-    display: flex; flex-direction: column; gap: 0.25rem; flex: 1;
-  }
+  .game-card .body { padding: 0.65rem 0.7rem 0.75rem; display: flex; flex-direction: column; gap: 0.25rem; flex: 1; }
   .game-card .title {
     font-size: 0.88rem; font-weight: 600; line-height: 1.25;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
@@ -92,30 +60,34 @@
     margin-top: auto; padding-top: 0.35rem;
     display: flex; align-items: baseline; justify-content: space-between; gap: 0.35rem;
   }
-  .game-card .now {
-    font-size: 1.05rem; font-weight: 700; color: var(--accent2);
-  }
-  .game-card .was {
-    font-size: 0.75rem; color: var(--muted); text-decoration: line-through;
-  }
-  .game-card .store-tag {
-    font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
-  }
+  .game-card .now { font-size: 1.05rem; font-weight: 700; color: var(--accent2); }
+  .game-card .was { font-size: 0.75rem; color: var(--muted); text-decoration: line-through; }
+  .game-card .store-tag { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 
   .hot-strip {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 0.65rem;
   }
   .hot-chip {
+    position: relative; overflow: hidden;
     display: flex; flex-direction: column; gap: 0.2rem;
-    padding: 0.65rem 0.75rem; border-radius: 12px;
-    border: 1px solid #1a3a2a; background: rgba(15, 26, 18, 0.9);
-    text-decoration: none !important; color: var(--text);
+    padding: 0.7rem 0.8rem; border-radius: 12px;
+    border: 1px solid #1a3a2a; background: rgba(15, 26, 18, 0.92);
+    text-decoration: none !important; color: var(--text); min-height: 5.2rem;
   }
   .hot-chip:hover { border-color: #2a6a3a; }
-  .hot-chip .ht { font-size: 0.82rem; font-weight: 600; line-height: 1.25;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .hot-chip .ghost {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center;
+    opacity: 0.14; filter: saturate(0.7);
+    pointer-events: none;
+  }
+  .hot-chip .inner { position: relative; z-index: 1; }
+  .hot-chip .ht {
+    font-size: 0.82rem; font-weight: 600; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
   .hot-chip .hp { font-size: 0.95rem; font-weight: 700; color: #86efac; }
   .hot-chip .hs { font-size: 0.7rem; color: var(--muted); }
 
@@ -167,16 +139,21 @@
   <div class="hot-strip">
     {% for c in hot_deals %}
       <a class="hot-chip" href="{% url 'games:steam_detail' c.app_id %}">
-        <div class="ht">{{ c.title }}</div>
-        <div class="hp">
-          {% if c.lowest_gbp is not None %}£{{ c.lowest_gbp|floatformat:2 }}
-          {% elif c.price_status == 'free' %}Free
-          {% else %}See price{% endif %}
-        </div>
-        <div class="hs">
-          {% if c.savings %}{{ c.savings }}% under launch
-          {% elif c.discount %}-{{ c.discount }}% Steam
-          {% else %}{{ c.lowest_label }}{% endif %}
+        {% if c.image %}
+          <div class="ghost" style="background-image:url('{{ c.image }}');" aria-hidden="true"></div>
+        {% endif %}
+        <div class="inner">
+          <div class="ht">{{ c.title }}</div>
+          <div class="hp">
+            {% if c.lowest_gbp is not None %}£{{ c.lowest_gbp|floatformat:2 }}
+            {% elif c.price_status == 'free' %}Free
+            {% else %}See price{% endif %}
+          </div>
+          <div class="hs">
+            {% if c.savings %}{{ c.savings }}% under launch
+            {% elif c.discount %}-{{ c.discount }}% Steam
+            {% else %}{{ c.lowest_label }}{% endif %}
+          </div>
         </div>
       </a>
     {% endfor %}
@@ -237,11 +214,11 @@
   <h2>Deal tips</h2>
   <details open>
     <summary>How top deal sites think</summary>
-    <p>Compare <strong>live price</strong> to <strong>launch / list</strong>. Prefer official stores when the gap is small. Keyshops are cheaper but riskier.</p>
+    <p>Compare <strong>live price</strong> to <strong>launch / list</strong>. Prefer official stores when the gap is small.</p>
   </details>
   <details>
     <summary>What we show</summary>
-    <p>Steam live UK prices, tracked multi-store lows, PSN / UK physical on the detail page. Tracked games stay in the side drawer — not on this screen.</p>
+    <p>Steam live UK prices, multi-store lows on detail. Tracked games stay in the side drawer.</p>
   </details>
 </section>
 
