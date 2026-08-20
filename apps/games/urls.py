@@ -7,6 +7,7 @@ urlpatterns = [
     path("", views.home, name="home"),
     path("search/", views.steam_search, name="steam_search"),
     path("api/suggest/", views.steam_suggest, name="steam_suggest"),
+    path("api/platform/<int:app_id>/", views.platform_deals_api, name="platform_deals"),
     path("steam/<int:app_id>/", views.steam_detail, name="steam_detail"),
     path("track/steam/<int:app_id>/", views.track_steam, name="track_steam"),
     path("untrack/<slug:slug>/", views.untrack_game, name="untrack"),
