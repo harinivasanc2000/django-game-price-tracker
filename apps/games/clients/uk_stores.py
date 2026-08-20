@@ -1,13 +1,11 @@
 """
 UK local / marketplace sources.
 
-Many (CeX API, eBay, GAME) block datacenter IPs with 403/WAF.
-We:
-  1) Try polite public requests when possible
-  2) Always provide official search URLs for the user
+Public product search only (BeautifulSoup):
+  - product title, price, public rating aggregates, product link
+  - never personal seller PII (name/address/phone)
 
-Facebook Marketplace is link-only (login wall / ToS — no scraping).
-X/Twitter is link-only search for deal chatter + news (no unofficial scrape).
+Many sites block datacenter IPs → always provide search_url fallback.
 """
 
 from __future__ import annotations
@@ -15,27 +13,16 @@ from __future__ import annotations
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import quote_plus, quote
-
-import requests
+from urllib.parse import quote_plus, quote, urljoin
 
 from apps.games.cache import cached
-
-UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+from apps.games.clients.scrape_utils import (
+    fetch_html,
+    parse_money,
+    parse_rating,
+    product_row,
+    soup_from,
 )
-HEADERS = {"User-Agent": UA, "Accept-Language": "en-GB,en;q=0.9"}
-
-
-def _money(text: str) -> Decimal | None:
-    m = re.search(r"[£$]?\s*([0-9]+(?:[.,][0-9]{2})?)", text.replace(",", ""))
-    if not m:
-        return None
-    try:
-        return Decimal(m.group(1))
-    except InvalidOperation:
-        return None
 
 
 def platform_query(title: str, platform: str = "") -> str:
@@ -84,19 +71,19 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
         {
             "name": "eBay UK",
             "kind": "marketplace",
-            "note": "Auction & Buy It Now — check seller ratings",
+            "note": "Auction & Buy It Now — public seller *rating* only",
             "url": f"https://www.ebay.co.uk/sch/i.html?_nkw={qe}&_sacat=139973",
         },
         {
             "name": "Facebook Marketplace",
             "kind": "marketplace",
-            "note": "Local pickup — meet safely; no automated prices (login wall)",
+            "note": "Link only — no scrape (login wall)",
             "url": f"https://www.facebook.com/marketplace/search/?query={qe}",
         },
         {
             "name": "X / Twitter search",
             "kind": "social",
-            "note": "Deal alerts & chatter (not official prices)",
+            "note": "Deal chatter links only",
             "url": f"https://x.com/search?q={quote_plus(q + ' game deal OR sale')}&f=live",
         },
         {
@@ -109,49 +96,63 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
 
 
 def _try_cex_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
-    """Attempt CeX public search page; fall back if blocked."""
     q = platform_query(title, platform)
     url = f"https://uk.webuy.com/search?stext={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
 
-    # API often 403; try HTML search page
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=12)
-    except requests.RequestException:
+    html, status = fetch_html(url)
+    if not html:
         out["blocked"] = True
         return out
 
-    if r.status_code != 200 or len(r.text) < 500:
-        out["blocked"] = True
-        return out
-
-    # Best-effort extract from embedded JSON if present
-    html = r.text
-    for m in re.finditer(
-        r'"boxName"\s*:\s*"([^"]+)".{0,400}?"sellPrice"\s*:\s*([0-9.]+)',
-        html,
-        re.DOTALL,
-    ):
-        name, price = m.group(1), m.group(2)
-        try:
-            out["results"].append(
-                {
-                    "name": name[:200],
-                    "price": Decimal(price),
-                    "currency": "GBP",
-                    "store_name": "CeX",
-                    "url": url,
-                    "is_used": True,
-                }
-            )
-        except InvalidOperation:
+    soup = soup_from(html)
+    # Prefer structured JSON in page if present
+    for script in soup.find_all("script"):
+        text = script.string or script.get_text() or ""
+        if "sellPrice" not in text or "boxName" not in text:
             continue
-        if len(out["results"]) >= limit:
-            break
+        for m in re.finditer(
+            r'"boxName"\s*:\s*"([^"]+)".{0,500}?"sellPrice"\s*:\s*([0-9.]+)',
+            text,
+            re.DOTALL,
+        ):
+            try:
+                price = Decimal(m.group(2))
+            except InvalidOperation:
+                continue
+            row = product_row(
+                name=m.group(1),
+                price=price,
+                store_name="CeX",
+                url=url,
+                is_used=True,
+            )
+            if row:
+                out["results"].append(row)
+            if len(out["results"]) >= limit:
+                return out
+
+    # BS4 card fallback
+    if not out["results"]:
+        for card in soup.select("[class*='product'], [class*='search-product'], .superbox")[: limit + 8]:
+            name_el = card.find(["h2", "h3", "a"], class_=re.compile(r"name|title", re.I))
+            if not name_el:
+                name_el = card.find("a")
+            name = name_el.get_text(" ", strip=True) if name_el else ""
+            price_el = card.find(string=re.compile(r"£\s*[0-9]"))
+            if not price_el:
+                price_el = card.find(class_=re.compile(r"price", re.I))
+            price = parse_money(price_el if isinstance(price_el, str) else (price_el.get_text() if price_el else ""))
+            href = ""
+            if name_el and name_el.name == "a" and name_el.get("href"):
+                href = urljoin(url, name_el["href"])
+            row = product_row(name=name, price=price, store_name="CeX", url=href or url, is_used=True)
+            if row:
+                out["results"].append(row)
+            if len(out["results"]) >= limit:
+                break
 
     if not out["results"]:
-        # price patterns near product cards (fragile)
-        # without reliable titles, don't invent rows
         out["blocked"] = True
     return out
 
@@ -161,9 +162,9 @@ def try_cex_search(title: str, platform: str = "", limit: int = 6) -> dict[str, 
     if not title:
         return {"results": [], "blocked": True, "search_url": ""}
     return cached(
-        f"cex:search:{title.lower()}:{platform}",
+        f"cex:bs4:{title.lower()}:{platform}",
         lambda: _try_cex_uncached(title, platform=platform, limit=limit),
-        timeout=1800,  # 30 min — CeX blocks aggressively
+        timeout=1800,
     )
 
 
@@ -171,40 +172,43 @@ def _try_ebay_uncached(title: str, platform: str = "", limit: int = 6) -> dict[s
     q = platform_query(title, platform)
     url = f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(q)}&_sacat=139973"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=12)
-    except requests.RequestException:
-        out["blocked"] = True
-        return out
-    if r.status_code != 200 or "s-item__price" not in r.text:
+
+    html, _ = fetch_html(url)
+    if not html:
         out["blocked"] = True
         return out
 
-    chunks = re.split(r'class="s-item__wrapper', r.text)[1:]
-    for chunk in chunks[: limit + 3]:
-        tm = re.search(r'class="s-item__title"[^>]*>\s*(?:<span[^>]*>)?([^<]+)', chunk)
-        pm = re.search(r'class="s-item__price"[^>]*>([^<]+)', chunk)
-        lm = re.search(r'href="(https://www\.ebay\.co\.uk/itm/[^"?]+)', chunk)
-        if not tm or not pm:
+    soup = soup_from(html)
+    items = soup.select("li.s-item, .s-item")
+    for item in items:
+        title_el = item.select_one(".s-item__title")
+        if not title_el:
             continue
-        name = tm.group(1).strip()
-        if name.lower().startswith("shop on ebay"):
+        name = title_el.get_text(" ", strip=True)
+        if not name or name.lower().startswith("shop on ebay"):
             continue
-        price = _money(pm.group(1))
-        if price is None:
-            continue
-        out["results"].append(
-            {
-                "name": name[:200],
-                "price": price,
-                "currency": "GBP",
-                "store_name": "eBay UK",
-                "url": lm.group(1) if lm else url,
-                "is_used": True,
-            }
+        price_el = item.select_one(".s-item__price")
+        price = parse_money(price_el.get_text() if price_el else "")
+        link_el = item.select_one("a.s-item__link")
+        href = link_el["href"] if link_el and link_el.get("href") else url
+        # Public feedback % only — not seller personal identity
+        rating = None
+        rating_el = item.select_one(".s-item__seller-info-text, .x-star-rating")
+        if rating_el:
+            rating = parse_rating(rating_el.get_text(" ", strip=True))
+        row = product_row(
+            name=name,
+            price=price,
+            store_name="eBay UK",
+            url=href.split("?")[0],
+            rating=rating,
+            is_used=True,
         )
+        if row:
+            out["results"].append(row)
         if len(out["results"]) >= limit:
             break
+
     if not out["results"]:
         out["blocked"] = True
     return out
@@ -215,7 +219,45 @@ def try_ebay_uk(title: str, platform: str = "", limit: int = 6) -> dict[str, Any
     if not title:
         return {"results": [], "blocked": True, "search_url": ""}
     return cached(
-        f"ebay:search:{title.lower()}:{platform}",
+        f"ebay:bs4:{title.lower()}:{platform}",
         lambda: _try_ebay_uncached(title, platform=platform, limit=limit),
-        timeout=1800,  # 30 min — eBay blocks datacenter IPs
+        timeout=1800,
+    )
+
+
+def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+    """GAME.co.uk public search — product cards only."""
+    q = platform_query(title, platform)
+    url = f"https://www.game.co.uk/en/search?q={quote_plus(q)}"
+    out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
+    html, _ = fetch_html(url)
+    if not html:
+        out["blocked"] = True
+        return out
+    soup = soup_from(html)
+    for card in soup.select("article, .product, [data-product], .product-card")[: limit + 10]:
+        a = card.find("a", href=True)
+        name_el = card.find(["h2", "h3", "span"], class_=re.compile(r"name|title", re.I))
+        name = (name_el or a).get_text(" ", strip=True) if (name_el or a) else ""
+        price_el = card.find(class_=re.compile(r"price", re.I))
+        price = parse_money(price_el.get_text() if price_el else "")
+        href = urljoin(url, a["href"]) if a else url
+        row = product_row(name=name, price=price, store_name="GAME UK", url=href)
+        if row:
+            out["results"].append(row)
+        if len(out["results"]) >= limit:
+            break
+    if not out["results"]:
+        out["blocked"] = True
+    return out
+
+
+def try_game_uk(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+    title = (title or "").strip()
+    if not title:
+        return {"results": [], "blocked": True, "search_url": ""}
+    return cached(
+        f"gameuk:bs4:{title.lower()}:{platform}",
+        lambda: _try_game_uk_uncached(title, platform=platform, limit=limit),
+        timeout=1800,
     )
