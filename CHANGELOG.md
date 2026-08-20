@@ -1,46 +1,21 @@
-# Changelog — full project log
+# Changelog
 
 ---
 
-## 2026-08-20 15:15 BST — Finish watch alerts + GBP charts (on top of local work)
+## 2026-08-20 15:45 BST — Detail polish
 
-### Already in your tree (local commits)
-- `apps/games/fx.py` — USD/EUR → GBP via open.er-api.com (+ fallback rates)
-- `apps/games/cache.py` — request dedupe / short TTL cache
-- `Watch` + `PriceAlert` models; alert checks in Celery refresh
-- Console email backend + `SITE_URL`
-- Live offers sorted by **GBP**
+### UI
+- **News + social in sticky scrollable sidebar**; main column = prices & deals only
+- **Graph: change-only points** (flat 19–22 collapses; next point is the next real change)
+- **Platform chips (PC/PS4/PS5/Xbox/Switch/All)** switch via AJAX — **no full page reload**
+- Steam **Windows / Mac / Linux** shown as OS badges (from Steam API)
+- **Per-game wallpaper** from Steam `library_hero` / page background / header art
+- Parallel fetch for deals + PSN/UK + news on title open
+- Wider layout on detail pages
 
-### Completed this pass
-- Migration `0004_watch_pricealert`
-- Admin for Watch + PriceAlert
-- **Chart series all in GBP** (fair average)
-- Offer chips show `≈ £x.xx` when currency is not GBP
-- Detail page: **Watch price** form (target under £…) after Track
-- Profile: watches, alerts, mark-read
-- Watch redirect stays on Steam detail when possible
-
-### How to use alerts
-```bash
-git pull
-python manage.py migrate
-# set email on your user in admin
-python manage.py runserver
-# Track a game → Watch price with target
-python manage.py refresh_prices   # checks targets; emails print to console
-```
-
-### Still TODO
-- [ ] SMS / Discord webhook alerts
-- [ ] Per-user tracked list (not global is_active)
-- [ ] Stronger CeX when API allows
-
----
-
-## 2026-08-19 — Platforms, PSN, UK stores, news, Celery, graph dropdown
-
-See earlier entries in git history for full detail.
+### API
+- `GET /api/platform/<app_id>/?platform=ps5` — JSON for platform panels
 
 ```bash
-git pull && python manage.py migrate && python manage.py runserver
+git pull && python manage.py runserver
 ```
