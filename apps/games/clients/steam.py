@@ -9,6 +9,8 @@ from typing import Any
 
 import requests
 
+from apps.games.cache import cached
+
 STORE_SEARCH = "https://store.steampowered.com/api/storesearch/"
 STORE_DETAILS = "https://store.steampowered.com/api/appdetails"
 USER_AGENT = "GamePriceTracker/0.1 (personal; polite)"
@@ -138,7 +140,7 @@ def _parse_price_block(price_info: dict | None, is_free_flag: bool, country: str
     }
 
 
-def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[str, Any]]:
+def _search_store_uncached(term: str, country: str = "GB", limit: int = 30) -> list[dict[str, Any]]:
     queries = expand_query(term)
     if not queries:
         return []
@@ -188,6 +190,11 @@ def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[s
     return results[:limit]
 
 
+def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[str, Any]]:
+    key = f"steam:search:{country}:{term.strip().lower()}"
+    return cached(key, lambda: _search_store_uncached(term, country=country, limit=limit), 300)
+
+
 def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[str, Any]]:
     """Lightweight suggestions for typeahead (Netflix-style)."""
     term = (term or "").strip()
@@ -208,7 +215,7 @@ def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[s
     ]
 
 
-def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
+def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any] | None:
     params = {"appids": app_id, "cc": country.lower()}
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
 
@@ -290,6 +297,11 @@ def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
             "True launch price needs ITAD/GG.deals or manual entry later."
         ),
     }
+
+
+def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
+    key = f"steam:detail:{country}:{app_id}"
+    return cached(key, lambda: _get_app_details_uncached(app_id, country=country), 600)
 
 
 def get_app_price(app_id: int, country: str = "GB") -> dict[str, Any] | None:

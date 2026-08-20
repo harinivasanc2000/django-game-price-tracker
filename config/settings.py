@@ -28,6 +28,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "django.middleware.gzip.GZipMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -61,6 +62,12 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        # Reuse the same connection across requests within a thread — big
+        # win for SQLite (avoids re-opening the file per request).
+        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
+        "OPTIONS": {
+            "timeout": 20,
+        },
     }
 }
 
@@ -85,9 +92,34 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 DEFAULT_CURRENCY = os.getenv("DEFAULT_CURRENCY", "GBP")
 DEFAULT_REGION = os.getenv("DEFAULT_REGION", "GB")
 
+# ---------------------------------------------------------------------------
+# Caching
+# ---------------------------------------------------------------------------
+# LocMem by default — zero external deps. Swap to Redis in production:
+#   CACHES + REDIS_URL -> "django.core.cache.backends.redis.RedisCache"
+CACHES = {
+    "default": {
+        "BACKEND": os.getenv(
+            "CACHE_BACKEND",
+            "django.core.cache.backends.locmem.LocMemCache",
+        ),
+        "LOCATION": os.getenv("CACHE_LOCATION", "game-price-tracker"),
+        "TIMEOUT": int(os.getenv("CACHE_TIMEOUT", "300")),
+    }
+}
+
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
+
+# ---------------------------------------------------------------------------
+# Email (default: console for local dev — swap to SMTP in production)
+# ---------------------------------------------------------------------------
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend"
+)
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Game Price Tracker <noreply@localhost>")
+SITE_URL = os.getenv("SITE_URL", "http://127.0.0.1:8000")
 
 # ---------------------------------------------------------------------------
 # Celery (background price updates)

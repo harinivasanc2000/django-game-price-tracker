@@ -13,30 +13,32 @@ from typing import Any
 
 import requests
 
+from apps.games.cache import cached
+
 BASE = "https://www.cheapshark.com/api/1.0"
 USER_AGENT = "GamePriceTracker/0.1 (personal; polite)"
 
 _store_cache: dict[str, str] | None = None
 
 
-def list_stores() -> dict[str, str]:
+def _list_stores_uncached() -> dict[str, str]:
     """storeID -> storeName"""
-    global _store_cache
-    if _store_cache is not None:
-        return _store_cache
     try:
         r = requests.get(f"{BASE}/stores", headers={"User-Agent": USER_AGENT}, timeout=10)
         r.raise_for_status()
-        _store_cache = {str(s["storeID"]): s["storeName"] for s in r.json() if s.get("isActive")}
+        return {str(s["storeID"]): s["storeName"] for s in r.json() if s.get("isActive")}
     except (requests.RequestException, ValueError, KeyError):
-        _store_cache = {}
+        return {}
+
+
+def list_stores() -> dict[str, str]:
+    global _store_cache
+    if _store_cache is None:
+        _store_cache = cached("cheapshark:stores", _list_stores_uncached, timeout=86400)
     return _store_cache
 
 
-def search_games(title: str, limit: int = 5) -> list[dict[str, Any]]:
-    title = (title or "").strip()
-    if not title:
-        return []
+def _search_games_uncached(title: str, limit: int = 5) -> list[dict[str, Any]]:
     try:
         r = requests.get(
             f"{BASE}/games",
@@ -48,6 +50,17 @@ def search_games(title: str, limit: int = 5) -> list[dict[str, Any]]:
         return r.json() or []
     except (requests.RequestException, ValueError):
         return []
+
+
+def search_games(title: str, limit: int = 5) -> list[dict[str, Any]]:
+    title = (title or "").strip()
+    if not title:
+        return []
+    return cached(
+        f"cheapshark:search:{title.lower()}",
+        lambda: _search_games_uncached(title, limit=limit),
+        timeout=600,
+    )
 
 
 def best_match_game_id(title: str) -> str | None:
@@ -64,15 +77,7 @@ def best_match_game_id(title: str) -> str | None:
     return str(results[0]["gameID"])
 
 
-def deals_for_title(title: str, limit: int = 20) -> list[dict[str, Any]]:
-    """
-    Return sorted deals across stores for a game title.
-    Each: store_name, price, retail, savings, url, deal_id
-    """
-    game_id = best_match_game_id(title)
-    if not game_id:
-        return []
-
+def _deals_by_game_id_uncached(game_id: str) -> list[dict[str, Any]]:
     stores = list_stores()
     try:
         r = requests.get(
@@ -88,7 +93,7 @@ def deals_for_title(title: str, limit: int = 20) -> list[dict[str, Any]]:
 
     deals_raw = data.get("deals") or []
     out = []
-    for d in deals_raw[:limit]:
+    for d in deals_raw[:20]:
         sid = str(d.get("storeID", ""))
         price = Decimal(str(d.get("price", "0")))
         retail = Decimal(str(d.get("retailPrice", "0")))
@@ -107,3 +112,19 @@ def deals_for_title(title: str, limit: int = 20) -> list[dict[str, Any]]:
         )
     out.sort(key=lambda x: x["price"])
     return out
+
+
+def deals_for_title(title: str, limit: int = 20) -> list[dict[str, Any]]:
+    """
+    Return sorted deals across stores for a game title.
+    Each: store_name, price, retail, savings, url, deal_id
+    """
+    title = (title or "").strip()
+    if not title:
+        return []
+    game_id = best_match_game_id(title)
+    if not game_id:
+        return []
+    key = f"cheapshark:deals:{game_id}"
+    deals = cached(key, lambda: _deals_by_game_id_uncached(game_id), timeout=600)
+    return deals[:limit]

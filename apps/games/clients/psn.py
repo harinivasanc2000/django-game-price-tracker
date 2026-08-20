@@ -15,6 +15,8 @@ from urllib.parse import quote
 
 import requests
 
+from apps.games.cache import cached
+
 TUMBLER = (
     "https://store.playstation.com/store/api/chihiro/00_09_000/tumbler/"
     "GB/en/999/{query}"
@@ -25,11 +27,7 @@ USER_AGENT = (
 )
 
 
-def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
-    title = (title or "").strip()
-    if not title:
-        return []
-
+def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
     url = TUMBLER.format(query=quote(title))
     params = {"suggested_size": max(limit, 8), "mode": "game"}
     headers = {
@@ -75,9 +73,6 @@ def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
                 continue
 
         platforms = []
-        for p in sku.get("platforms") or []:
-            # platform ids are opaque; prefer metadata
-            pass
         meta = item.get("metadata") or {}
         playable = (meta.get("playable_platform") or {}).get("values") or []
         platforms = [str(x) for x in playable]
@@ -110,6 +105,17 @@ def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
     # Full games first
     results.sort(key=lambda x: (not x["is_full_game"], x["price"]))
     return results
+
+
+def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
+    title = (title or "").strip()
+    if not title:
+        return []
+    return cached(
+        f"psn:search:{title.lower()}",
+        lambda: _search_psn_uncached(title, limit=limit),
+        timeout=600,
+    )
 
 
 def best_psn_deal(title: str) -> dict[str, Any] | None:

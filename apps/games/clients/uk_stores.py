@@ -19,6 +19,8 @@ from urllib.parse import quote_plus, quote
 
 import requests
 
+from apps.games.cache import cached
+
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -106,7 +108,7 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
     ]
 
 
-def try_cex_search(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def _try_cex_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
     """Attempt CeX public search page; fall back if blocked."""
     q = platform_query(title, platform)
     url = f"https://uk.webuy.com/search?stext={quote_plus(q)}"
@@ -149,13 +151,23 @@ def try_cex_search(title: str, platform: str = "", limit: int = 6) -> dict[str, 
 
     if not out["results"]:
         # price patterns near product cards (fragile)
-        prices = re.findall(r"£([0-9]+\.[0-9]{2})", html)
         # without reliable titles, don't invent rows
         out["blocked"] = True
     return out
 
 
-def try_ebay_uk(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def try_cex_search(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+    title = (title or "").strip()
+    if not title:
+        return {"results": [], "blocked": True, "search_url": ""}
+    return cached(
+        f"cex:search:{title.lower()}:{platform}",
+        lambda: _try_cex_uncached(title, platform=platform, limit=limit),
+        timeout=1800,  # 30 min — CeX blocks aggressively
+    )
+
+
+def _try_ebay_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
     q = platform_query(title, platform)
     url = f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(q)}&_sacat=139973"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
@@ -196,3 +208,14 @@ def try_ebay_uk(title: str, platform: str = "", limit: int = 6) -> dict[str, Any
     if not out["results"]:
         out["blocked"] = True
     return out
+
+
+def try_ebay_uk(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+    title = (title or "").strip()
+    if not title:
+        return {"results": [], "blocked": True, "search_url": ""}
+    return cached(
+        f"ebay:search:{title.lower()}:{platform}",
+        lambda: _try_ebay_uncached(title, platform=platform, limit=limit),
+        timeout=1800,  # 30 min — eBay blocks datacenter IPs
+    )

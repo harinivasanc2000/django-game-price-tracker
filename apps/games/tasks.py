@@ -5,15 +5,22 @@ Background price refresh tasks.
 - PSN UK (public tumbler search)
 - CheapShark best deal (third-party / key shops)
 - Amazon UK when HTML is available (often blocked by WAF)
+
+After each snapshot we check the user Watch target prices and record
+PriceAlert rows when a target is hit. `send_pending_alerts` then emails
+them out (console backend in dev).
 """
 
 from __future__ import annotations
 
 from decimal import Decimal
 from celery import shared_task
+from django.conf import settings
+from django.core.mail import send_mail
 from django.utils import timezone
 
-from .models import Game, PriceRecord, Store, AdminChangeLog
+from .models import Game, PriceRecord, Store, AdminChangeLog, Watch, PriceAlert
+from .fx import to_gbp_or_zero
 from .clients.steam import get_app_details
 from .clients.cheapshark import deals_for_title
 from .clients.psn import best_psn_deal
@@ -32,6 +39,35 @@ def _store(slug: str, name: str, store_type: str, website: str = "", notes: str 
         },
     )
     return obj
+
+
+def _check_watch_targets(game: Game, price, currency: str, store_name: str = "", url: str = "") -> int:
+    """Record PriceAlert rows for every watch whose GBP target has been met.
+
+    Returns the number of alerts created. A watch is only alerted once per
+    price point (set semantics — duplicate snapshots don't spam).
+    """
+    watches = Watch.objects.filter(game=game, target_price__isnull=False).select_related("user")
+    hits = 0
+    gbp = to_gbp_or_zero(price, currency)
+    for watch in watches:
+        if gbp <= 0 or gbp > watch.target_price:
+            continue
+        exists = PriceAlert.objects.filter(
+            watch=watch, price=gbp, currency=settings.DEFAULT_CURRENCY
+        ).exists()
+        if exists:
+            continue
+        PriceAlert.objects.create(
+            watch=watch,
+            price=gbp,
+            currency=settings.DEFAULT_CURRENCY,
+            target_price=watch.target_price,
+            store=store_name[:120],
+            url=url[:300],
+        )
+        hits += 1
+    return hits
 
 
 def refresh_one_game(game: Game, country: str = "GB") -> dict:
@@ -66,7 +102,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
             discount = detail.get("discount") or None
             notes = detail["name"][:255]
 
-        PriceRecord.objects.create(
+        rec = PriceRecord.objects.create(
             game=game,
             store=steam,
             price=price,
@@ -78,6 +114,9 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
             is_used=False,
             in_stock=True,
             notes=notes,
+        )
+        _check_watch_targets(
+            game, rec.price, rec.currency, steam.name, rec.url
         )
         if detail.get("header_image") and not game.cover_url:
             game.cover_url = detail["header_image"]
@@ -97,7 +136,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 "https://store.playstation.com/en-gb",
                 "Public Chihiro tumbler search",
             )
-            PriceRecord.objects.create(
+            rec = PriceRecord.objects.create(
                 game=game,
                 store=store,
                 price=psn["price"],
@@ -110,6 +149,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 in_stock=True,
                 notes=f"PSN {psn.get('name','')[:120]} @ {timezone.now():%Y-%m-%d}",
             )
+            _check_watch_targets(game, rec.price, rec.currency, store.name, rec.url)
             result["psn"] = True
     except Exception as exc:  # noqa: BLE001
         result["errors"].append(f"psn: {exc}")
@@ -127,7 +167,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 "Public search HTML when available",
             )
             row = rows[0]
-            PriceRecord.objects.create(
+            rec = PriceRecord.objects.create(
                 game=game,
                 store=store,
                 price=row["price"],
@@ -138,6 +178,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 in_stock=True,
                 notes=f"Amazon {row.get('name','')[:100]} @ {timezone.now():%Y-%m-%d}",
             )
+            _check_watch_targets(game, rec.price, rec.currency, store.name, rec.url)
             result["amazon"] = True
     except Exception as exc:  # noqa: BLE001
         result["errors"].append(f"amazon: {exc}")
@@ -157,7 +198,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 best.get("url") or "https://www.cheapshark.com",
                 "Via CheapShark — may include keyshops. Verify seller.",
             )
-            PriceRecord.objects.create(
+            rec = PriceRecord.objects.create(
                 game=game,
                 store=tp,
                 price=best["price"],
@@ -170,6 +211,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 in_stock=True,
                 notes=f"CheapShark best @ {timezone.now():%Y-%m-%d} [third-party]",
             )
+            _check_watch_targets(game, rec.price, rec.currency, tp.name, rec.url)
             result["third_party"] = True
     except Exception as exc:  # noqa: BLE001
         result["errors"].append(f"cheapshark: {exc}")
@@ -193,6 +235,12 @@ def refresh_all_tracked_prices(country: str = "GB") -> dict:
         else:
             summary["failed"] += 1
 
+    # Flush any alerts that were produced during the refresh.
+    try:
+        send_pending_alerts.delay()
+    except Exception:  # noqa: BLE001
+        pass
+
     AdminChangeLog.objects.create(
         actor="celery",
         action="refresh_all_tracked_prices",
@@ -211,4 +259,47 @@ def refresh_single_game(game_id: int, country: str = "GB") -> dict:
         game = Game.objects.get(pk=game_id, is_active=True)
     except Game.DoesNotExist:
         return {"error": "not found"}
-    return refresh_one_game(game, country=country)
+    result = refresh_one_game(game, country=country)
+    try:
+        send_pending_alerts.delay()
+    except Exception:  # noqa: BLE001
+        pass
+    return result
+
+
+@shared_task(name="apps.games.tasks.send_pending_alerts")
+def send_pending_alerts() -> dict:
+    """Email every unsent PriceAlert, then mark them as sent."""
+    pending = list(
+        PriceAlert.objects.filter(is_sent=False)
+        .select_related("watch__user", "watch__game")
+        .order_by("created_at")[:100]
+    )
+    if not pending:
+        return {"sent": 0}
+
+    site_url = getattr(settings, "SITE_URL", "http://127.0.0.1:8000").rstrip("/")
+    sent = 0
+    for alert in pending:
+        game = alert.watch.game
+        user = alert.watch.user
+        if not user.email:
+            # No email address — leave unsent so admins can inspect.
+            continue
+        link = f"{site_url}/game/{game.slug}/"
+        subject = f"Price drop: {game.title} at {alert.price} {alert.currency}"
+        message = (
+            f"{game.title} is now {alert.price} {alert.currency} "
+            f"(your target: {alert.target_price} {alert.currency}).\n"
+            f"Store: {alert.store or 'n/a'}\n\n"
+            f"View: {link}\n"
+        )
+        try:
+            send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email])
+            alert.is_sent = True
+            alert.sent_at = timezone.now()
+            alert.save(update_fields=["is_sent", "sent_at"])
+            sent += 1
+        except Exception:  # noqa: BLE001 — SMTP hiccup shouldn't kill the refresh
+            continue
+    return {"sent": sent, "pending": len(pending)}

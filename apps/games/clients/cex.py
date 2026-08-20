@@ -13,10 +13,14 @@ from typing import Any
 
 import requests
 
+from apps.games.cache import cached
+
 BASE = "https://wss2.cex.uk.webuy.io/v3"
 USER_AGENT = "GamePriceTracker/0.1 (personal research; contact: local)"
 _last_request = 0.0
 MIN_INTERVAL = 1.5  # seconds between requests
+
+SEARCH_CACHE_TTL = 1800  # 30 min — unofficial API; never hammer
 
 
 def _throttle() -> None:
@@ -27,11 +31,8 @@ def _throttle() -> None:
     _last_request = time.monotonic()
 
 
-def search_boxes(query: str, count: int = 20) -> list[dict[str, Any]]:
-    """
-    Search CeX boxes by keyword.
-    Returns list of dicts with boxId, boxName, sellPrice, cashPrice, etc.
-    """
+def _search_boxes_uncached(query: str, count: int = 20) -> list[dict[str, Any]]:
+    """Raw CeX request — results are cached by `search_boxes`."""
     _throttle()
     url = f"{BASE}/boxes"
     params = {
@@ -60,6 +61,21 @@ def search_boxes(query: str, count: int = 20) -> list[dict[str, Any]]:
         or []
     )
     return boxes if isinstance(boxes, list) else []
+
+
+def search_boxes(query: str, count: int = 20) -> list[dict[str, Any]]:
+    """
+    Search CeX boxes by keyword (cached to protect the unofficial API).
+    Returns list of dicts with boxId, boxName, sellPrice, cashPrice, etc.
+    """
+    query = (query or "").strip()
+    if not query:
+        return []
+    return cached(
+        f"cex:boxes:{query.lower()}:{count}",
+        lambda: _search_boxes_uncached(query, count=count),
+        timeout=SEARCH_CACHE_TTL,
+    )
 
 
 def find_god_of_war_ps4() -> list[dict[str, Any]]:

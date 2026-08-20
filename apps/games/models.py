@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 
@@ -95,10 +96,64 @@ class PriceRecord(models.Model):
 
     class Meta:
         ordering = ["price", "-recorded_at"]
-        indexes = [models.Index(fields=["game", "store", "-recorded_at"])]
+        indexes = [
+            models.Index(fields=["game", "store", "-recorded_at"]),
+            # Fast "last snapshot per game" lookups used by the compare page.
+            models.Index(fields=["game", "-recorded_at"]),
+            # Background refresh scans: newest first.
+            models.Index(fields=["-recorded_at"]),
+        ]
 
     def __str__(self):
         return f"{self.game.title} @ {self.store.name}: {self.price} {self.currency}"
+
+
+class Watch(models.Model):
+    """A user following a tracked game (per-game, per-user)."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="watches"
+    )
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name="watches")
+    target_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Optional: alert me when the GBP price drops below this",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["user", "game"], name="unique_user_game_watch")
+        ]
+        indexes = [models.Index(fields=["game", "user"])]
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.game.title}"
+
+
+class PriceAlert(models.Model):
+    """One fire-and-forget notification: emitted when a watch target is hit."""
+
+    watch = models.ForeignKey(Watch, on_delete=models.CASCADE, related_name="alerts")
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default="GBP")
+    target_price = models.DecimalField(max_digits=10, decimal_places=2)
+    store = models.CharField(max_length=120, blank=True)
+    url = models.URLField(blank=True)
+    is_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["is_sent", "-created_at"])]
+
+    def __str__(self):
+        return f"Alert {self.watch_id} @ {self.price} {self.currency}"
 
 
 class BrowseHistory(models.Model):
@@ -113,10 +168,16 @@ class BrowseHistory(models.Model):
     steam_app_id = models.PositiveIntegerField(null=True, blank=True)
     title = models.CharField(max_length=255, blank=True)
     detail_url = models.CharField(max_length=255, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    # Indexed so the occasional cleanup prune is fast.
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            # Power the "recent items for this session" query on the
+            # history page (session_key is already db_indexed).
+            models.Index(fields=["session_key", "-created_at"]),
+        ]
 
     def __str__(self):
         return f"{self.action}: {self.title or self.query}"

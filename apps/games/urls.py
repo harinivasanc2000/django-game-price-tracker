@@ -13,4 +13,7 @@ urlpatterns = [
     path("history/", views.history_page, name="history"),
     path("profile/", views.profile, name="profile"),
     path("game/<slug:slug>/", views.game_compare, name="compare"),
+    path("watch/<slug:slug>/", views.watch_game, name="watch"),
+    path("unwatch/<slug:slug>/", views.unwatch_game, name="unwatch"),
+    path("alerts/clear/", views.clear_alerts, name="clear_alerts"),
 ]

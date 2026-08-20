@@ -12,10 +12,12 @@ from urllib.parse import quote_plus
 
 import requests
 
+from apps.games.cache import cached
+
 STEAM_NEWS = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
 
 
-def steam_news(app_id: int, count: int = 6) -> list[dict[str, Any]]:
+def _steam_news_uncached(app_id: int, count: int = 6) -> list[dict[str, Any]]:
     try:
         r = requests.get(
             STEAM_NEWS,
@@ -40,6 +42,14 @@ def steam_news(app_id: int, count: int = 6) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def steam_news(app_id: int, count: int = 6) -> list[dict[str, Any]]:
+    return cached(
+        f"steam:news:{app_id}:{count}",
+        lambda: _steam_news_uncached(app_id, count=count),
+        timeout=900,  # 15 min
+    )
 
 
 def social_news_links(title: str) -> list[dict[str, str]]:

@@ -1,16 +1,26 @@
 import json
 from collections import defaultdict
 from decimal import Decimal
+from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.text import slugify
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
-from .models import Game, PriceRecord, Store, BrowseHistory
+from django.utils import timezone
+from .models import (
+    Game,
+    PriceRecord,
+    Store,
+    BrowseHistory,
+    Watch,
+    PriceAlert,
+)
+from .fx import to_gbp, to_gbp_or_zero
 from .clients.steam import search_store, get_app_details, suggest_store
 from .clients.cheapshark import deals_for_title
-from .clients.external_stores import external_links_for_title, ensure_uk_stores
+from .clients.external_stores import ensure_uk_stores
 from .clients.psn import search_psn, best_psn_deal
 from .clients.amazon_uk import search_amazon_uk
 from .clients.uk_stores import uk_search_links, try_cex_search, try_ebay_uk, platform_query
@@ -30,6 +40,11 @@ PLATFORMS = [
     ("switch", "Switch"),
 ]
 
+# History: keep per-session list bounded and prune occasionally.
+HISTORY_MAX_PER_SESSION = 100
+HISTORY_PRUNE_INTERVAL = timezone.timedelta(hours=24)
+HISTORY_PRUNE_MARK = timezone.timedelta(days=60)
+
 
 def _session_key(request):
     if not request.session.session_key:
@@ -38,14 +53,23 @@ def _session_key(request):
 
 
 def _log_history(request, action, query="", steam_app_id=None, title="", detail_url=""):
+    skey = _session_key(request)
     BrowseHistory.objects.create(
-        session_key=_session_key(request),
+        session_key=skey,
         action=action,
         query=query[:255],
         steam_app_id=steam_app_id,
         title=(title or "")[:255],
         detail_url=(detail_url or "")[:255],
     )
+    # Keep this session's history bounded and the table from growing forever.
+    old_ids = BrowseHistory.objects.filter(session_key=skey).values_list("id", flat=True)[HISTORY_MAX_PER_SESSION:]
+    if old_ids:
+        BrowseHistory.objects.filter(id__in=list(old_ids)).delete()
+    recently_pruned = request.session.get("history_pruned_at")
+    if not recently_pruned or (timezone.now() - timezone.datetime.fromisoformat(recently_pruned)).total_seconds() > HISTORY_PRUNE_INTERVAL.total_seconds():
+        BrowseHistory.objects.filter(created_at__lt=timezone.now() - HISTORY_PRUNE_MARK).delete()
+        request.session["history_pruned_at"] = timezone.now().isoformat()
 
 
 def _unique_slug(name: str, app_id: int) -> str:
@@ -58,6 +82,16 @@ def _unique_slug(name: str, app_id: int) -> str:
             slug = f"steam-{app_id}"
             break
     return slug[:180]
+
+
+def _snapshot_since(game: Game, hours: int = 24) -> list:
+    """Most recent snapshots (oldest first) within the window, for the change badge."""
+    since = timezone.now() - timezone.timedelta(hours=hours)
+    return list(
+        PriceRecord.objects.filter(game=game, recorded_at__gte=since)
+        .select_related("store")
+        .order_by("recorded_at")[:12]
+    )
 
 
 def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows, cex_rows, ebay_rows):
@@ -231,6 +265,7 @@ def steam_detail(request, app_id: int):
             {
                 "store": "Steam",
                 "price": detail["price"],
+                "price_gbp": to_gbp_or_zero(detail["price"], detail.get("currency") or "GBP"),
                 "currency": detail.get("currency") or "GBP",
                 "kind": "official",
                 "url": detail.get("url"),
@@ -242,6 +277,7 @@ def steam_detail(request, app_id: int):
             {
                 "store": "PSN UK",
                 "price": best_psn["price"],
+                "price_gbp": to_gbp_or_zero(best_psn["price"], "GBP"),
                 "currency": "GBP",
                 "kind": "official",
                 "url": best_psn.get("url"),
@@ -252,6 +288,7 @@ def steam_detail(request, app_id: int):
             {
                 "store": "Amazon UK",
                 "price": amazon_rows[0]["price"],
+                "price_gbp": to_gbp_or_zero(amazon_rows[0]["price"], "GBP"),
                 "currency": "GBP",
                 "kind": "marketplace",
                 "url": amazon_rows[0].get("url"),
@@ -262,6 +299,7 @@ def steam_detail(request, app_id: int):
             {
                 "store": "CeX",
                 "price": cex["results"][0]["price"],
+                "price_gbp": to_gbp_or_zero(cex["results"][0]["price"], "GBP"),
                 "currency": "GBP",
                 "kind": "used",
                 "url": cex.get("search_url"),
@@ -272,6 +310,7 @@ def steam_detail(request, app_id: int):
             {
                 "store": "eBay UK",
                 "price": ebay["results"][0]["price"],
+                "price_gbp": to_gbp_or_zero(ebay["results"][0]["price"], "GBP"),
                 "currency": "GBP",
                 "kind": "marketplace",
                 "url": ebay["results"][0].get("url"),
@@ -282,12 +321,14 @@ def steam_detail(request, app_id: int):
             {
                 "store": store_deals[0]["store_name"],
                 "price": store_deals[0]["price"],
+                "price_gbp": to_gbp_or_zero(store_deals[0]["price"], store_deals[0].get("currency") or "USD"),
                 "currency": store_deals[0].get("currency") or "USD",
                 "kind": "third-party",
                 "url": store_deals[0].get("url"),
             }
         )
-    live_offers.sort(key=lambda x: float(x["price"]))
+    # Sort by normalised GBP so USD key-shop prices compare fairly with UK retail.
+    live_offers.sort(key=lambda x: x["price_gbp"])
 
     return render(
         request,
@@ -320,6 +361,8 @@ def steam_detail(request, app_id: int):
             "best_third_party": store_deals[0] if store_deals else None,
             "chart_json": json.dumps(chart),
             "has_chart": bool(chart["labels"]),
+            "is_watched": Watch.objects.filter(user=request.user, game_id=already.id).exists()
+            if request.user.is_authenticated and already else False,
         },
     )
 
@@ -382,10 +425,13 @@ def track_steam(request, app_id: int):
         notes=notes,
     )
 
+    # Refresh the rest of the sellers in the background; never block the
+    # request on network calls. Eager Celery means it runs inline when
+    # no broker is configured, so this also works out-of-the-box.
     try:
-        from .tasks import refresh_one_game
+        from .tasks import refresh_single_game
 
-        refresh_one_game(game, country=country)
+        refresh_single_game.delay(game.id, country=country)
     except Exception:
         pass
 
@@ -417,15 +463,130 @@ def history_page(request):
 
 @login_required
 def profile(request):
+    watches = list(
+        Watch.objects.filter(user=request.user).select_related("game").order_by("-created_at")
+    )
+    tracked = list(Game.objects.filter(is_active=True).order_by("title")[:50])
+    unsent_alerts = PriceAlert.objects.filter(watch__user=request.user, is_sent=False).count()
     return render(
         request,
         "games/profile.html",
-        {"tracked": Game.objects.filter(is_active=True).order_by("title")[:50]},
+        {
+            "tracked": tracked,
+            "watches": watches,
+            "unsent_alerts": unsent_alerts,
+        },
     )
 
 
 def game_compare(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
-    if game.steam_app_id:
-        return redirect("games:steam_detail", app_id=game.steam_app_id)
-    return redirect("games:home")
+    prices = list(
+        PriceRecord.objects.filter(game=game)
+        .select_related("store")
+        .order_by("price", "-recorded_at")[:50]
+    )
+    # Normalise to GBP for a fair "lowest" comparison across currencies.
+    def _gbp(p):
+        return to_gbp_or_zero(p.price, p.currency)
+
+    prices.sort(key=_gbp)
+    lowest = prices[0] if prices else None
+
+    # Latest snapshot per store (most recent row), for the change badge.
+    recent = _snapshot_since(game, hours=24)
+    change = None
+    if len(recent) >= 2:
+        first, last = recent[0], recent[-1]
+        prev_gbp, cur_gbp = to_gbp_or_zero(first.price, first.currency), _gbp(last)
+        if prev_gbp != cur_gbp:
+            change = {
+                "direction": "down" if cur_gbp < prev_gbp else "up",
+                "delta": abs(cur_gbp - prev_gbp),
+                "pct": abs((cur_gbp - prev_gbp) / prev_gbp * 100) if prev_gbp else 0,
+                "currency": settings.DEFAULT_CURRENCY,
+            }
+
+    history = list(
+        PriceRecord.objects.filter(game=game).select_related("store").order_by("recorded_at")[:150]
+    )
+    # Only keep one point per store per day to keep the chart light.
+    chart_labels, chart_values, chart_stores, seen_days = [], [], [], set()
+    for h in history:
+        day = h.recorded_at.strftime("%Y-%m-%d")
+        key = (h.store_id, day)
+        if key in seen_days:
+            continue
+        seen_days.add(key)
+        chart_labels.append(h.recorded_at.strftime("%d %b %y"))
+        chart_values.append(float(h.price))
+        chart_stores.append(h.store.name)
+
+    siblings = Game.objects.filter(title=game.title, is_active=True).exclude(pk=game.pk)[:6]
+    watched = (
+        Watch.objects.filter(user=request.user, game=game).first()
+        if request.user.is_authenticated else None
+    )
+
+    return render(
+        request,
+        "games/compare.html",
+        {
+            "game": game,
+            "prices": prices,
+            "lowest": lowest,
+            "change": change,
+            "retail_baseline": lowest.original_price if lowest else None,
+            "siblings": siblings,
+            "history_count": len(history),
+            "chart_labels": json.dumps(chart_labels),
+            "chart_values": json.dumps(chart_values),
+            "chart_stores": json.dumps(chart_stores),
+            "watched": watched,
+        },
+    )
+
+
+@login_required
+@require_POST
+def watch_game(request, slug):
+    game = get_object_or_404(Game, slug=slug, is_active=True)
+    target_raw = (request.POST.get("target_price") or "").strip()
+    target = None
+    if target_raw:
+        try:
+            target = Decimal(target_raw)
+            if target < 0:
+                raise ValueError
+        except Exception:
+            messages.error(request, "Target price must be a positive number.")
+            return redirect("games:compare", slug=slug)
+    Watch.objects.update_or_create(
+        user=request.user,
+        game=game,
+        defaults={"target_price": target},
+    )
+    messages.success(request, (
+        f"Watching {game.title}."
+        if target is None else
+        f"Watching {game.title} — we'll alert you under £{target}."
+    ))
+    return redirect("games:compare", slug=slug)
+
+
+@login_required
+@require_POST
+def unwatch_game(request, slug):
+    game = get_object_or_404(Game, slug=slug, is_active=True)
+    Watch.objects.filter(user=request.user, game=game).delete()
+    messages.info(request, f"Stopped watching {game.title}.")
+    return redirect("games:compare", slug=slug)
+
+
+@login_required
+@require_POST
+def clear_alerts(request):
+    """Mark all unsent alerts for this user as read/dismissed."""
+    PriceAlert.objects.filter(watch__user=request.user, is_sent=False).update(is_sent=True, sent_at=timezone.now())
+    messages.info(request, "Price alerts marked as read.")
+    return redirect("games:profile")

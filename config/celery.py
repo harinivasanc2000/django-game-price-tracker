@@ -29,5 +29,10 @@ app.conf.beat_schedule = {
         "task": "apps.games.tasks.refresh_all_tracked_prices",
         "schedule": crontab(hour=6, minute=0),
     },
+    # Flush queued price-drop emails every 15 minutes.
+    "send-pending-alerts-quarterly": {
+        "task": "apps.games.tasks.send_pending_alerts",
+        "schedule": crontab(minute="*/15"),
+    },
 }
 app.conf.timezone = "Europe/London"

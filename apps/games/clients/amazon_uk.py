@@ -15,6 +15,8 @@ from urllib.parse import quote_plus
 
 import requests
 
+from apps.games.cache import cached
+
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -26,10 +28,7 @@ def search_url(title: str, extra: str = "") -> str:
     return f"https://www.amazon.co.uk/s?k={q}&i=videogames"
 
 
-def search_amazon_uk(title: str, extra: str = "", limit: int = 8) -> dict[str, Any]:
-    """
-    Returns { results: [...], blocked: bool, search_url: str }
-    """
+def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> dict[str, Any]:
     url = search_url(title, extra)
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
 
@@ -103,3 +102,14 @@ def search_amazon_uk(title: str, extra: str = "", limit: int = 8) -> dict[str, A
     out["results"] = results
     out["blocked"] = len(results) == 0
     return out
+
+
+def search_amazon_uk(title: str, extra: str = "", limit: int = 8) -> dict[str, Any]:
+    title = (title or "").strip()
+    if not title:
+        return {"results": [], "blocked": True, "search_url": search_url(title, extra)}
+    return cached(
+        f"amazon:search:{title.lower()}:{extra.strip().lower()}",
+        lambda: _search_amazon_uk_uncached(title, extra=extra, limit=limit),
+        timeout=1800,  # 30 min — Amazon blocks hard if hammered
+    )
