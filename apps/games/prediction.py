@@ -10,7 +10,7 @@ Not financial advice. Heuristic scores from:
 
 from __future__ import annotations
 
-from decimal import Decimal
+from datetime import timedelta
 from typing import Any
 
 from django.utils import timezone
@@ -35,10 +35,9 @@ def predict_deal(
     best_offer_kind: str | None = None,
     game: Game | None = None,
 ) -> dict[str, Any]:
-    """Return human-readable prediction + numeric scores."""
     signals: list[str] = []
-    drop_score = 0  # 0–100 likelihood that waiting could still save money
-    buy_score = 50  # 0–100 "reasonable to buy now"
+    drop_score = 0
+    buy_score = 50
 
     under_launch = _pct_under(best_offer_gbp or steam_price_gbp, launch_gbp)
     if under_launch is not None:
@@ -79,13 +78,12 @@ def predict_deal(
             signals.append(
                 f"Keyshop ~£{gap:.2f} cheaper than Steam — weigh risk vs savings."
             )
-            buy_score -= 5  # risk penalty
+            buy_score -= 5
         elif gap > 0:
             signals.append("Keyshop only slightly cheaper than official — official often safer.")
 
-    # Trend from stored snapshots
     if game:
-        since = timezone.now() - timezone.timedelta(days=14)
+        since = timezone.now() - timedelta(days=14)
         rows = list(
             PriceRecord.objects.filter(game=game, recorded_at__gte=since)
             .order_by("recorded_at")[:40]
@@ -105,7 +103,7 @@ def predict_deal(
                     drop_score += 5
                     signals.append("Tracked price mostly flat recently.")
 
-    drop_score = max(0, min(100, drop_score + 40))  # baseline mid
+    drop_score = max(0, min(100, drop_score + 40))
     buy_score = max(0, min(100, buy_score))
 
     if buy_score >= 70:
