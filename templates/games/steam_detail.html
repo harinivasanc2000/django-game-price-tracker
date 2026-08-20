@@ -3,68 +3,86 @@
 
 {% block extra_css %}
 <style>
-  .hero { background: var(--card); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 1.25rem; }
-  .hero img { width: 100%; max-height: 200px; object-fit: cover; display: block; }
-  .hero-body { padding: 1.2rem 1.35rem; }
+  .layout { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+  @media (min-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr) 280px; align-items: start; }
+  }
+  .main-col { min-width: 0; }
+  .side-col {
+    position: sticky; top: 0.75rem;
+    max-height: calc(100vh - 1.5rem);
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+  .hero { background: rgba(18,8,8,0.82); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 1rem; backdrop-filter: blur(6px); }
+  .hero img.banner { width: 100%; max-height: 180px; object-fit: cover; display: block; }
+  .hero-body { padding: 1.15rem 1.3rem; }
   .btn {
-    display: inline-block; padding: 0.55rem 1rem; border-radius: 10px;
-    font-weight: 600; font-size: 0.9rem; text-decoration: none !important; border: none; cursor: pointer; font-family: inherit;
+    display: inline-block; padding: 0.5rem 0.95rem; border-radius: 10px;
+    font-weight: 600; font-size: 0.88rem; text-decoration: none !important; border: none; cursor: pointer; font-family: inherit;
   }
   .btn-track { background: var(--accent); color: #fff; }
   .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
-  .plat-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.75rem; }
-  .plat-row a {
-    font-size: 0.78rem; padding: 0.3rem 0.65rem; border-radius: 999px;
-    border: 1px solid var(--border); color: var(--muted); text-decoration: none !important;
+  .os-row, .plat-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.65rem; }
+  .os-row span, .plat-row button {
+    font-size: 0.75rem; padding: 0.28rem 0.65rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); background: transparent;
+    cursor: pointer; font-family: inherit;
   }
-  .plat-row a.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .plat-row button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .plat-row button:hover { border-color: var(--accent2); color: var(--text); }
+  .os-row span { cursor: default; background: #1a1212; }
   .offer-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.55rem;
-    margin: 1rem 0 0.25rem;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 0.5rem;
+    margin: 0.9rem 0 0.2rem;
   }
   .offer-chip {
     background: #1a0c0c; border: 1px solid var(--border); border-radius: 12px;
-    padding: 0.65rem 0.75rem; text-decoration: none !important; color: inherit;
+    padding: 0.6rem 0.7rem; text-decoration: none !important; color: inherit;
   }
   .offer-chip:hover { border-color: var(--accent2); }
-  .offer-chip .s { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .offer-chip .p { font-weight: 700; color: var(--accent2); margin-top: 0.2rem; font-size: 1.05rem; }
-  .offer-chip .g { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
-  .offer-chip.best { border-color: #2a6a3a; box-shadow: 0 0 0 1px rgba(62,207,106,0.25); }
+  .offer-chip .s { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .offer-chip .p { font-weight: 700; color: var(--accent2); margin-top: 0.15rem; font-size: 1rem; }
+  .offer-chip .g { font-size: 0.68rem; color: var(--muted); }
+  .offer-chip.best { border-color: #2a6a3a; }
   .deal-row {
     display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
-    padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); font-size: 0.92rem;
+    padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); font-size: 0.9rem;
   }
   .deal-row:last-child { border-bottom: none; }
-  .panel { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.25rem; overflow: hidden; }
-  .panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.85rem 1rem 0.35rem; }
-  .disclaimer {
-    margin: 0.5rem 1rem 1rem; padding: 0.75rem 0.9rem; border-radius: 10px;
-    background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.82rem; line-height: 1.45;
+  .panel {
+    background: rgba(18,8,8,0.88); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 1rem; overflow: hidden; backdrop-filter: blur(6px);
   }
-  .chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.5rem 0 0.85rem; }
-  .chart-toolbar label { font-size: 0.85rem; color: var(--muted); }
+  .panel h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1rem 0.3rem; }
+  .disclaimer {
+    margin: 0.45rem 1rem 0.9rem; padding: 0.65rem 0.8rem; border-radius: 10px;
+    background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.78rem; line-height: 1.4;
+  }
+  .chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem; margin: 0.4rem 0 0.7rem; padding: 0 0.25rem; }
   .chart-toolbar select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 0.4rem 0.65rem; font-size: 0.9rem;
+    border-radius: 8px; padding: 0.35rem 0.55rem; font-size: 0.85rem;
   }
-  .kind { font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px; margin-left: 0.35rem; }
+  .kind { font-size: 0.62rem; padding: 0.1rem 0.3rem; border-radius: 4px; }
   .kind.official { background: #1a3a2a; color: #86efac; }
   .kind.marketplace { background: #1e3a5f; color: #7dd3fc; }
   .kind.third-party { background: #3a2a1a; color: #fcd34d; }
   .kind.used { background: #2a2a3a; color: #c4b5fd; }
   .link-chip {
-    display: inline-block; margin: 0.25rem 0.35rem 0.25rem 0;
-    padding: 0.4rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
-    font-size: 0.82rem; color: var(--text); text-decoration: none !important;
+    display: inline-block; margin: 0.2rem 0.3rem 0.2rem 0;
+    padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid var(--border);
+    font-size: 0.78rem; color: var(--text); text-decoration: none !important;
   }
-  .link-chip:hover { border-color: var(--accent2); }
-  .watch-box {
-    margin-top: 1rem; padding: 0.85rem; border-radius: 12px; border: 1px solid var(--border);
-    background: #120808;
-  }
+  .news-item { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); }
+  .news-item:last-child { border-bottom: none; }
+  .news-item a { color: var(--text); font-size: 0.88rem; font-weight: 500; text-decoration: none !important; }
+  .news-item a:hover { color: var(--accent2); }
+  .news-item .meta { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
+  .plat-loading { opacity: 0.5; pointer-events: none; }
+  .watch-box { margin-top: 0.9rem; padding: 0.75rem; border-radius: 12px; border: 1px solid var(--border); background: #120808; }
   .watch-box input {
-    width: 6rem; padding: 0.4rem 0.5rem; border-radius: 8px;
+    width: 5.5rem; padding: 0.35rem 0.45rem; border-radius: 8px;
     border: 1px solid var(--border); background: var(--bg); color: var(--text);
   }
 </style>
@@ -74,100 +92,211 @@
 {% block content %}
 <a href="{% url 'games:steam_search' %}" style="color: var(--muted); font-size: 0.85rem;">← Search</a>
 
-<div class="hero" style="margin-top: 0.85rem;">
-  {% if d.header_image %}<img src="{{ d.header_image }}" alt="">{% endif %}
-  <div class="hero-body">
-    <h1 style="font-size: 1.45rem;">{{ d.name }}</h1>
-    <div style="margin-top: 0.4rem;">
-      <span class="badge digital">{{ d.type }}</span>
-      {% if d.is_dlc %}<span class="badge dlc" style="margin-left:0.25rem;">DLC</span>{% endif %}
-      {% for p in d.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
-    </div>
+<div class="layout" style="margin-top: 0.75rem;">
+  <div class="main-col">
+    <div class="hero">
+      {% if d.header_image %}<img class="banner" src="{{ d.header_image }}" alt="">{% endif %}
+      <div class="hero-body">
+        <h1 style="font-size: 1.4rem;">{{ d.name }}</h1>
+        <div style="margin-top: 0.35rem;">
+          <span class="badge digital">{{ d.type }}</span>
+          {% if d.is_dlc %}<span class="badge dlc" style="margin-left:0.25rem;">DLC</span>{% endif %}
+          {% for g in d.genres|slice:":3" %}<span class="badge" style="margin-left:0.25rem;">{{ g }}</span>{% endfor %}
+        </div>
 
-    <div class="plat-row">
-      {% for val, label in platforms %}
-        <a class="{% if current_platform == val %}on{% endif %}"
-           href="?platform={{ val }}&cc={{ country }}">{{ label }}</a>
-      {% endfor %}
-    </div>
+        {% if steam_os %}
+        <div class="os-row" title="Steam OS support">
+          {% for p in steam_os %}
+            <span>{{ p|title }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
 
-    {% if live_offers %}
-      <div class="offer-grid">
-        {% for o in live_offers %}
-          <a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url|default:'#' }}" {% if o.url %}target="_blank" rel="noopener"{% endif %}>
-            <div class="s">{{ o.store }}{% if forloop.first %} · lowest (GBP){% endif %}</div>
-            <div class="p">{{ o.price }} {{ o.currency }}</div>
-            {% if o.currency != 'GBP' %}
-              <div class="g">≈ £{{ o.price_gbp }}</div>
-            {% endif %}
-            <span class="kind {{ o.kind }}">{{ o.kind }}</span>
-          </a>
-        {% endfor %}
-      </div>
-    {% endif %}
+        <div class="plat-row" id="platformChips" data-app="{{ app_id }}" data-cc="{{ country }}">
+          {% for val, label in store_platforms %}
+            <button type="button" data-platform="{{ val }}" class="{% if current_platform == val %}on{% endif %}">{{ label }}</button>
+          {% endfor %}
+          <button type="button" data-platform="" class="{% if not current_platform %}on{% endif %}">All</button>
+        </div>
 
-    {% if launch %}
-      <p style="font-size: 0.9rem; color: var(--muted); margin-top: 0.65rem;">
-        Launch reference: <strong style="color: var(--text);">{{ launch }} {{ launch_currency }}</strong>
-      </p>
-    {% endif %}
+        {% if live_offers %}
+          <div class="offer-grid" id="offerGrid">
+            {% for o in live_offers %}
+              <a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url|default:'#' }}" {% if o.url %}target="_blank" rel="noopener"{% endif %}>
+                <div class="s">{{ o.store }}{% if forloop.first %} · lowest{% endif %}</div>
+                <div class="p">{{ o.price }} {{ o.currency }}</div>
+                {% if o.currency != 'GBP' %}<div class="g">≈ £{{ o.price_gbp }}</div>{% endif %}
+                <span class="kind {{ o.kind }}">{{ o.kind }}</span>
+              </a>
+            {% endfor %}
+          </div>
+        {% endif %}
 
-    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.1rem;">
-      {% if already_tracked %}
-        <form method="post" action="{% url 'games:untrack' already_tracked.slug %}">
-          {% csrf_token %}
-          <button type="submit" class="btn btn-ghost">Untrack</button>
-        </form>
-      {% else %}
-        <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">Track</a>
-      {% endif %}
-      <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
-    </div>
-
-    {% if user.is_authenticated and already_tracked %}
-      <div class="watch-box">
-        {% if is_watched %}
-          <p style="font-size:0.9rem;margin-bottom:0.5rem;">
-            Watching{% if watched.target_price %} · alert under <strong>£{{ watched.target_price }}</strong>{% endif %}
+        {% if launch %}
+          <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.55rem;">
+            Launch: <strong style="color: var(--text);">{{ launch }} {{ launch_currency }}</strong>
           </p>
-          <form method="post" action="{% url 'games:unwatch' already_tracked.slug %}" style="display:inline;">
-            {% csrf_token %}
-            <button type="submit" class="btn btn-ghost">Unwatch</button>
-          </form>
-        {% else %}
-          <form method="post" action="{% url 'games:watch' already_tracked.slug %}" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
-            {% csrf_token %}
-            <label style="font-size:0.85rem;color:var(--muted);">Alert under £</label>
-            <input type="number" name="target_price" step="0.01" min="0" placeholder="e.g. 9.99">
-            <button type="submit" class="btn btn-track">Watch price</button>
-          </form>
-          <p style="font-size:0.75rem;color:var(--muted);margin-top:0.4rem;">Uses GBP-normalised prices. Email goes to your account email (console in local dev).</p>
+        {% endif %}
+
+        <div style="display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.95rem;">
+          {% if already_tracked %}
+            <form method="post" action="{% url 'games:untrack' already_tracked.slug %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-ghost">Untrack</button>
+            </form>
+          {% else %}
+            <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">Track</a>
+          {% endif %}
+          <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
+        </div>
+
+        {% if user.is_authenticated and already_tracked %}
+          <div class="watch-box">
+            {% if is_watched %}
+              <p style="font-size:0.88rem;margin-bottom:0.4rem;">Watching{% if watched.target_price %} · under <strong>£{{ watched.target_price }}</strong>{% endif %}</p>
+              <form method="post" action="{% url 'games:unwatch' already_tracked.slug %}">{% csrf_token %}<button type="submit" class="btn btn-ghost">Unwatch</button></form>
+            {% else %}
+              <form method="post" action="{% url 'games:watch' already_tracked.slug %}" style="display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;">
+                {% csrf_token %}
+                <label style="font-size:0.82rem;color:var(--muted);">Alert under £</label>
+                <input type="number" name="target_price" step="0.01" min="0" placeholder="9.99">
+                <button type="submit" class="btn btn-track">Watch</button>
+              </form>
+            {% endif %}
+          </div>
         {% endif %}
       </div>
-    {% elif user.is_authenticated and not already_tracked %}
-      <p style="font-size:0.8rem;color:var(--muted);margin-top:0.75rem;">Track first to set a price alert.</p>
-    {% endif %}
-  </div>
-</div>
+    </div>
 
-{% if has_chart %}
-<div class="panel" style="padding: 1rem;">
-  <h2 style="padding: 0;">Price graph (GBP)</h2>
-  <div class="chart-toolbar">
-    <label for="sellerSelect">Show</label>
-    <select id="sellerSelect">
-      <option value="__avg__">Average (all sellers, GBP)</option>
-      <option value="__all__">All sellers (overlay)</option>
-    </select>
+    {% if has_chart %}
+    <div class="panel" style="padding: 0.9rem 1rem;">
+      <h2 style="padding: 0;">Price changes only (GBP)</h2>
+      <p style="font-size: 0.75rem; color: var(--muted); margin: 0.25rem 0 0.5rem;">Flat periods collapsed — next point is the next real change.</p>
+      <div class="chart-toolbar">
+        <label for="sellerSelect" style="font-size:0.8rem;color:var(--muted);">Show</label>
+        <select id="sellerSelect">
+          <option value="__avg__">Average</option>
+          <option value="__all__">All sellers</option>
+        </select>
+      </div>
+      <canvas id="priceChart" height="120"></canvas>
+    </div>
+    {% endif %}
+
+    <div id="platformPanels">
+      <div class="panel">
+        <h2>PlayStation Store (UK)</h2>
+        <div id="psnList">
+          {% if psn_rows %}
+            {% for row in psn_rows %}
+              <div class="deal-row">
+                <div>
+                  <strong>{{ row.name }}</strong>
+                  {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.3rem;">Full</span>{% endif %}
+                  <div style="font-size:0.78rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">PSN →</a></div>
+                </div>
+                <div class="price-now">{% if row.display_price %}{{ row.display_price }}{% else %}{{ row.price }} {{ row.currency }}{% endif %}</div>
+              </div>
+            {% endfor %}
+          {% else %}
+            <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No PSN matches.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>UK physical & local</h2>
+        <div id="ukList">
+          {% if cex_rows %}
+            {% for row in cex_rows %}
+              <div class="deal-row"><div><strong>{{ row.name }}</strong> <span class="kind used">used</span></div><div class="price-now">{{ row.price }} {{ row.currency }}</div></div>
+            {% endfor %}
+          {% elif cex_search_url %}
+            <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
+          {% endif %}
+          {% if ebay_rows %}
+            {% for row in ebay_rows %}
+              <div class="deal-row"><div><strong>{{ row.name }}</strong></div><div class="price-now">{{ row.price }} {{ row.currency }}</div></div>
+            {% endfor %}
+          {% elif ebay_search_url %}
+            <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK →</a></p>
+          {% endif %}
+          <div style="padding:0.65rem 1rem 1rem;" id="ukLinks">
+            {% for link in uk_links %}
+              <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.name }}</a>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Amazon UK</h2>
+        <div id="amazonList">
+          {% if amazon_blocked %}
+            <div class="disclaimer">Amazon may block bots.
+              {% if amazon_search_url %}<a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Search →</a>{% endif %}
+            </div>
+          {% endif %}
+          {% for row in amazon_rows %}
+            <div class="deal-row"><div><strong>{{ row.name }}</strong></div><div class="price-now">{{ row.price }} {{ row.currency }}</div></div>
+          {% empty %}
+            {% if not amazon_blocked %}<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No rows.</p>{% endif %}
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Other PC digital</h2>
+      <div class="disclaimer">May include keyshops.</div>
+      {% for deal in store_deals %}
+        <div class="deal-row">
+          <div>
+            <strong>{{ deal.store_name }}</strong>
+            {% if deal.savings %}<span class="badge lowest" style="margin-left:0.3rem;">-{{ deal.savings }}%</span>{% endif %}
+          </div>
+          <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
+        </div>
+      {% empty %}
+        <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No deals.</p>
+      {% endfor %}
+    </div>
   </div>
-  <canvas id="priceChart" height="140"></canvas>
-  <div class="disclaimer" style="margin: 1rem 0 0;">Values converted to GBP for comparison. Still mixes new/used and official/keyshops.</div>
+
+  <aside class="side-col">
+    <div class="panel" style="margin-bottom: 0.85rem;">
+      <h2>News</h2>
+      {% if news_items %}
+        {% for n in news_items %}
+          <div class="news-item">
+            {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener">{{ n.title }}</a>{% else %}<span>{{ n.title }}</span>{% endif %}
+            <div class="meta">{{ n.feed }}</div>
+          </div>
+        {% endfor %}
+      {% else %}
+        <p style="padding:0.75rem 0.85rem;color:var(--muted);font-size:0.85rem;">No Steam news.</p>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <h2>Social</h2>
+      <div style="padding: 0.5rem 0.85rem 0.85rem;">
+        {% for s in social_links %}
+          <a class="link-chip" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a>
+        {% endfor %}
+      </div>
+    </div>
+  </aside>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if has_chart %}
 <script>
 (function () {
   const data = {{ chart_json|safe }};
   const colors = ['#e03030','#e8a838','#3ecf6a','#5b8def','#c084fc','#f472b6','#2dd4bf','#a3a3a3'];
   const select = document.getElementById('sellerSelect');
+  if (!select) return;
   (data.sellers || []).forEach(s => {
     const opt = document.createElement('option');
     opt.value = s; opt.textContent = s; select.appendChild(opt);
@@ -177,16 +306,16 @@
   function datasetsFor(mode) {
     const ds = [];
     if (mode === '__avg__') {
-      ds.push({ label: 'Average (GBP)', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
+      ds.push({ label: 'Average (change pts)', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.2, pointRadius: 4 });
     } else if (mode === '__all__') {
       (data.sellers || []).forEach((s, i) => {
-        ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.25, pointRadius: 2, borderWidth: 1.5 });
+        ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.2, pointRadius: 3, borderWidth: 1.5 });
       });
     } else {
-      ds.push({ label: mode + ' (GBP)', data: data.series[mode] || [], borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.25, pointRadius: 3 });
+      ds.push({ label: mode, data: data.series[mode] || [], borderColor: '#e03030', fill: true, spanGaps: true, tension: 0.2, pointRadius: 4 });
     }
     if (data.launch && data.launch.some(v => v != null)) {
-      ds.push({ label: 'Launch reference', data: data.launch, borderColor: '#a89090', borderDash: [6, 4], pointRadius: 0, spanGaps: true });
+      ds.push({ label: 'Launch', data: data.launch, borderColor: '#a89090', borderDash: [6, 4], pointRadius: 0, spanGaps: true });
     }
     return ds;
   }
@@ -198,7 +327,7 @@
       options: {
         plugins: { legend: { labels: { color: '#a89090', boxWidth: 12, font: { size: 11 } } } },
         scales: {
-          x: { ticks: { color: '#a89090', maxRotation: 45 }, grid: { color: '#3a1515' } },
+          x: { ticks: { color: '#a89090', maxRotation: 40 }, grid: { color: '#3a1515' } },
           y: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } }
         }
       }
@@ -210,117 +339,64 @@
 </script>
 {% endif %}
 
-<div class="panel">
-  <h2>PlayStation Store (UK)</h2>
-  {% if psn_rows %}
-    {% for row in psn_rows %}
-      <div class="deal-row">
-        <div>
-          <strong>{{ row.name }}</strong>
-          {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.35rem;">Full game</span>{% endif %}
-          {% for p in row.platforms %}<span class="badge" style="margin-left:0.25rem;">{{ p }}</span>{% endfor %}
-          <div style="font-size:0.8rem;margin-top:0.2rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">Open on PSN →</a></div>
-        </div>
-        <div class="price-now">{{ row.display_price }}</div>
-      </div>
-    {% endfor %}
-  {% else %}
-    <p style="padding: 0.85rem 1rem; color: var(--muted); font-size: 0.9rem;">No PSN matches.</p>
-  {% endif %}
-</div>
+<script>
+(function () {
+  const chips = document.getElementById('platformChips');
+  if (!chips) return;
+  const appId = chips.dataset.app;
+  const cc = chips.dataset.cc || 'GB';
+  const panels = document.getElementById('platformPanels');
 
-<div class="panel">
-  <h2>UK physical & local</h2>
-  <div class="disclaimer">
-    CeX / eBay / high-street often block bots. Search links always work in your browser.
-    Facebook Marketplace is link-only.
-  </div>
-  {% if cex_rows %}
-    {% for row in cex_rows %}
-      <div class="deal-row">
-        <div><strong>{{ row.name }}</strong> <span class="kind used">used</span></div>
-        <div class="price-now">{{ row.price }} {{ row.currency }}</div>
-      </div>
-    {% endfor %}
-  {% elif cex_search_url %}
-    <p style="padding: 0.5rem 1rem; font-size: 0.9rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
-  {% endif %}
-  {% if ebay_rows %}
-    {% for row in ebay_rows %}
-      <div class="deal-row">
-        <div>
-          <strong>{{ row.name }}</strong>
-          <div style="font-size:0.8rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">View →</a></div>
-        </div>
-        <div class="price-now">{{ row.price }} {{ row.currency }}</div>
-      </div>
-    {% endfor %}
-  {% elif ebay_search_url %}
-    <p style="padding: 0.5rem 1rem; font-size: 0.9rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK →</a></p>
-  {% endif %}
-  <div style="padding: 0.75rem 1rem 1rem;">
-    {% for link in uk_links %}
-      <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.name }}</a>
-    {% endfor %}
-  </div>
-</div>
+  function rowHtml(name, price, extra) {
+    return `<div class="deal-row"><div><strong>${name}</strong>${extra || ''}</div><div class="price-now">${price}</div></div>`;
+  }
 
-<div class="panel">
-  <h2>Amazon UK</h2>
-  {% if amazon_blocked %}
-    <div class="disclaimer">Amazon blocked automated access.
-      {% if amazon_search_url %}<a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Amazon UK →</a>{% endif %}
-    </div>
-  {% endif %}
-  {% for row in amazon_rows %}
-    <div class="deal-row">
-      <div>
-        <strong>{{ row.name }}</strong>
-        <div style="font-size:0.8rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">View →</a></div>
-      </div>
-      <div class="price-now">{{ row.price }} {{ row.currency }}</div>
-    </div>
-  {% empty %}
-    {% if not amazon_blocked %}<p style="padding:0.85rem 1rem;color:var(--muted);font-size:0.9rem;">No Amazon rows.</p>{% endif %}
-  {% endfor %}
-</div>
+  function renderPlatform(data) {
+    const psn = document.getElementById('psnList');
+    if (psn) {
+      if ((data.psn_rows || []).length) {
+        psn.innerHTML = data.psn_rows.map(r => rowHtml(
+          r.name,
+          r.display_price || (r.price + ' ' + (r.currency || 'GBP')),
+          r.is_full_game ? ' <span class="badge digital">Full</span>' : ''
+        )).join('');
+      } else {
+        psn.innerHTML = '<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No PSN matches.</p>';
+      }
+    }
+    const uk = document.getElementById('ukList');
+    if (uk) {
+      let html = '';
+      (data.cex_rows || []).forEach(r => { html += rowHtml(r.name + ' <span class="kind used">used</span>', r.price + ' ' + (r.currency || 'GBP')); });
+      if (!(data.cex_rows || []).length && data.cex_search_url) html += `<p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="${data.cex_search_url}" target="_blank" rel="noopener">Search CeX →</a></p>`;
+      (data.ebay_rows || []).forEach(r => { html += rowHtml(r.name, r.price + ' ' + (r.currency || 'GBP')); });
+      if (!(data.ebay_rows || []).length && data.ebay_search_url) html += `<p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="${data.ebay_search_url}" target="_blank" rel="noopener">Search eBay UK →</a></p>`;
+      html += '<div style="padding:0.65rem 1rem 1rem;">' + (data.uk_links || []).map(l => `<a class="link-chip" href="${l.url}" target="_blank" rel="noopener">${l.name}</a>`).join('') + '</div>';
+      uk.innerHTML = html;
+    }
+    const amz = document.getElementById('amazonList');
+    if (amz) {
+      let html = '';
+      if (data.amazon_blocked) html += `<div class="disclaimer">Amazon may block bots. ${data.amazon_search_url ? `<a href="${data.amazon_search_url}" target="_blank" rel="noopener">Search →</a>` : ''}</div>`;
+      (data.amazon_rows || []).forEach(r => { html += rowHtml(r.name, r.price + ' ' + (r.currency || 'GBP')); });
+      if (!(data.amazon_rows || []).length && !data.amazon_blocked) html += '<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No rows.</p>';
+      amz.innerHTML = html;
+    }
+  }
 
-<div class="panel">
-  <h2>News (Steam)</h2>
-  {% if news_items %}
-    {% for n in news_items %}
-      <div class="deal-row">
-        <div>
-          <strong>{{ n.title }}</strong>
-          <div style="font-size:0.75rem;color:var(--muted);">{{ n.feed }}</div>
-          {% if n.url %}<div style="font-size:0.8rem;"><a href="{{ n.url }}" target="_blank" rel="noopener">Read →</a></div>{% endif %}
-        </div>
-      </div>
-    {% endfor %}
-  {% else %}
-    <p style="padding:0.85rem 1rem;color:var(--muted);font-size:0.9rem;">No Steam news for this app.</p>
-  {% endif %}
-  <div style="padding: 0.5rem 1rem 1rem;">
-    {% for s in social_links %}
-      <a class="link-chip" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a>
-    {% endfor %}
-  </div>
-</div>
-
-<div class="panel">
-  <h2>Other PC digital stores</h2>
-  <div class="disclaimer">May include keyshops. Prefer Steam / GOG / Epic / Humble when unsure.</div>
-  {% for deal in store_deals %}
-    <div class="deal-row">
-      <div>
-        <strong>{{ deal.store_name }}</strong>
-        {% if deal.savings %}<span class="badge lowest" style="margin-left:0.35rem;">-{{ deal.savings }}%</span>{% endif %}
-        {% if deal.url %}<div style="font-size:0.8rem;"><a href="{{ deal.url }}" target="_blank" rel="noopener">Deal link</a></div>{% endif %}
-      </div>
-      <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
-    </div>
-  {% empty %}
-    <p style="padding:0.85rem 1rem;color:var(--muted);font-size:0.9rem;">No PC store deals.</p>
-  {% endfor %}
-</div>
+  chips.querySelectorAll('button[data-platform]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const plat = btn.getAttribute('data-platform') || '';
+      chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+      panels?.classList.add('plat-loading');
+      const url = `/api/platform/${appId}/?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`;
+      fetch(url)
+        .then(r => r.json())
+        .then(data => { renderPlatform(data); history.replaceState(null, '', `?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`); })
+        .catch(() => {})
+        .finally(() => panels?.classList.remove('plat-loading'));
+    });
+  });
+})();
+</script>
 {% endblock %}
