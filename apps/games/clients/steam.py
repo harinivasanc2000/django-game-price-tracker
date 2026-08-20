@@ -46,7 +46,6 @@ def expand_query(term: str) -> list[str]:
     terms = []
     if key in SEARCH_ALIASES:
         terms.extend(SEARCH_ALIASES[key])
-    # partial alias match (e.g. "gta san")
     for ak, vals in SEARCH_ALIASES.items():
         if key.startswith(ak + " ") or key.startswith(ak):
             terms.extend(vals)
@@ -77,7 +76,6 @@ def _score_result(item: dict, query: str) -> int:
         score += 40
     if q in name:
         score += 20
-    # multi-word: all tokens present
     if tokens:
         hits = sum(1 for t in tokens if t in name)
         score += hits * 12
@@ -90,12 +88,6 @@ def _score_result(item: dict, query: str) -> int:
 
 
 def _parse_price_block(price_info: dict | None, is_free_flag: bool, country: str) -> dict:
-    """
-    Normalize Steam price fields.
-    price_status: paid | free | unknown
-    - free only if Steam marks is_free OR explicit free price
-    - missing price_overview is usually region/unavailable — NOT free
-    """
     currency = "GBP" if country.upper() == "GB" else "USD"
     if price_info:
         final = price_info.get("final")
@@ -110,7 +102,7 @@ def _parse_price_block(price_info: dict | None, is_free_flag: bool, country: str
             if final == 0 and is_free_flag:
                 status = "free"
             elif final == 0:
-                status = "unknown"  # zero without is_free is suspicious
+                status = "unknown"
             else:
                 status = "paid"
             return {
@@ -196,7 +188,6 @@ def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[s
 
 
 def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[str, Any]]:
-    """Lightweight suggestions for typeahead (Netflix-style)."""
     term = (term or "").strip()
     if len(term) < 2:
         return []
@@ -210,6 +201,7 @@ def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[s
             "price": str(r["price"]) if r["price"] is not None else None,
             "currency": r["currency"],
             "is_likely_dlc": r["is_likely_dlc"],
+            "platforms": r.get("platforms") or [],
         }
         for r in rows
     ]
@@ -235,6 +227,17 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
     header = app_data.get("header_image") or (
         f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg"
     )
+    # Fan/dev-style wide art used as live wallpaper (Steam CDN public assets)
+    library_hero = (
+        f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/library_hero.jpg"
+    )
+    page_bg = app_data.get("background") or ""
+    screenshots = []
+    for s in (app_data.get("screenshots") or [])[:6]:
+        url = s.get("path_full") or s.get("path_thumbnail") or ""
+        if url:
+            screenshots.append(url)
+
     app_type = (app_data.get("type") or "game").lower()
     is_dlc = app_type == "dlc" or bool(app_data.get("fullgame"))
     is_free_flag = bool(app_data.get("is_free"))
@@ -258,10 +261,6 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
     else:
         price_note = ""
 
-    # List / sale baseline from Steam (not always historic launch MSRP)
-    list_price = parsed["original"]
-    current = parsed["price"]
-
     fullgame = app_data.get("fullgame") or {}
     parent_id = fullgame.get("appid")
 
@@ -270,9 +269,9 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
         "name": app_data.get("name") or f"App {app_id}",
         "type": app_type,
         "is_dlc": is_dlc,
-        "price": current,
-        "original": list_price,
-        "list_price": list_price,
+        "price": parsed["price"],
+        "original": parsed["original"],
+        "list_price": parsed["original"],
         "discount": parsed["discount"],
         "currency": parsed["currency"],
         "price_status": parsed["price_status"],
@@ -281,6 +280,9 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
         "coming_soon": coming_soon,
         "url": f"https://store.steampowered.com/app/{app_id}/",
         "header_image": header,
+        "library_hero": library_hero,
+        "page_background": page_bg,
+        "screenshots": screenshots,
         "short_description": app_data.get("short_description") or "",
         "platforms": platforms,
         "release_date": release,
@@ -293,14 +295,13 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
         "genres": [g.get("description") for g in (app_data.get("genres") or []) if g.get("description")],
         "launch_price_note": (
             "Steam does not expose historic launch MSRP via public API. "
-            "We use the current list/initial price as retail baseline. "
-            "True launch price needs ITAD/GG.deals or manual entry later."
+            "We use the current list/initial price as retail baseline."
         ),
     }
 
 
 def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
-    key = f"steam:detail:{country}:{app_id}"
+    key = f"steam:detail:v2:{country}:{app_id}"
     return cached(key, lambda: _get_app_details_uncached(app_id, country=country), 600)
 
 
