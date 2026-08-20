@@ -45,6 +45,10 @@
   .offer-chip .p { font-weight: 700; color: var(--accent2); margin-top: 0.15rem; font-size: 1rem; }
   .offer-chip .g { font-size: 0.68rem; color: var(--muted); }
   .offer-chip.best { border-color: #2a6a3a; }
+  .best-tip {
+    margin-top: 0.65rem; font-size: 0.8rem; color: var(--muted); line-height: 1.4;
+    padding: 0.55rem 0.7rem; border-radius: 8px; background: #0f1a12; border: 1px solid #1a3a2a;
+  }
   .deal-row {
     display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
     padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); font-size: 0.9rem;
@@ -55,6 +59,7 @@
     margin-bottom: 1rem; overflow: hidden; backdrop-filter: blur(6px);
   }
   .panel h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1rem 0.3rem; }
+  .panel.plat-dim { opacity: 0.45; }
   .disclaimer {
     margin: 0.45rem 1rem 0.9rem; padding: 0.65rem 0.8rem; border-radius: 10px;
     background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.78rem; line-height: 1.4;
@@ -85,6 +90,8 @@
     width: 5.5rem; padding: 0.35rem 0.45rem; border-radius: 8px;
     border: 1px solid var(--border); background: var(--bg); color: var(--text);
   }
+  .safe-list { padding: 0.5rem 1rem 0.9rem; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
+  .safe-list li { margin: 0.25rem 0 0.25rem 1rem; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -112,6 +119,7 @@
         </div>
         {% endif %}
 
+        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 0.55rem;">Store platform (filters UK / PSN / physical — no page reload)</p>
         <div class="plat-row" id="platformChips" data-app="{{ app_id }}" data-cc="{{ country }}">
           {% for val, label in store_platforms %}
             <button type="button" data-platform="{{ val }}" class="{% if current_platform == val %}on{% endif %}">{{ label }}</button>
@@ -123,13 +131,21 @@
           <div class="offer-grid" id="offerGrid">
             {% for o in live_offers %}
               <a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url|default:'#' }}" {% if o.url %}target="_blank" rel="noopener"{% endif %}>
-                <div class="s">{{ o.store }}{% if forloop.first %} · lowest{% endif %}</div>
+                <div class="s">{{ o.store }}{% if forloop.first %} · lowest GBP{% endif %}</div>
                 <div class="p">{{ o.price }} {{ o.currency }}</div>
                 {% if o.currency != 'GBP' %}<div class="g">≈ £{{ o.price_gbp }}</div>{% endif %}
                 <span class="kind {{ o.kind }}">{{ o.kind }}</span>
               </a>
             {% endfor %}
           </div>
+          {% with best=live_offers.0 %}
+          <div class="best-tip">
+            <strong style="color:#86efac;">Best GBP pick right now:</strong>
+            {{ best.store }} at
+            {% if best.currency == 'GBP' %}£{{ best.price }}{% else %}{{ best.price }} {{ best.currency }} (≈ £{{ best.price_gbp }}){% endif %}
+            · Prefer <span class="kind official">official</span> over <span class="kind third-party">third-party</span> when the gap is small.
+          </div>
+          {% endwith %}
         {% endif %}
 
         {% if launch %}
@@ -184,7 +200,7 @@
     {% endif %}
 
     <div id="platformPanels">
-      <div class="panel">
+      <div class="panel" data-plat-group="ps">
         <h2>PlayStation Store (UK)</h2>
         <div id="psnList">
           {% if psn_rows %}
@@ -204,7 +220,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-plat-group="physical">
         <h2>UK physical & local</h2>
         <div id="ukList">
           {% if cex_rows %}
@@ -229,7 +245,7 @@
         </div>
       </div>
 
-      <div class="panel">
+      <div class="panel" data-plat-group="physical">
         <h2>Amazon UK</h2>
         <div id="amazonList">
           {% if amazon_blocked %}
@@ -244,41 +260,50 @@
           {% endfor %}
         </div>
       </div>
-    </div>
 
-    <div class="panel">
-      <h2>Other PC digital</h2>
-      <div class="disclaimer">May include keyshops.</div>
-      {% for deal in store_deals %}
-        <div class="deal-row">
-          <div>
-            <strong>{{ deal.store_name }}</strong>
-            {% if deal.savings %}<span class="badge lowest" style="margin-left:0.3rem;">-{{ deal.savings }}%</span>{% endif %}
+      <div class="panel" data-plat-group="pc">
+        <h2>Other PC digital</h2>
+        <div class="disclaimer">May include keyshops — verify seller & region before buying.</div>
+        {% for deal in store_deals %}
+          <div class="deal-row">
+            <div>
+              <strong>{{ deal.store_name }}</strong>
+              {% if deal.savings %}<span class="badge lowest" style="margin-left:0.3rem;">-{{ deal.savings }}%</span>{% endif %}
+            </div>
+            <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
           </div>
-          <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
-        </div>
-      {% empty %}
-        <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No deals.</p>
-      {% endfor %}
+        {% empty %}
+          <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No deals.</p>
+        {% endfor %}
+      </div>
     </div>
   </div>
 
   <aside class="side-col">
     <div class="panel" style="margin-bottom: 0.85rem;">
-      <h2>News</h2>
+      <h2>Deal & price news</h2>
       {% if news_items %}
         {% for n in news_items %}
           <div class="news-item">
             {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener">{{ n.title }}</a>{% else %}<span>{{ n.title }}</span>{% endif %}
-            <div class="meta">{{ n.feed }}</div>
+            <div class="meta">{{ n.feed }}{% if n.deal_related %} · sale/price{% endif %}</div>
           </div>
         {% endfor %}
       {% else %}
-        <p style="padding:0.75rem 0.85rem;color:var(--muted);font-size:0.85rem;">No Steam news.</p>
+        <p style="padding:0.75rem 0.85rem;color:var(--muted);font-size:0.85rem;">No sale/price headlines right now.</p>
       {% endif %}
     </div>
+    <div class="panel" style="margin-bottom: 0.85rem;">
+      <h2>Stay safe</h2>
+      <ul class="safe-list">
+        <li>Official stores first when prices are close.</li>
+        <li>Keyshops: check region, refunds, seller score.</li>
+        <li>Used discs: condition grade + returns.</li>
+        <li>Confirm the final price on the store page.</li>
+      </ul>
+    </div>
     <div class="panel">
-      <h2>Social</h2>
+      <h2>More deal sources</h2>
       <div style="padding: 0.5rem 0.85rem 0.85rem;">
         {% for s in social_links %}
           <a class="link-chip" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a>
@@ -347,6 +372,20 @@
   const cc = chips.dataset.cc || 'GB';
   const panels = document.getElementById('platformPanels');
 
+  function focusPanels(plat) {
+    const groups = panels.querySelectorAll('[data-plat-group]');
+    groups.forEach(el => {
+      const g = el.getAttribute('data-plat-group');
+      let show = true;
+      if (plat === 'pc') show = (g === 'pc' || g === 'physical');
+      else if (plat === 'ps4' || plat === 'ps5') show = (g === 'ps' || g === 'physical');
+      else if (plat === 'xbox' || plat === 'switch') show = (g === 'physical');
+      else show = true;
+      el.classList.toggle('plat-dim', !show);
+      el.style.display = show ? '' : 'none';
+    });
+  }
+
   function rowHtml(name, price, extra) {
     return `<div class="deal-row"><div><strong>${name}</strong>${extra || ''}</div><div class="price-now">${price}</div></div>`;
   }
@@ -384,10 +423,13 @@
     }
   }
 
+  focusPanels('{{ current_platform|default:"" }}');
+
   chips.querySelectorAll('button[data-platform]').forEach(btn => {
     btn.addEventListener('click', () => {
       const plat = btn.getAttribute('data-platform') || '';
       chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+      focusPanels(plat);
       panels?.classList.add('plat-loading');
       const url = `/api/platform/${appId}/?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`;
       fetch(url)
