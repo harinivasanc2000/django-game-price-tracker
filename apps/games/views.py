@@ -27,6 +27,9 @@ from .clients.amazon_uk import search_amazon_uk
 from .clients.uk_stores import uk_search_links, try_cex_search, try_ebay_uk, platform_query
 from .clients.news import steam_news, social_news_links
 
+# Re-export for urls.py
+from .views_best_deals import best_deals  # noqa: F401,E402
+
 POPULAR_APP_IDS = [
     1091500, 1245620, 271590, 1174180, 1593500, 1086940,
     292030, 1817070, 814380, 1113000, 108710, 1145360,
@@ -110,7 +113,6 @@ def _gbp_point(amount, currency="GBP") -> float | None:
 
 
 def _collapse_changes(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]:
-    """Keep first point and only points where price actually changes."""
     if not pairs:
         return []
     out = [pairs[0]]
@@ -121,7 +123,6 @@ def _collapse_changes(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]
 
 
 def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows, cex_rows, ebay_rows):
-    """GBP series; only plot price *changes* (flat stretches collapse)."""
     points: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
     if already:
@@ -163,7 +164,6 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
         if g is not None:
             points["eBay UK"].append((now, g))
 
-    # Collapse per-seller to change points only
     for seller in list(points.keys()):
         points[seller] = _collapse_changes(points[seller])
 
@@ -186,22 +186,12 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
     for i, _ in enumerate(labels):
         vals = [series[s][i] for s in series if series[s][i] is not None]
         avg.append(round(sum(vals) / len(vals), 2) if vals else None)
-    # Collapse flat average stretches too
     avg_pairs = [(labels[i], avg[i]) for i in range(len(labels)) if avg[i] is not None]
     avg_collapsed = _collapse_changes(avg_pairs)
     if avg_collapsed:
         labels = [p[0] for p in avg_collapsed]
         avg = [p[1] for p in avg_collapsed]
-        # re-align series to collapsed labels (last known)
         for seller in series:
-            by_lab = {}
-            last = None
-            for lab, val in zip(
-                [l for l in points[seller] and [x[0] for x in points[seller]] or []],
-                [x[1] for x in points.get(seller, [])],
-            ):
-                by_lab[lab] = val
-            # rebuild from original points list
             by_lab = {lab: price for lab, price in points.get(seller, [])}
             series[seller] = [by_lab.get(lab) for lab in labels]
 
@@ -229,7 +219,6 @@ def _serialize_deal_row(row: dict) -> dict:
 
 
 def _platform_bundle(title: str, platform: str = "") -> dict:
-    """Fetch UK / PSN / Amazon / links for a platform (parallel)."""
     platform = (platform or "").strip().lower()
     psn_query = platform_query(title, platform) if platform.startswith("ps") else title
     amz_extra = platform.upper() if platform else ""
@@ -261,7 +250,6 @@ def _platform_bundle(title: str, platform: str = "") -> dict:
 
 
 def platform_deals_api(request, app_id: int):
-    """AJAX: swap platform without full page reload."""
     platform = request.GET.get("platform", "").strip().lower()
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
@@ -346,7 +334,6 @@ def steam_detail(request, app_id: int):
     already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
     catalog = Game.objects.filter(steam_app_id=app_id).first()
 
-    # Parallel network for deals + news + platform bundle
     with ThreadPoolExecutor(max_workers=6) as pool:
         f_deals = pool.submit(deals_for_title, detail["name"], 15)
         f_news = pool.submit(steam_news, app_id, 8)
@@ -454,7 +441,6 @@ def steam_detail(request, app_id: int):
     if request.user.is_authenticated and already:
         watched = Watch.objects.filter(user=request.user, game=already).first()
 
-    # OS platforms from Steam + store platforms always available
     steam_os = detail.get("platforms") or []
     store_platforms = [("pc", "PC"), ("ps4", "PS4"), ("ps5", "PS5"), ("xbox", "Xbox"), ("switch", "Switch")]
 
@@ -464,6 +450,12 @@ def steam_detail(request, app_id: int):
         or detail.get("header_image")
         or ""
     )
+
+    savings_vs_launch = None
+    if launch and live_offers:
+        best_gbp = float(live_offers[0]["price_gbp"])
+        if launch > 0:
+            savings_vs_launch = int(round((1 - best_gbp / launch) * 100))
 
     return render(
         request,
@@ -495,6 +487,7 @@ def steam_detail(request, app_id: int):
             "launch": launch,
             "launch_currency": launch_currency,
             "launch_source": launch_source,
+            "savings_vs_launch": savings_vs_launch,
             "best_third_party": store_deals[0] if store_deals else None,
             "chart_json": json.dumps(chart),
             "has_chart": bool(chart["labels"]),
