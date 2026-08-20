@@ -6,6 +6,7 @@ app_name = "games"
 urlpatterns = [
     path("", views.home, name="home"),
     path("search/", views.steam_search, name="steam_search"),
+    path("deals/", views.best_deals, name="best_deals"),
     path("api/suggest/", views.steam_suggest, name="steam_suggest"),
     path("api/platform/<int:app_id>/", views.platform_deals_api, name="platform_deals"),
     path("steam/<int:app_id>/", views.steam_detail, name="steam_detail"),
