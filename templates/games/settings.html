@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Settings · Appearance{% endblock %}
+
+{% block extra_css %}
+<style>
+  .set-grid { display: grid; gap: 1.25rem; max-width: 640px; }
+  .set-card {
+    background: rgba(18,8,8,0.9); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1rem 1.1rem;
+  }
+  .set-card h2 {
+    font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin-bottom: 0.75rem;
+  }
+  .opt-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .opt {
+    cursor: pointer; border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.55rem 0.75rem; background: transparent; color: var(--text);
+    font-family: inherit; font-size: 0.88rem;
+  }
+  .opt:hover { border-color: var(--accent2); }
+  .opt.on { border-color: var(--accent2); background: rgba(140,30,30,0.25); }
+  .wall-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.55rem;
+  }
+  .wall-opt {
+    cursor: pointer; border: 2px solid var(--border); border-radius: 12px;
+    overflow: hidden; background: #0a0606; text-align: left; padding: 0;
+    font-family: inherit; color: var(--text);
+  }
+  .wall-opt.on { border-color: var(--accent2); }
+  .wall-opt .prev {
+    height: 64px; background-size: cover; background-position: center;
+  }
+  .wall-opt .lbl { display: block; padding: 0.4rem 0.5rem; font-size: 0.75rem; color: var(--muted); }
+  .note { font-size: 0.82rem; color: var(--muted); margin-top: 0.75rem; line-height: 1.4; }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'games:home' %}" style="color:var(--muted);font-size:0.85rem;">← Home</a>
+<h1 style="font-size:1.35rem;margin:0.6rem 0 0.35rem;">Appearance</h1>
+<p style="color:var(--muted);font-size:0.9rem;margin-bottom:1.25rem;">
+  Saved in this browser only — no account needed.
+</p>
+
+<div class="set-grid">
+  <section class="set-card">
+    <h2>Theme</h2>
+    <div class="opt-row" id="themeOpts">
+      <button type="button" class="opt" data-theme="dark">Dark red</button>
+      <button type="button" class="opt" data-theme="soft">Soft dark</button>
+      <button type="button" class="opt" data-theme="ember">Ember</button>
+      <button type="button" class="opt" data-theme="mist">Mist (dim light)</button>
+    </div>
+  </section>
+
+  <section class="set-card">
+    <h2>Wallpaper</h2>
+    <div class="wall-grid" id="wallOpts">
+      <button type="button" class="wall-opt" data-wall="comet">
+        <div class="prev" style="background:radial-gradient(ellipse at 30% 20%,#4a1010,#080404);"></div>
+        <span class="lbl">Comet rain (live)</span>
+      </button>
+      <button type="button" class="wall-opt" data-wall="stars">
+        <div class="prev" style="background:#020208;"></div>
+        <span class="lbl">Deep space (live)</span>
+      </button>
+      <button type="button" class="wall-opt" data-wall="aurora">
+        <div class="prev" style="background:linear-gradient(160deg,#0a1620,#1a3040,#0c1810);"></div>
+        <span class="lbl">Aurora (live)</span>
+      </button>
+      <button type="button" class="wall-opt" data-wall="gradient">
+        <div class="prev" style="background:radial-gradient(ellipse at 20% 30%,#641010,#080404);"></div>
+        <span class="lbl">Red haze (static)</span>
+      </button>
+      <button type="button" class="wall-opt" data-wall="scenery">
+        <div class="prev" style="background:linear-gradient(180deg,#1a1520 0%,#2a2030 40%,#0e1a14 100%);"></div>
+        <span class="lbl">Night hills (static)</span>
+      </button>
+      <button type="button" class="wall-opt" data-wall="void">
+        <div class="prev" style="background:#050505;"></div>
+        <span class="lbl">Void (static)</span>
+      </button>
+      <button type="button" class="wall-opt" data-wall="ocean">
+        <div class="prev" style="background:linear-gradient(180deg,#0a1520,#0c2030 50%,#061018);"></div>
+        <span class="lbl">Deep ocean (static)</span>
+      </button>
+      <button type="button" class="wall-opt" data-wall="game">
+        <div class="prev" style="background:linear-gradient(45deg,#2a1010,#101828);"></div>
+        <span class="lbl">Game art (on detail pages)</span>
+      </button>
+    </div>
+    <p class="note">
+      Live options use a light canvas (low FPS). <strong>Game art</strong> uses Steam library art on title pages when available; elsewhere falls back to comet.
+      Settings never leave your browser.
+    </p>
+  </section>
+
+  <section class="set-card">
+    <h2>Reset</h2>
+    <button type="button" class="opt" id="resetAppearance">Restore defaults</button>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var THEME_KEY = 'gpt_theme';
+  var WALL_KEY = 'gpt_wallpaper';
+
+  function currentTheme() {
+    try { return localStorage.getItem(THEME_KEY) || 'dark'; } catch (e) { return 'dark'; }
+  }
+  function currentWall() {
+    try { return localStorage.getItem(WALL_KEY) || 'comet'; } catch (e) { return 'comet'; }
+  }
+
+  function mark() {
+    var t = currentTheme(), w = currentWall();
+    document.querySelectorAll('#themeOpts .opt').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-theme') === t);
+    });
+    document.querySelectorAll('#wallOpts .wall-opt').forEach(function (b) {
+      b.classList.toggle('on', b.getAttribute('data-wall') === w);
+    });
+  }
+
+  document.querySelectorAll('#themeOpts .opt').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var v = b.getAttribute('data-theme');
+      try { localStorage.setItem(THEME_KEY, v); } catch (e) {}
+      if (window.applyAppearance) window.applyAppearance();
+      mark();
+      if (window.showToast) window.showToast('Theme updated');
+    });
+  });
+
+  document.querySelectorAll('#wallOpts .wall-opt').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var v = b.getAttribute('data-wall');
+      try { localStorage.setItem(WALL_KEY, v); } catch (e) {}
+      if (window.applyAppearance) window.applyAppearance();
+      mark();
+      if (window.showToast) window.showToast('Wallpaper updated');
+    });
+  });
+
+  document.getElementById('resetAppearance').addEventListener('click', function () {
+    try {
+      localStorage.setItem(THEME_KEY, 'dark');
+      localStorage.setItem(WALL_KEY, 'comet');
+    } catch (e) {}
+    if (window.applyAppearance) window.applyAppearance();
+    mark();
+    if (window.showToast) window.showToast('Defaults restored');
+  });
+
+  mark();
+})();
+</script>
+{% endblock %}
