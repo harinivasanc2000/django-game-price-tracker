@@ -43,7 +43,6 @@ def platform_query(title: str, platform: str = "") -> str:
 
 
 def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
-    """Always-clickable official search URLs (even when scrape is blocked)."""
     q = platform_query(title, platform)
     qe = quote_plus(q)
     return [
@@ -120,6 +119,13 @@ def _empty(url: str) -> dict[str, Any]:
     return {"results": [], "blocked": True, "search_url": url}
 
 
+def _safe(fn, *args, **kwargs) -> dict[str, Any]:
+    try:
+        return fn(*args, **kwargs)
+    except Exception:
+        return {"results": [], "blocked": True, "search_url": kwargs.get("url") or ""}
+
+
 def _try_cex_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
     q = platform_query(title, platform)
     url = f"https://uk.webuy.com/search?stext={quote_plus(q)}"
@@ -142,7 +148,6 @@ def _try_cex_uncached(title: str, platform: str = "", limit: int = 6) -> dict[st
                 price = Decimal(m.group(2))
             except InvalidOperation:
                 continue
-            # Prefer product path if boxId present nearby
             href = url
             id_m = re.search(r'"boxId"\s*:\s*"?([0-9]+)"?', text[m.start() : m.start() + 800])
             if id_m:
@@ -258,8 +263,6 @@ def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 6) -> dic
         if not a:
             continue
         href = urljoin(url, a["href"])
-        if "/en/" not in href and "game.co.uk" not in href:
-            continue
         name_el = card.find(["h2", "h3", "span"], class_=re.compile(r"name|title", re.I))
         name = (name_el or a).get_text(" ", strip=True) if (name_el or a) else ""
         if len(name) < 3:
@@ -297,12 +300,10 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 6) -> dict[
     if not html:
         return _empty(url)
     soup = soup_from(html)
-    # Argos often embeds product JSON
     for script in soup.find_all("script"):
         text = script.string or ""
-        if """productId""" not in text and "attributes" not in text:
-            if '"name"' not in text or '"price"' not in text:
-                continue
+        if '"name"' not in text or '"price"' not in text:
+            continue
         for m in re.finditer(
             r'"name"\s*:\s*"([^"]{5,120})".{0,300}?"price"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
             text,
@@ -373,7 +374,6 @@ def _try_currys_uncached(title: str, platform: str = "", limit: int = 6) -> dict
         if len(out["results"]) >= limit:
             break
     if not out["results"]:
-        # JSON-LD Product
         for script in soup.find_all("script", type="application/ld+json"):
             text = script.string or ""
             for m in re.finditer(
@@ -385,9 +385,7 @@ def _try_currys_uncached(title: str, platform: str = "", limit: int = 6) -> dict
                     price = Decimal(m.group(2))
                 except InvalidOperation:
                     continue
-                row = product_row(
-                    name=m.group(1), price=price, store_name="Currys", url=url
-                )
+                row = product_row(name=m.group(1), price=price, store_name="Currys", url=url)
                 if row:
                     out["results"].append(row)
                 if len(out["results"]) >= limit:
@@ -409,16 +407,24 @@ def try_currys(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]
 
 
 def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 5) -> dict[str, Any]:
-    """Parallel public searches for UK physical / local retailers."""
     title = (title or "").strip()
     links = uk_search_links(title, platform)
 
+    def _wrap(fn):
+        def run():
+            try:
+                return fn(title, platform, limit)
+            except Exception:
+                return {"results": [], "blocked": True, "search_url": ""}
+
+        return run
+
     with ThreadPoolExecutor(max_workers=6) as pool:
-        f_cex = pool.submit(try_cex_search, title, platform, limit)
-        f_ebay = pool.submit(try_ebay_uk, title, platform, limit)
-        f_game = pool.submit(try_game_uk, title, platform, limit)
-        f_argos = pool.submit(try_argos, title, platform, limit)
-        f_currys = pool.submit(try_currys, title, platform, limit)
+        f_cex = pool.submit(_wrap(try_cex_search))
+        f_ebay = pool.submit(_wrap(try_ebay_uk))
+        f_game = pool.submit(_wrap(try_game_uk))
+        f_argos = pool.submit(_wrap(try_argos))
+        f_currys = pool.submit(_wrap(try_currys))
         cex = f_cex.result()
         ebay = f_ebay.result()
         game = f_game.result()
@@ -432,5 +438,4 @@ def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 5) -> 
         "argos": argos,
         "currys": currys,
         "uk_links": links,
-        # Facebook / Gumtree: links only (in uk_links)
     }
