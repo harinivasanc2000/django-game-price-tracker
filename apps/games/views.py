@@ -40,7 +40,6 @@ PLATFORMS = [
     ("switch", "Switch"),
 ]
 
-# History: keep per-session list bounded and prune occasionally.
 HISTORY_MAX_PER_SESSION = 100
 HISTORY_PRUNE_INTERVAL = timezone.timedelta(hours=24)
 HISTORY_PRUNE_MARK = timezone.timedelta(days=60)
@@ -62,12 +61,23 @@ def _log_history(request, action, query="", steam_app_id=None, title="", detail_
         title=(title or "")[:255],
         detail_url=(detail_url or "")[:255],
     )
-    # Keep this session's history bounded and the table from growing forever.
-    old_ids = BrowseHistory.objects.filter(session_key=skey).values_list("id", flat=True)[HISTORY_MAX_PER_SESSION:]
+    old_ids = list(
+        BrowseHistory.objects.filter(session_key=skey).values_list("id", flat=True)[
+            HISTORY_MAX_PER_SESSION:
+        ]
+    )
     if old_ids:
-        BrowseHistory.objects.filter(id__in=list(old_ids)).delete()
+        BrowseHistory.objects.filter(id__in=old_ids).delete()
     recently_pruned = request.session.get("history_pruned_at")
-    if not recently_pruned or (timezone.now() - timezone.datetime.fromisoformat(recently_pruned)).total_seconds() > HISTORY_PRUNE_INTERVAL.total_seconds():
+    try:
+        need_prune = (
+            not recently_pruned
+            or (timezone.now() - timezone.datetime.fromisoformat(recently_pruned)).total_seconds()
+            > HISTORY_PRUNE_INTERVAL.total_seconds()
+        )
+    except Exception:
+        need_prune = True
+    if need_prune:
         BrowseHistory.objects.filter(created_at__lt=timezone.now() - HISTORY_PRUNE_MARK).delete()
         request.session["history_pruned_at"] = timezone.now().isoformat()
 
@@ -85,7 +95,6 @@ def _unique_slug(name: str, app_id: int) -> str:
 
 
 def _snapshot_since(game: Game, hours: int = 24) -> list:
-    """Most recent snapshots (oldest first) within the window, for the change badge."""
     since = timezone.now() - timezone.timedelta(hours=hours)
     return list(
         PriceRecord.objects.filter(game=game, recorded_at__gte=since)
@@ -94,8 +103,13 @@ def _snapshot_since(game: Game, hours: int = 24) -> list:
     )
 
 
+def _gbp_point(amount, currency="GBP") -> float | None:
+    v = to_gbp(amount, currency)
+    return float(v) if v is not None else None
+
+
 def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows, cex_rows, ebay_rows):
-    current = float(detail["price"]) if detail.get("price") is not None else None
+    """All chart values normalised to GBP for fair averages."""
     points: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
     if already:
@@ -106,22 +120,36 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
         )
         for h in history:
             label = h.recorded_at.strftime("%d %b %H:%M")
-            points[h.store.name].append((label, float(h.price)))
+            gbp = _gbp_point(h.price, h.currency)
+            if gbp is not None:
+                points[h.store.name].append((label, gbp))
 
     now = "Now"
-    if current is not None and detail.get("price_status") == "paid":
-        points["Steam"].append((now, current))
+    if detail.get("price") is not None and detail.get("price_status") == "paid":
+        g = _gbp_point(detail["price"], detail.get("currency") or "GBP")
+        if g is not None:
+            points["Steam"].append((now, g))
     for deal in store_deals[:8]:
-        points[deal["store_name"]].append((now, float(deal["price"])))
+        g = _gbp_point(deal["price"], deal.get("currency") or "USD")
+        if g is not None:
+            points[deal["store_name"]].append((now, g))
     for row in psn_rows[:1]:
         if float(row.get("price") or 0) > 0:
-            points["PlayStation Store (UK)"].append((now, float(row["price"])))
+            g = _gbp_point(row["price"], "GBP")
+            if g is not None:
+                points["PlayStation Store (UK)"].append((now, g))
     for row in amazon_rows[:1]:
-        points["Amazon UK"].append((now, float(row["price"])))
+        g = _gbp_point(row["price"], "GBP")
+        if g is not None:
+            points["Amazon UK"].append((now, g))
     for row in cex_rows[:1]:
-        points["CeX"].append((now, float(row["price"])))
+        g = _gbp_point(row["price"], "GBP")
+        if g is not None:
+            points["CeX"].append((now, g))
     for row in ebay_rows[:1]:
-        points["eBay UK"].append((now, float(row["price"])))
+        g = _gbp_point(row["price"], "GBP")
+        if g is not None:
+            points["eBay UK"].append((now, g))
 
     labels: list[str] = []
     seen = set()
@@ -151,6 +179,7 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
         "average": avg,
         "launch": launch_series,
         "sellers": sellers,
+        "unit": "GBP",
     }
 
 
@@ -184,7 +213,6 @@ def steam_search(request):
     results, error = [], None
     if q:
         _log_history(request, BrowseHistory.Action.SEARCH, query=q)
-        # Platform hint in Steam query improves ranking slightly
         search_q = platform_query(q, platform) if platform else q
         results = search_store(search_q, country=country, limit=40)
         if not results:
@@ -231,7 +259,6 @@ def steam_detail(request, app_id: int):
     catalog = Game.objects.filter(steam_app_id=app_id).first()
     store_deals = deals_for_title(detail["name"], limit=15)
 
-    # Platform-aware queries for console / physical
     psn_q = platform_query(detail["name"], platform or "ps5")
     psn_rows = search_psn(psn_q if platform.startswith("ps") else detail["name"], limit=8)
     amazon = search_amazon_uk(detail["name"], extra=platform.upper() if platform else "", limit=6)
@@ -321,14 +348,19 @@ def steam_detail(request, app_id: int):
             {
                 "store": store_deals[0]["store_name"],
                 "price": store_deals[0]["price"],
-                "price_gbp": to_gbp_or_zero(store_deals[0]["price"], store_deals[0].get("currency") or "USD"),
+                "price_gbp": to_gbp_or_zero(
+                    store_deals[0]["price"], store_deals[0].get("currency") or "USD"
+                ),
                 "currency": store_deals[0].get("currency") or "USD",
                 "kind": "third-party",
                 "url": store_deals[0].get("url"),
             }
         )
-    # Sort by normalised GBP so USD key-shop prices compare fairly with UK retail.
     live_offers.sort(key=lambda x: x["price_gbp"])
+
+    watched = None
+    if request.user.is_authenticated and already:
+        watched = Watch.objects.filter(user=request.user, game=already).first()
 
     return render(
         request,
@@ -361,8 +393,8 @@ def steam_detail(request, app_id: int):
             "best_third_party": store_deals[0] if store_deals else None,
             "chart_json": json.dumps(chart),
             "has_chart": bool(chart["labels"]),
-            "is_watched": Watch.objects.filter(user=request.user, game_id=already.id).exists()
-            if request.user.is_authenticated and already else False,
+            "watched": watched,
+            "is_watched": watched is not None,
         },
     )
 
@@ -425,9 +457,6 @@ def track_steam(request, app_id: int):
         notes=notes,
     )
 
-    # Refresh the rest of the sellers in the background; never block the
-    # request on network calls. Eager Celery means it runs inline when
-    # no broker is configured, so this also works out-of-the-box.
     try:
         from .tasks import refresh_single_game
 
@@ -467,13 +496,19 @@ def profile(request):
         Watch.objects.filter(user=request.user).select_related("game").order_by("-created_at")
     )
     tracked = list(Game.objects.filter(is_active=True).order_by("title")[:50])
-    unsent_alerts = PriceAlert.objects.filter(watch__user=request.user, is_sent=False).count()
+    alerts = list(
+        PriceAlert.objects.filter(watch__user=request.user)
+        .select_related("watch__game")
+        .order_by("-created_at")[:20]
+    )
+    unsent_alerts = sum(1 for a in alerts if not a.is_sent)
     return render(
         request,
         "games/profile.html",
         {
             "tracked": tracked,
             "watches": watches,
+            "alerts": alerts,
             "unsent_alerts": unsent_alerts,
         },
     )
@@ -486,14 +521,13 @@ def game_compare(request, slug):
         .select_related("store")
         .order_by("price", "-recorded_at")[:50]
     )
-    # Normalise to GBP for a fair "lowest" comparison across currencies.
+
     def _gbp(p):
         return to_gbp_or_zero(p.price, p.currency)
 
     prices.sort(key=_gbp)
     lowest = prices[0] if prices else None
 
-    # Latest snapshot per store (most recent row), for the change badge.
     recent = _snapshot_since(game, hours=24)
     change = None
     if len(recent) >= 2:
@@ -510,7 +544,6 @@ def game_compare(request, slug):
     history = list(
         PriceRecord.objects.filter(game=game).select_related("store").order_by("recorded_at")[:150]
     )
-    # Only keep one point per store per day to keep the chart light.
     chart_labels, chart_values, chart_stores, seen_days = [], [], [], set()
     for h in history:
         day = h.recorded_at.strftime("%Y-%m-%d")
@@ -518,14 +551,18 @@ def game_compare(request, slug):
         if key in seen_days:
             continue
         seen_days.add(key)
+        gbp = _gbp_point(h.price, h.currency)
+        if gbp is None:
+            continue
         chart_labels.append(h.recorded_at.strftime("%d %b %y"))
-        chart_values.append(float(h.price))
+        chart_values.append(gbp)
         chart_stores.append(h.store.name)
 
     siblings = Game.objects.filter(title=game.title, is_active=True).exclude(pk=game.pk)[:6]
     watched = (
         Watch.objects.filter(user=request.user, game=game).first()
-        if request.user.is_authenticated else None
+        if request.user.is_authenticated
+        else None
     )
 
     return render(
@@ -536,7 +573,7 @@ def game_compare(request, slug):
             "prices": prices,
             "lowest": lowest,
             "change": change,
-            "retail_baseline": lowest.original_price if lowest else None,
+            "retail_baseline": float(game.launch_price) if game.launch_price else None,
             "siblings": siblings,
             "history_count": len(history),
             "chart_labels": json.dumps(chart_labels),
@@ -545,6 +582,12 @@ def game_compare(request, slug):
             "watched": watched,
         },
     )
+
+
+def _redirect_after_watch(game: Game):
+    if game.steam_app_id:
+        return redirect("games:steam_detail", app_id=game.steam_app_id)
+    return redirect("games:compare", slug=game.slug)
 
 
 @login_required
@@ -560,18 +603,17 @@ def watch_game(request, slug):
                 raise ValueError
         except Exception:
             messages.error(request, "Target price must be a positive number.")
-            return redirect("games:compare", slug=slug)
+            return _redirect_after_watch(game)
     Watch.objects.update_or_create(
         user=request.user,
         game=game,
         defaults={"target_price": target},
     )
-    messages.success(request, (
-        f"Watching {game.title}."
-        if target is None else
-        f"Watching {game.title} — we'll alert you under £{target}."
-    ))
-    return redirect("games:compare", slug=slug)
+    if target is None:
+        messages.success(request, f"Watching {game.title}.")
+    else:
+        messages.success(request, f"Watching {game.title} — alert under £{target}.")
+    return _redirect_after_watch(game)
 
 
 @login_required
@@ -580,13 +622,14 @@ def unwatch_game(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
     Watch.objects.filter(user=request.user, game=game).delete()
     messages.info(request, f"Stopped watching {game.title}.")
-    return redirect("games:compare", slug=slug)
+    return _redirect_after_watch(game)
 
 
 @login_required
 @require_POST
 def clear_alerts(request):
-    """Mark all unsent alerts for this user as read/dismissed."""
-    PriceAlert.objects.filter(watch__user=request.user, is_sent=False).update(is_sent=True, sent_at=timezone.now())
+    PriceAlert.objects.filter(watch__user=request.user, is_sent=False).update(
+        is_sent=True, sent_at=timezone.now()
+    )
     messages.info(request, "Price alerts marked as read.")
     return redirect("games:profile")
