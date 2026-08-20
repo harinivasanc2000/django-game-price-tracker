@@ -6,6 +6,8 @@ from .models import (
     BrowseHistory,
     SiteSettings,
     AdminChangeLog,
+    Watch,
+    PriceAlert,
 )
 
 
@@ -59,6 +61,22 @@ class PriceRecordAdmin(admin.ModelAdmin):
     search_fields = ("game__title", "store__name")
     date_hierarchy = "recorded_at"
     raw_id_fields = ("game", "store")
+
+
+@admin.register(Watch)
+class WatchAdmin(admin.ModelAdmin):
+    list_display = ("user", "game", "target_price", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("user__username", "game__title")
+    raw_id_fields = ("user", "game")
+
+
+@admin.register(PriceAlert)
+class PriceAlertAdmin(admin.ModelAdmin):
+    list_display = ("watch", "price", "currency", "target_price", "store", "is_sent", "created_at")
+    list_filter = ("is_sent", "currency")
+    search_fields = ("watch__user__username", "watch__game__title", "store")
+    date_hierarchy = "created_at"
 
 
 @admin.register(BrowseHistory)
