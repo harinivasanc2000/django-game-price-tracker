@@ -1,25 +1,20 @@
 """
-Amazon UK public search — best-effort HTML parse.
-
-Amazon often returns WAF/captcha (HTTP 202) to datacenter IPs.
-When HTML is available we extract asin, title, price from public search markup.
-Always returns a search_url fallback.
+Amazon UK public *search* page — product title, price, star rating, ASIN link.
+No seller personal data. Often WAF-blocked from datacenters → search_url fallback.
 """
 
 from __future__ import annotations
 
-import re
-from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote_plus
 
-import requests
-
 from apps.games.cache import cached
-
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+from apps.games.clients.scrape_utils import (
+    fetch_html,
+    parse_money,
+    parse_rating,
+    product_row,
+    soup_from,
 )
 
 
@@ -32,75 +27,48 @@ def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> d
     url = search_url(title, extra)
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
 
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "text/html,application/xhtml+xml",
-        "Accept-Language": "en-GB,en;q=0.9",
-    }
-    try:
-        r = requests.get(url, headers=headers, timeout=12)
-    except requests.RequestException:
+    html, _ = fetch_html(url)
+    if not html or "a-price" not in html:
         out["blocked"] = True
         return out
 
-    if r.status_code != 200 or not r.text or "a-price-whole" not in r.text:
-        out["blocked"] = True
-        return out
+    soup = soup_from(html)
+    cards = soup.select('div[data-component-type="s-search-result"]')
+    for card in cards:
+        asin = card.get("data-asin") or ""
+        title_el = card.select_one("h2 a span, h2 span")
+        name = title_el.get_text(" ", strip=True) if title_el else ""
+        whole = card.select_one(".a-price-whole")
+        frac = card.select_one(".a-price-fraction")
+        if whole:
+            w = whole.get_text().replace(",", "").replace(".", "").strip()
+            f = frac.get_text().strip() if frac else "00"
+            price = parse_money(f"{w}.{f}")
+        else:
+            price_el = card.select_one(".a-price .a-offscreen")
+            price = parse_money(price_el.get_text() if price_el else "")
 
-    html = r.text
-    # Split roughly by result cards
-    chunks = re.split(r'data-component-type="s-search-result"', html)[1:]
-    results = []
-    for chunk in chunks[: limit + 5]:
-        asin_m = re.search(r'data-asin="([A-Z0-9]{10})"', chunk)
-        if not asin_m:
-            asin_m = re.search(r'data-asin="([A-Z0-9]{10})"', "data-asin=" + chunk[:200])
-        asin = asin_m.group(1) if asin_m else ""
+        rating = None
+        rating_el = card.select_one("span.a-icon-alt, i.a-icon-star-small span")
+        if rating_el:
+            rating = parse_rating(rating_el.get_text())
 
-        title_m = re.search(
-            r'class="a-size-medium a-color-base a-text-normal"[^>]*>([^<]+)',
-            chunk,
+        product_url = f"https://www.amazon.co.uk/dp/{asin}" if asin else url
+        row = product_row(
+            name=name,
+            price=price,
+            store_name="Amazon UK",
+            url=product_url,
+            rating=rating,
         )
-        if not title_m:
-            title_m = re.search(
-                r'class="a-size-base-plus a-color-base a-text-normal"[^>]*>([^<]+)',
-                chunk,
-            )
-        if not title_m:
-            title_m = re.search(r'<h2[^>]*>\s*<a[^>]*>\s*<span[^>]*>([^<]+)', chunk)
-        name = (title_m.group(1).strip() if title_m else "")[:200]
-        if not name:
-            continue
-
-        whole_m = re.search(r'class="a-price-whole">([^<]+)', chunk)
-        frac_m = re.search(r'class="a-price-fraction">([^<]+)', chunk)
-        if not whole_m:
-            continue
-        whole = whole_m.group(1).replace(",", "").replace(".", "").strip()
-        frac = frac_m.group(1).strip() if frac_m else "00"
-        try:
-            price = Decimal(f"{whole}.{frac}")
-        except (InvalidOperation, ValueError):
-            continue
-
-        product_url = (
-            f"https://www.amazon.co.uk/dp/{asin}" if asin else url
-        )
-        results.append(
-            {
-                "name": name,
-                "price": price,
-                "currency": "GBP",
-                "asin": asin,
-                "url": product_url,
-                "store_name": "Amazon UK",
-            }
-        )
-        if len(results) >= limit:
+        if row:
+            if asin:
+                row["asin"] = asin
+            out["results"].append(row)
+        if len(out["results"]) >= limit:
             break
 
-    out["results"] = results
-    out["blocked"] = len(results) == 0
+    out["blocked"] = len(out["results"]) == 0
     return out
 
 
@@ -109,7 +77,7 @@ def search_amazon_uk(title: str, extra: str = "", limit: int = 8) -> dict[str, A
     if not title:
         return {"results": [], "blocked": True, "search_url": search_url(title, extra)}
     return cached(
-        f"amazon:search:{title.lower()}:{extra.strip().lower()}",
+        f"amazon:bs4:{title.lower()}:{extra.strip().lower()}",
         lambda: _search_amazon_uk_uncached(title, extra=extra, limit=limit),
-        timeout=1800,  # 30 min — Amazon blocks hard if hammered
+        timeout=1800,
     )
