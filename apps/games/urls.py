@@ -5,6 +5,7 @@ from . import search_view
 from . import views_export
 from . import settings_view
 from . import health_view
+from . import views_steam_detail
 
 app_name = "games"
 
@@ -16,8 +17,8 @@ urlpatterns = [
     path("health/", health_view.health, name="health"),
     path("export/tracked.json", views_export.export_tracked_json, name="export_tracked"),
     path("api/suggest/", views.steam_suggest, name="steam_suggest"),
-    path("api/platform/<int:app_id>/", views.platform_deals_api, name="platform_deals"),
-    path("steam/<int:app_id>/", views.steam_detail, name="steam_detail"),
+    path("api/platform/<int:app_id>/", views_steam_detail.platform_deals_api, name="platform_deals"),
+    path("steam/<int:app_id>/", views_steam_detail.steam_detail, name="steam_detail"),
     path("track/steam/<int:app_id>/", views.track_steam, name="track_steam"),
     path("untrack/<slug:slug>/", views.untrack_game, name="untrack"),
     path("history/", views.history_page, name="history"),
