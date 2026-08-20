@@ -1,13 +1,16 @@
 from django.urls import path
 from . import views
 from . import home_view
+from . import search_view
+from . import views_export
 
 app_name = "games"
 
 urlpatterns = [
     path("", home_view.home, name="home"),
-    path("search/", views.steam_search, name="steam_search"),
+    path("search/", search_view.steam_search, name="steam_search"),
     path("deals/", views.best_deals, name="best_deals"),
+    path("export/tracked.json", views_export.export_tracked_json, name="export_tracked"),
     path("api/suggest/", views.steam_suggest, name="steam_suggest"),
     path("api/platform/<int:app_id>/", views.platform_deals_api, name="platform_deals"),
     path("steam/<int:app_id>/", views.steam_detail, name="steam_detail"),
