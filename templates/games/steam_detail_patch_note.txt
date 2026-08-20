@@ -1,0 +1,5 @@
+Add near top of steam_detail.html after extends:
+{% load deal_tags %}
+
+Add after the hero block (before chart):
+{% deal_prediction_panel %}
