@@ -29,6 +29,15 @@ DEFAULT_HEADERS = {
     "Accept-Language": "en-GB,en;q=0.9",
 }
 
+# Prefer lxml if installed; otherwise stdlib html.parser (no extra install).
+_PARSER = "html.parser"
+try:
+    import lxml  # noqa: F401
+
+    _PARSER = "lxml"
+except ImportError:
+    pass
+
 
 def fetch_html(url: str, timeout: int = 12) -> tuple[str | None, int]:
     try:
@@ -37,7 +46,6 @@ def fetch_html(url: str, timeout: int = 12) -> tuple[str | None, int]:
         return None, 0
     if r.status_code != 200 or not r.text or len(r.text) < 400:
         return None, r.status_code
-    # common bot walls
     low = r.text.lower()
     if "captcha" in low and "robot" in low:
         return None, r.status_code
@@ -45,7 +53,7 @@ def fetch_html(url: str, timeout: int = 12) -> tuple[str | None, int]:
 
 
 def soup_from(html: str) -> BeautifulSoup:
-    return BeautifulSoup(html, "lxml")
+    return BeautifulSoup(html, _PARSER)
 
 
 def parse_money(text: str | None) -> Decimal | None:
