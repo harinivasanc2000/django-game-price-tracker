@@ -1,6 +1,43 @@
 {% extends "base.html" %}
 {% block title %}{% if site_settings %}{{ site_settings.site_title }}{% else %}Home{% endif %}{% endblock %}
 
+{% block extra_css %}
+<style>
+  .disclaimer-backdrop {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(4, 2, 2, 0.55);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1.25rem;
+  }
+  .disclaimer-box {
+    width: min(420px, 100%);
+    background: #140a0a;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.35rem 1.4rem 1.2rem;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  }
+  .disclaimer-box h2 { font-size: 1.15rem; margin-bottom: 0.65rem; }
+  .disclaimer-box p { font-size: 0.88rem; color: var(--muted); margin-bottom: 0.55rem; line-height: 1.45; }
+  .disclaimer-box ul { margin: 0.35rem 0 0.75rem 1.1rem; color: var(--muted); font-size: 0.85rem; }
+  .disclaimer-box li { margin-bottom: 0.3rem; }
+  .disclaimer-box .ok {
+    width: 100%; margin-top: 0.5rem; padding: 0.65rem 1rem; border: none; border-radius: 10px;
+    background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; font-family: inherit; font-size: 0.95rem;
+  }
+  .disclaimer-box .ok:hover { filter: brightness(1.08); }
+  .tips {
+    margin-top: 2.5rem; padding: 1rem 1.1rem; border-radius: 12px;
+    border: 1px solid var(--border); background: rgba(18,8,8,0.7);
+  }
+  .tips h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.65rem; }
+  .tips details { margin-bottom: 0.45rem; }
+  .tips summary { cursor: pointer; font-size: 0.92rem; color: var(--text); padding: 0.25rem 0; }
+  .tips details p { font-size: 0.85rem; color: var(--muted); margin: 0.35rem 0 0.5rem 0.1rem; line-height: 1.45; }
+</style>
+{% endblock %}
+
 {% block content %}
 <section style="margin: 2rem 0 2.5rem;">
   {% include "games/_search_box.html" with placeholder="Search Steam…" autofocus=True %}
@@ -11,7 +48,7 @@
   <h2 style="font-size: 0.8rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.75rem;">Tracked</h2>
   <div style="display: grid; gap: 0.4rem;">
     {% for game in tracked_home %}
-      <a href="{% url 'games:compare' game.slug %}"
+      <a href="{% if game.steam_app_id %}{% url 'games:steam_detail' game.steam_app_id %}{% else %}{% url 'games:compare' game.slug %}{% endif %}"
          style="display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.7rem; border-radius: 10px; background: var(--card); border: 1px solid var(--border); color: var(--text); text-decoration: none;">
         {% if game.cover_url %}
           <img src="{{ game.cover_url }}" alt="" style="width: 88px; height: 33px; object-fit: cover; border-radius: 5px;" loading="lazy">
@@ -43,4 +80,57 @@
     </p>
   {% endif %}
 </section>
+
+<section class="tips">
+  <h2>Finding deals & staying safe</h2>
+  <details open>
+    <summary>How to spot a good deal</summary>
+    <p>Compare the live price to the <strong>launch / list price</strong> on this site. Prefer official stores (Steam, PSN, Xbox, Epic, Humble, GOG). A deep discount on a keyshop is not automatically better if the key is region-locked or from a risky seller.</p>
+  </details>
+  <details>
+    <summary>Protect yourself with third-party keys</summary>
+    <p>Grey-market keyshops can be cheaper but may void support, use stolen payment methods, or sell unauthorised keys. Check seller ratings, refund policy, and whether activation is for <strong>your region</strong>. When unsure, pay a bit more on Steam / PSN / Epic.</p>
+  </details>
+  <details>
+    <summary>Physical & used (CeX, eBay, Marketplace)</summary>
+    <p>Used discs are often cheaper. Check condition grades, seller feedback, and return windows. Facebook Marketplace is link-only here — meet safely and prefer in-person payment methods you trust.</p>
+  </details>
+  <details>
+    <summary>What this tool is not</summary>
+    <p>We do not sell games, process payments, or guarantee any listed price. Data comes from public sources and can be wrong, delayed, or blocked. Always confirm on the store before you buy.</p>
+  </details>
+</section>
+
+<div class="disclaimer-backdrop" id="firstVisitModal" hidden>
+  <div class="disclaimer-box" role="dialog" aria-labelledby="discTitle" aria-modal="true">
+    <h2 id="discTitle">Welcome</h2>
+    <p><strong style="color: var(--text);">What this is:</strong> a personal helper to compare public game prices (Steam, PSN, UK shops, aggregators) and track drops.</p>
+    <p><strong style="color: var(--text);">What this is not:</strong> a store, payment processor, or guarantee of any deal. We are not affiliated with Steam, PlayStation, Amazon, CeX, or keyshops.</p>
+    <ul>
+      <li>Prices may be wrong, outdated, or region-specific.</li>
+      <li>Third-party / keyshop links carry risk — buy at your own judgement.</li>
+      <li>The author is <strong style="color: var(--text);">not responsible</strong> for purchases, bans, invalid keys, or losses.</li>
+    </ul>
+    <p style="font-size: 0.8rem;">By continuing you accept that you use this tool at your own risk.</p>
+    <button type="button" class="ok" id="acceptDisclaimer">I understand — continue</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const KEY = 'gpt_disclaimer_v1';
+  const modal = document.getElementById('firstVisitModal');
+  if (!modal) return;
+  try {
+    if (localStorage.getItem(KEY) === '1') return;
+  } catch (e) {}
+  modal.hidden = false;
+  document.getElementById('acceptDisclaimer')?.addEventListener('click', () => {
+    try { localStorage.setItem(KEY, '1'); } catch (e) {}
+    modal.hidden = true;
+  });
+})();
+</script>
 {% endblock %}
