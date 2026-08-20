@@ -1,0 +1,22 @@
+{% if similar_games %}
+<div class="panel" style="margin-bottom: 0.85rem;">
+  <h2>Related on Steam</h2>
+  <div style="padding: 0.35rem 0.65rem 0.75rem;">
+    {% for g in similar_games %}
+      <a href="{% url 'games:steam_detail' g.app_id %}" style="display:flex;gap:0.55rem;align-items:center;padding:0.4rem 0.25rem;text-decoration:none!important;color:var(--text);border-bottom:1px solid var(--border);">
+        {% if g.tiny_image %}
+          <img src="{{ g.tiny_image }}" alt="" width="48" height="22" style="border-radius:4px;object-fit:cover;background:var(--border);" loading="lazy">
+        {% endif %}
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:0.82rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ g.name }}</div>
+          <div style="font-size:0.72rem;color:var(--muted);">
+            {% if g.price_status == 'paid' and g.price %}{{ g.price }} {{ g.currency }}{% if g.discount %} · -{{ g.discount }}%{% endif %}
+            {% elif g.price_status == 'free' %}Free
+            {% else %}See price{% endif %}
+          </div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
