@@ -1,0 +1,22 @@
+{% if digital_links or digital_rows %}
+<div class="panel" data-plat-group="pc">
+  <h2>More digital stores</h2>
+  <p style="padding:0.35rem 1rem;font-size:0.75rem;color:var(--muted);">
+    Public search only — title, price, link. Third-party keys carry risk.
+  </p>
+  {% for row in digital_rows %}
+    <div class="deal-row">
+      <div>
+        <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+        <span class="kind third-party" style="margin-left:0.25rem;">{{ row.store_name }}</span>
+      </div>
+      <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
+    </div>
+  {% endfor %}
+  <div style="padding:0.55rem 1rem 1rem;">
+    {% for link in digital_links %}
+      <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.name }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
