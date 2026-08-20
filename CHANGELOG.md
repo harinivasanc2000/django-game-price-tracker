@@ -2,56 +2,45 @@
 
 ---
 
-## 2026-08-19 22:00 BST — Platforms, UK stores, news & social
+## 2026-08-20 15:15 BST — Finish watch alerts + GBP charts (on top of local work)
 
-### Added
-- **Platform selector** (All / PC / PS4 / PS5 / Xbox / Switch) on search + detail chips
-  - Adjusts PSN / Amazon / CeX / eBay query hints
-- `apps/games/clients/uk_stores.py`
-  - CeX + eBay UK best-effort public parse
-  - Always-on search links: **CeX, GAME, Argos, Smyths, eBay UK, Facebook Marketplace, X, Reddit**
-- `apps/games/clients/news.py`
-  - **Steam public news API** per app
-  - Social link-outs: X deals search, Reddit GameDeals/PS5, Facebook posts search
-- Detail sections: UK physical/local, news, social
+### Already in your tree (local commits)
+- `apps/games/fx.py` — USD/EUR → GBP via open.er-api.com (+ fallback rates)
+- `apps/games/cache.py` — request dedupe / short TTL cache
+- `Watch` + `PriceAlert` models; alert checks in Celery refresh
+- Console email backend + `SITE_URL`
+- Live offers sorted by **GBP**
 
-### Policy / limits
-- **Facebook Marketplace**: link-only (login wall; we do not scrape accounts or marketplace data)
-- **X/Twitter**: official search links for deal chatter (not scraped prices)
-- CeX/eBay/GAME often **403 from servers** — works better from home IP or via browser links
+### Completed this pass
+- Migration `0004_watch_pricealert`
+- Admin for Watch + PriceAlert
+- **Chart series all in GBP** (fair average)
+- Offer chips show `≈ £x.xx` when currency is not GBP
+- Detail page: **Watch price** form (target under £…) after Track
+- Profile: watches, alerts, mark-read
+- Watch redirect stays on Steam detail when possible
+
+### How to use alerts
+```bash
+git pull
+python manage.py migrate
+# set email on your user in admin
+python manage.py runserver
+# Track a game → Watch price with target
+python manage.py refresh_prices   # checks targets; emails print to console
+```
 
 ### Still TODO
-- [ ] GBP FX for mixed-currency average
-- [ ] Price-drop alerts
-- [ ] Per-user watchlists
-- [ ] CeX when API allows authenticated partners
+- [ ] SMS / Discord webhook alerts
+- [ ] Per-user tracked list (not global is_active)
+- [ ] Stronger CeX when API allows
 
 ---
 
-## 2026-08-19 21:50 BST — PSN live + Amazon best-effort + offer chips
+## 2026-08-19 — Platforms, PSN, UK stores, news, Celery, graph dropdown
 
-- PSN Chihiro tumbler live GBP prices
-- Amazon HTML when not WAF-blocked
-- Live offer chip strip
-
----
-
-## 2026-08-19 21:10 BST — Graph dropdown
-
-- Average / All / per-seller chart filter
-
----
-
-## 2026-08-19 20:45 BST — Celery
-
-- `refresh_prices`, optional Redis worker
-
----
-
-## Earlier
-
-- Seed slug fix, clean home, typeahead, launch prices, wallpaper, track-on-page
+See earlier entries in git history for full detail.
 
 ```bash
-git pull && python manage.py runserver
+git pull && python manage.py migrate && python manage.py runserver
 ```
