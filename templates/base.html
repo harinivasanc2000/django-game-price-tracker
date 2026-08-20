@@ -5,16 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{% if site_settings %}{{ site_settings.site_title }}{% else %}Game Price Tracker{% endif %}{% endblock %}</title>
   <style>
-    :root {
+    :root, [data-theme="dark"] {
       --bg: #080404; --card: #120808; --border: #3a1515;
       --text: #f0e6e6; --muted: #a89090; --accent: #8b1515; --accent2: #e03030; --good: #3ecf6a;
+      --drawer-bg: #100808;
+    }
+    [data-theme="soft"] {
+      --bg: #0c0c10; --card: #14141a; --border: #2a2a38;
+      --text: #e8e8f0; --muted: #9898b0; --accent: #5a4080; --accent2: #a878e0; --good: #3ecf6a;
+      --drawer-bg: #101018;
+    }
+    [data-theme="ember"] {
+      --bg: #0c0602; --card: #160c06; --border: #4a2810;
+      --text: #f5ebe0; --muted: #b09070; --accent: #a04010; --accent2: #e86820; --good: #6ecf6a;
+      --drawer-bg: #120804;
+    }
+    [data-theme="mist"] {
+      --bg: #1a1c20; --card: #242830; --border: #3a404c;
+      --text: #e4e6ea; --muted: #9aa0ac; --accent: #5a6070; --accent2: #8a90a0; --good: #5aba7a;
+      --drawer-bg: #1e2228;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
-    #bg-canvas { position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; pointer-events: none; }
+    #bg-layer, #bg-canvas { position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; pointer-events: none; }
+    #bg-layer { z-index: -3; }
     .bg-gradient {
-      position: fixed; inset: 0; z-index: -2; pointer-events: none;
       background: radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.3), transparent 55%), radial-gradient(ellipse 50% 35% at 85% 70%, rgba(50,8,8,0.35), transparent 50%), #080404;
+    }
+    .bg-scenery {
+      background:
+        linear-gradient(180deg, #12101a 0%, #1a1528 35%, #0e1a18 70%, #0a100e 100%);
+    }
+    .bg-scenery::after {
+      content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 38%;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 100%, #0a1812 0%, transparent 70%),
+        radial-gradient(ellipse 60% 50% at 70% 100%, #0c1418 0%, transparent 65%);
+      opacity: 0.9;
+    }
+    .bg-void { background: #050505; }
+    .bg-ocean {
+      background: linear-gradient(180deg, #061018 0%, #0a2030 45%, #061820 100%);
     }
     .game-wallpaper {
       position: fixed; inset: 0; z-index: -3; pointer-events: none;
@@ -24,8 +55,7 @@
     }
     .game-wallpaper::after {
       content: ""; position: absolute; inset: 0;
-      background: linear-gradient(180deg, rgba(8,4,4,0.55) 0%, rgba(8,4,4,0.82) 45%, rgba(8,4,4,0.95) 100%),
-                  radial-gradient(ellipse 80% 50% at 50% 0%, transparent 0%, rgba(8,4,4,0.5) 100%);
+      background: linear-gradient(180deg, rgba(8,4,4,0.55) 0%, rgba(8,4,4,0.82) 45%, rgba(8,4,4,0.95) 100%);
     }
     a { color: var(--accent2); text-decoration: none; }
     a:hover { text-decoration: underline; }
@@ -50,17 +80,23 @@
     .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
     .drawer {
       position: fixed; top: 0; right: 0; width: min(340px, 92vw); height: 100%;
-      background: #100808; border-left: 1px solid var(--border); z-index: 100;
+      background: var(--drawer-bg); border-left: 1px solid var(--border); z-index: 100;
       transform: translateX(100%); transition: transform 0.28s ease;
       display: flex; flex-direction: column; box-shadow: -12px 0 40px rgba(0,0,0,0.4);
     }
     .drawer.open { transform: translateX(0); }
     .drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); }
     .drawer-body { flex: 1; overflow-y: auto; padding: 0.5rem; }
-    .drawer-item { display: block; padding: 0.75rem 0.85rem; border-radius: 10px; color: var(--text); text-decoration: none !important; }
+    .drawer-item {
+      display: flex; align-items: center; gap: 0.65rem;
+      padding: 0.55rem 0.7rem; border-radius: 10px; color: var(--text); text-decoration: none !important;
+    }
     .drawer-item:hover { background: rgba(80,20,20,0.4); }
-    .drawer-item .t { font-weight: 600; font-size: 0.92rem; }
-    .drawer-item .s { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+    .drawer-item img {
+      width: 72px; height: 34px; object-fit: cover; border-radius: 5px; background: var(--border); flex-shrink: 0;
+    }
+    .drawer-item .t { font-weight: 600; font-size: 0.9rem; }
+    .drawer-item .s { font-size: 0.72rem; color: var(--muted); margin-top: 0.12rem; }
     #toast {
       position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%) translateY(120%);
       background: #1a3a2a; color: #86efac; border: 1px solid #2a6a3a;
@@ -71,13 +107,11 @@
   </style>
   {% block extra_css %}{% endblock %}
 </head>
-<body data-wallpaper="{% if site_settings %}{{ site_settings.wallpaper }}{% else %}comet{% endif %}">
+<body data-theme="dark" data-wallpaper="comet"{% if game_wallpaper %} data-game-art="{{ game_wallpaper }}"{% endif %}>
+  <div id="bg-layer" aria-hidden="true"></div>
+  <canvas id="bg-canvas" aria-hidden="true"></canvas>
   {% if game_wallpaper %}
-    <div class="game-wallpaper" style="background-image: url('{{ game_wallpaper }}');" aria-hidden="true"></div>
-  {% elif site_settings.wallpaper == "gradient" %}
-    <div class="bg-gradient" aria-hidden="true"></div>
-  {% else %}
-    <canvas id="bg-canvas" aria-hidden="true"></canvas>
+    <div class="game-wallpaper" id="gameArtLayer" style="background-image: url('{{ game_wallpaper }}'); display: none;" aria-hidden="true"></div>
   {% endif %}
 
   <div class="container{% if wide_layout %} wide{% endif %}">
@@ -88,9 +122,10 @@
         <a href="{% url 'games:steam_search' %}">Search</a>
         <a href="{% url 'games:best_deals' %}">Deals</a>
         <a href="{% url 'games:history' %}">History</a>
+        <a href="{% url 'games:appearance' %}">Settings</a>
         {% if user.is_authenticated %}
           <a href="{% url 'games:profile' %}">Profile</a>
-          {% if user.is_staff %}<a href="/admin/">Settings</a>{% endif %}
+          {% if user.is_staff %}<a href="/admin/">Admin</a>{% endif %}
         {% else %}
           <a href="{% url 'login' %}">Log in</a>
         {% endif %}
@@ -110,8 +145,17 @@
       {% if tracked_drawer %}
         {% for g in tracked_drawer %}
           <a class="drawer-item" href="{% if g.steam_app_id %}{% url 'games:steam_detail' g.steam_app_id %}{% else %}{% url 'games:compare' g.slug %}{% endif %}">
-            <div class="t">{{ g.title }}</div>
-            <div class="s">{{ g.get_platform_display }}{% if g.launch_price %} · launch {{ g.launch_price }} {{ g.launch_currency }}{% endif %}</div>
+            {% if g.cover_url %}
+              <img src="{{ g.cover_url }}" alt="" loading="lazy" width="72" height="34">
+            {% elif g.steam_app_id %}
+              <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/{{ g.steam_app_id }}/capsule_184x69.jpg" alt="" loading="lazy" width="72" height="34" onerror="this.style.display='none'">
+            {% else %}
+              <img src="" alt="" style="background:var(--border);" width="72" height="34">
+            {% endif %}
+            <div>
+              <div class="t">{{ g.title }}</div>
+              <div class="s">{{ g.get_platform_display }}{% if g.launch_price %} · launch {{ g.launch_price }} {{ g.launch_currency }}{% endif %}</div>
+            </div>
           </a>
         {% endfor %}
       {% else %}
@@ -131,6 +175,7 @@
     clearTimeout(window._toastTimer);
     window._toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
   };
+
   (function () {
     var drawer = document.getElementById('trackedDrawer');
     var backdrop = document.getElementById('drawerBackdrop');
@@ -141,7 +186,6 @@
     backdrop && backdrop.addEventListener('click', close);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') close();
-      // / focuses search unless typing in an input
       if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
         var tag = (e.target && e.target.tagName) || '';
         if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
@@ -150,43 +194,156 @@
       }
     });
   })();
-  </script>
 
-  {% if not game_wallpaper %}
-    {% if not site_settings.wallpaper or site_settings.wallpaper == "comet" %}
-  <script>
+  /* Appearance: theme + wallpaper (localStorage, no login) */
   (function () {
-    var c = document.getElementById('bg-canvas');
-    if (!c) return;
-    var ctx = c.getContext('2d');
-    var w, h, comets = [], last = 0;
-    function resize() { w = c.width = window.innerWidth; h = c.height = window.innerHeight; }
-    window.addEventListener('resize', resize, { passive: true });
-    resize();
-    function spawn() {
-      return { x: Math.random() * w * 1.2, y: -20 - Math.random() * h * 0.3, len: 40 + Math.random() * 70,
-        speed: 1.2 + Math.random() * 2.2, angle: Math.PI / 3.2 + Math.random() * 0.25, alpha: 0.15 + Math.random() * 0.35 };
-    }
-    for (var i = 0; i < 8; i++) comets.push(spawn());
-    function frame(t) {
-      if (t - last < 33) { requestAnimationFrame(frame); return; }
-      last = t; ctx.clearRect(0, 0, w, h);
-      for (var j = 0; j < comets.length; j++) {
-        var m = comets[j];
-        m.x += Math.cos(m.angle) * m.speed; m.y += Math.sin(m.angle) * m.speed;
-        var g = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
-        g.addColorStop(0, 'rgba(255,120,100,' + m.alpha + ')'); g.addColorStop(1, 'rgba(120,20,20,0)');
-        ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath();
-        ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len); ctx.stroke();
-        if (m.y > h + 40 || m.x > w + 40) Object.assign(m, spawn());
+    var THEME_KEY = 'gpt_theme';
+    var WALL_KEY = 'gpt_wallpaper';
+    var layer = document.getElementById('bg-layer');
+    var canvas = document.getElementById('bg-canvas');
+    var gameArt = document.getElementById('gameArtLayer');
+    var animId = null;
+    var mode = 'comet';
+
+    function stopAnim() {
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+      if (canvas) {
+        var ctx = canvas.getContext('2d');
+        if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        canvas.style.display = 'none';
       }
-      requestAnimationFrame(frame);
     }
-    requestAnimationFrame(frame);
+
+    function startComet() {
+      if (!canvas) return;
+      canvas.style.display = 'block';
+      var ctx = canvas.getContext('2d');
+      var w, h, comets = [], last = 0;
+      function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+      resize();
+      function spawn() {
+        return { x: Math.random() * w * 1.2, y: -20 - Math.random() * h * 0.3, len: 40 + Math.random() * 70,
+          speed: 1.2 + Math.random() * 2.2, angle: Math.PI / 3.2 + Math.random() * 0.25, alpha: 0.15 + Math.random() * 0.35 };
+      }
+      for (var i = 0; i < 8; i++) comets.push(spawn());
+      function frame(t) {
+        if (mode !== 'comet') return;
+        if (t - last < 33) { animId = requestAnimationFrame(frame); return; }
+        last = t; ctx.clearRect(0, 0, w, h);
+        for (var j = 0; j < comets.length; j++) {
+          var m = comets[j];
+          m.x += Math.cos(m.angle) * m.speed; m.y += Math.sin(m.angle) * m.speed;
+          var g = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
+          g.addColorStop(0, 'rgba(255,120,100,' + m.alpha + ')'); g.addColorStop(1, 'rgba(120,20,20,0)');
+          ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath();
+          ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len); ctx.stroke();
+          if (m.y > h + 40 || m.x > w + 40) Object.assign(m, spawn());
+        }
+        animId = requestAnimationFrame(frame);
+      }
+      animId = requestAnimationFrame(frame);
+    }
+
+    function startStars() {
+      if (!canvas) return;
+      canvas.style.display = 'block';
+      var ctx = canvas.getContext('2d');
+      var w, h, stars = [], last = 0;
+      function resize() {
+        w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight;
+        stars = [];
+        for (var i = 0; i < 80; i++) {
+          stars.push({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.4 + 0.3, a: Math.random(), s: 0.002 + Math.random() * 0.008 });
+        }
+      }
+      resize();
+      window.addEventListener('resize', resize, { passive: true });
+      function frame(t) {
+        if (mode !== 'stars') return;
+        if (t - last < 40) { animId = requestAnimationFrame(frame); return; }
+        last = t;
+        ctx.fillStyle = '#020208';
+        ctx.fillRect(0, 0, w, h);
+        for (var i = 0; i < stars.length; i++) {
+          var s = stars[i];
+          s.a += s.s;
+          var alpha = 0.25 + 0.55 * Math.abs(Math.sin(s.a * 40));
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(220,230,255,' + alpha + ')';
+          ctx.fill();
+        }
+        animId = requestAnimationFrame(frame);
+      }
+      animId = requestAnimationFrame(frame);
+    }
+
+    function startAurora() {
+      if (!canvas) return;
+      canvas.style.display = 'block';
+      var ctx = canvas.getContext('2d');
+      var w, h, t0 = 0;
+      function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+      resize();
+      function frame(t) {
+        if (mode !== 'aurora') return;
+        if (t - t0 < 50) { animId = requestAnimationFrame(frame); return; }
+        t0 = t;
+        var phase = t * 0.0003;
+        ctx.fillStyle = '#061018';
+        ctx.fillRect(0, 0, w, h);
+        for (var band = 0; band < 3; band++) {
+          ctx.beginPath();
+          for (var x = 0; x <= w; x += 8) {
+            var y = h * 0.35 + band * 40 + Math.sin(x * 0.008 + phase + band) * 28 + Math.sin(x * 0.02 - phase) * 12;
+            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+          ctx.fillStyle = band === 0 ? 'rgba(40,120,100,0.12)' : band === 1 ? 'rgba(60,80,140,0.1)' : 'rgba(100,60,120,0.08)';
+          ctx.fill();
+        }
+        animId = requestAnimationFrame(frame);
+      }
+      animId = requestAnimationFrame(frame);
+    }
+
+    window.applyAppearance = function () {
+      var theme = 'dark', wall = 'comet';
+      try {
+        theme = localStorage.getItem(THEME_KEY) || 'dark';
+        wall = localStorage.getItem(WALL_KEY) || 'comet';
+      } catch (e) {}
+      document.body.setAttribute('data-theme', theme);
+      document.body.setAttribute('data-wallpaper', wall);
+      mode = wall;
+
+      stopAnim();
+      if (layer) {
+        layer.className = '';
+        layer.style.display = 'block';
+      }
+      if (gameArt) gameArt.style.display = 'none';
+
+      if (wall === 'game' && gameArt) {
+        gameArt.style.display = 'block';
+        if (layer) layer.style.display = 'none';
+        return;
+      }
+      if (wall === 'game') wall = 'comet';
+
+      if (wall === 'comet') { if (layer) layer.style.display = 'none'; startComet(); }
+      else if (wall === 'stars') { if (layer) layer.style.display = 'none'; startStars(); }
+      else if (wall === 'aurora') { if (layer) layer.style.display = 'none'; startAurora(); }
+      else if (wall === 'gradient') { layer.className = 'bg-gradient'; }
+      else if (wall === 'scenery') { layer.className = 'bg-scenery'; }
+      else if (wall === 'void') { layer.className = 'bg-void'; }
+      else if (wall === 'ocean') { layer.className = 'bg-ocean'; }
+      else { if (layer) layer.style.display = 'none'; startComet(); }
+    };
+
+    window.applyAppearance();
   })();
   </script>
-    {% endif %}
-  {% endif %}
   {% block extra_js %}{% endblock %}
 </body>
 </html>
