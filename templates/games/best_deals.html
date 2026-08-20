@@ -3,17 +3,20 @@
 
 {% block content %}
 <a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.85rem;">← Home</a>
-<h1 style="font-size: 1.35rem; margin: 0.75rem 0 0.35rem;">Best tracked deals</h1>
+<div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0.75rem;margin:0.75rem 0 0.35rem;">
+  <h1 style="font-size: 1.35rem; margin: 0;">Best tracked deals</h1>
+  <a href="{% url 'games:export_tracked' %}" style="font-size:0.85rem;" target="_blank">Export JSON →</a>
+</div>
 <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1.25rem;">
-  Latest snapshots for your tracked games, sorted by lowest GBP price.
-  Run <code style="background:var(--border);padding:0.1rem 0.35rem;border-radius:4px;">python manage.py refresh_prices</code> to update.
+  Latest snapshots sorted by lowest GBP.
+  Refresh with <code style="background:var(--border);padding:0.1rem 0.35rem;border-radius:4px;">python manage.py refresh_prices</code>.
 </p>
 
 {% if rows %}
   <div style="display:grid;gap:0.45rem;">
     {% for row in rows %}
       <a href="{% if row.game.steam_app_id %}{% url 'games:steam_detail' row.game.steam_app_id %}{% else %}{% url 'games:compare' row.game.slug %}{% endif %}"
-         style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.7rem 0.85rem;border-radius:12px;border:1px solid var(--border);background:var(--card);color:var(--text);text-decoration:none;">
+         style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.7rem 0.85rem;border-radius:12px;border:1px solid var(--border);background:rgba(18,8,8,0.88);color:var(--text);text-decoration:none;">
         <div>
           <div style="font-weight:600;">{{ row.game.title }}</div>
           <div style="font-size:0.78rem;color:var(--muted);margin-top:0.15rem;">
