@@ -11,16 +11,68 @@
   </p>
 {% endif %}
 
-<h2 style="font-size: 1rem; color: var(--muted); margin-bottom: 0.5rem;">Your tracked list</h2>
-{% if tracked %}
-  {% for g in tracked %}
-    <a href="{% url 'games:compare' g.slug %}" style="display:block; padding:0.6rem 0; border-bottom:1px solid var(--border); color: var(--text);">
-      {{ g.title }} <span class="badge">{{ g.get_platform_display }}</span>
-    </a>
-  {% endfor %}
-{% else %}
-  <p style="color: var(--muted);">None yet.</p>
+{% if unsent_alerts %}
+<section style="margin-bottom: 1.5rem; padding: 0.85rem 1rem; border-radius: 12px; border: 1px solid #2a6a3a; background: #0f1a12;">
+  <strong style="color: #86efac;">{{ unsent_alerts }} unread price alert{{ unsent_alerts|pluralize }}</strong>
+  <form method="post" action="{% url 'games:clear_alerts' %}" style="display:inline; margin-left: 0.75rem;">
+    {% csrf_token %}
+    <button type="submit" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:0.25rem 0.6rem;cursor:pointer;font-size:0.8rem;">Mark read</button>
+  </form>
+</section>
 {% endif %}
+
+{% if alerts %}
+<section style="margin-bottom: 2rem;">
+  <h2 style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.5rem;">Recent alerts</h2>
+  {% for a in alerts %}
+    <div style="padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.92rem;">
+      <strong>{{ a.watch.game.title }}</strong>
+      — {{ a.price }} {{ a.currency }}
+      <span style="color: var(--muted);">(target £{{ a.target_price }})</span>
+      {% if a.store %}<span style="color: var(--muted);">@ {{ a.store }}</span>{% endif %}
+      {% if not a.is_sent %}<span class="badge lowest" style="margin-left:0.35rem;">new</span>{% endif %}
+      <div style="font-size:0.75rem;color:var(--muted);">{{ a.created_at|date:"d M Y H:i" }}</div>
+    </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section style="margin-bottom: 2rem;">
+  <h2 style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.5rem;">Price watches</h2>
+  {% if watches %}
+    {% for w in watches %}
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.6rem 0;border-bottom:1px solid var(--border);">
+        <div>
+          <a href="{% if w.game.steam_app_id %}{% url 'games:steam_detail' w.game.steam_app_id %}{% else %}{% url 'games:compare' w.game.slug %}{% endif %}" style="color:var(--text);font-weight:500;">{{ w.game.title }}</a>
+          {% if w.target_price %}
+            <div style="font-size:0.8rem;color:var(--muted);">Alert under £{{ w.target_price }}</div>
+          {% else %}
+            <div style="font-size:0.8rem;color:var(--muted);">No target set</div>
+          {% endif %}
+        </div>
+        <form method="post" action="{% url 'games:unwatch' w.game.slug %}">
+          {% csrf_token %}
+          <button type="submit" style="background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:8px;padding:0.3rem 0.6rem;cursor:pointer;font-size:0.8rem;">Unwatch</button>
+        </form>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p style="color: var(--muted); font-size: 0.9rem;">None yet. Track a game, then set a target price on its page.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2 style="font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.5rem;">Globally tracked titles</h2>
+  {% if tracked %}
+    {% for g in tracked %}
+      <a href="{% url 'games:compare' g.slug %}" style="display:block; padding:0.6rem 0; border-bottom:1px solid var(--border); color: var(--text);">
+        {{ g.title }} <span class="badge">{{ g.get_platform_display }}</span>
+      </a>
+    {% endfor %}
+  {% else %}
+    <p style="color: var(--muted);">None yet.</p>
+  {% endif %}
+</section>
 
 <form method="post" action="{% url 'logout' %}" style="margin-top: 2rem;">
   {% csrf_token %}
