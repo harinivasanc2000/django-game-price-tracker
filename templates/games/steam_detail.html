@@ -154,17 +154,7 @@
           </p>
         {% endif %}
 
-        <div style="display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.95rem;">
-          {% if already_tracked %}
-            <form method="post" action="{% url 'games:untrack' already_tracked.slug %}">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-ghost">Untrack</button>
-            </form>
-          {% else %}
-            <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">Track</a>
-          {% endif %}
-          <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
-        </div>
+        {% include "games/_detail_actions.html" %}
 
         {% if user.is_authenticated and already_tracked %}
           <div class="watch-box">
