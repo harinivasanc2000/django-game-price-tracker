@@ -121,6 +121,7 @@
         <button type="button" class="nav-btn" id="openTracked">Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}</button>
         <a href="{% url 'games:steam_search' %}">Search</a>
         <a href="{% url 'games:best_deals' %}">Deals</a>
+        <a href="{% url 'games:research' %}">Research</a>
         <a href="{% url 'games:history' %}">History</a>
         <a href="{% url 'games:appearance' %}">Settings</a>
         {% if user.is_authenticated %}
@@ -195,7 +196,6 @@
     });
   })();
 
-  /* Appearance: theme + wallpaper (localStorage, no login) */
   (function () {
     var THEME_KEY = 'gpt_theme';
     var WALL_KEY = 'gpt_wallpaper';
