@@ -4,55 +4,66 @@
 
 ---
 
-## 2026-08-20 21:05 BST — UK local scrapes + clickable store links
+## 2026-08-20 21:55 BST — Error hardening + features
 
-### Added / expanded
-- Parallel public search: **CeX, eBay, GAME, Argos, Currys** (+ Amazon already)
-- Always-clickable `uk_links`: CeX, GAME, Argos, Currys, Amazon, eBay, Smyths, **Facebook Marketplace**, Gumtree, X, Reddit
-- Product rows link to product URL when scraped; otherwise **Search →** for that shop
-- `_uk_physical_panel.html` partial
-- Live offer chips include GAME / Argos / Currys when prices found
+### Fixed
+- **FX conversion bug**: open.er-api rates are *GBP-base* (1 GBP = N foreign). Now inverted so USD/EUR → GBP is correct (`fx.py` cache key `v2`)
+- Detail page no longer 500s if one store scrape / CheapShark / news fails — each future is soft-caught (`views_steam_detail.py`)
+- `deal_prediction_panel` catches bad context instead of crashing the template
 
-### Policy
-- Facebook Marketplace: **link only** (no scrape)
-- Product title / price / public rating / URL only
+### Added
+- **`/health/`** — DB + beautifulsoup/lxml diagnostics JSON
+- **Related on Steam** (`similar_games`) via public storesearch
+- `detail_helpers.empty_platform_bundle` fallback
+- Template partial `_similar_games.html` (include in sidebar)
 
-### Template
-Replace the old "UK physical & local" panel in `steam_detail.html` with:
+### Template tip
+In `steam_detail.html` sidebar, add:
 ```django
-{% include "games/_uk_physical_panel.html" %}
+{% include "games/_similar_games.html" %}
+```
+Fix AJAX esc() if still wrong:
+```js
+function esc(s) {
+  return String(s || '')
+    .replace(/&/g,'&')
+    .replace(/</g,'<')
+    .replace(/"/g,'"');
+}
 ```
 
 ```bash
 git pull && python manage.py runserver
+# check: http://127.0.0.1:8000/health/
 ```
 
 ---
 
-## 2026-08-20 21:02 BST — Fix FeatureNotFound: lxml missing
+## 2026-08-20 21:05 BST — UK local scrapes + clickable links
+
+### Added
+- CeX, eBay, GAME, Argos, Currys parallel public search
+- Always-clickable uk_links including Facebook Marketplace / Gumtree (link-only)
+
+---
+
+## 2026-08-20 21:02 BST — lxml FeatureNotFound fix
 
 ### Fixed
-- Fall back to `html.parser` when lxml not installed
+- Fall back to `html.parser` when lxml missing
 
 ---
 
 ## 2026-08-20 20:35 BST — BeautifulSoup + deal prediction
 
 ### Added
-- BS4 public product scrape helpers; deal outlook heuristics
+- BS4 public product scrape; deal outlook heuristics
 
 ---
 
-## 2026-08-20 20:05 BST — Appearance settings
+## Earlier
 
-### Added
-- Themes / wallpapers Settings page; drawer icons
-
----
-
-## Earlier history
-
-See git history for full prior entries (home grid, deals, Celery, Steam, PSN, etc.).
+See git log for appearance settings, home grid, Celery, Steam, PSN, etc.
 
 ---
 
@@ -60,4 +71,4 @@ See git history for full prior entries (home grid, deals, Celery, Steam, PSN, et
 
 - [ ] Per-user track lists
 - [ ] Discord / email alerts
-- [ ] Confirm detail template includes `_uk_physical_panel.html`
+- [ ] Stronger CeX when not blocked
