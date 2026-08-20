@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-20 20:05 BST — Appearance settings, tracked icons, hot-deal ghosts
+
+### Added
+- **Settings** nav (no login) → `/settings/`
+  - Themes: Dark red, Soft dark, Ember, Mist (dim light — not bright)
+  - Wallpapers:
+    - Live: Comet rain, Deep space (stars), Aurora
+    - Static: Red haze, Night hills, Void, Deep ocean
+    - Game art: Steam library art on detail pages
+  - Saved in `localStorage` only (`gpt_theme`, `gpt_wallpaper`)
+- **Tracked drawer**: capsule/cover icons beside each title
+- **On sale vs launch**: very translucent cover image behind each chip
+
+### Changed
+- Staff admin link relabelled **Admin**; public **Settings** is appearance
+
+---
+
 ## 2026-08-20 19:55 BST — Changelog policy + full history restore
 
 ### Process
