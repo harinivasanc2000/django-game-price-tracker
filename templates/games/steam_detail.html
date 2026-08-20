@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load deal_tags %}
 {% block title %}{{ d.name }}{% endblock %}
 
 {% block extra_css %}
@@ -74,6 +75,7 @@
   .kind.marketplace { background: #1e3a5f; color: #7dd3fc; }
   .kind.third-party { background: #3a2a1a; color: #fcd34d; }
   .kind.used { background: #2a2a3a; color: #c4b5fd; }
+  .kind.retail { background: #1a2a3a; color: #93c5fd; }
   .link-chip {
     display: inline-block; margin: 0.2rem 0.3rem 0.2rem 0;
     padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid var(--border);
@@ -92,6 +94,7 @@
   }
   .safe-list { padding: 0.5rem 1rem 0.9rem; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
   .safe-list li { margin: 0.25rem 0 0.25rem 1rem; }
+  .kbd-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.5rem; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -113,13 +116,11 @@
 
         {% if steam_os %}
         <div class="os-row" title="Steam OS support">
-          {% for p in steam_os %}
-            <span>{{ p|title }}</span>
-          {% endfor %}
+          {% for p in steam_os %}<span>{{ p|title }}</span>{% endfor %}
         </div>
         {% endif %}
 
-        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 0.55rem;">Store platform (filters UK / PSN / physical — no page reload)</p>
+        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 0.55rem;">Platform filter (no full reload)</p>
         <div class="plat-row" id="platformChips" data-app="{{ app_id }}" data-cc="{{ country }}">
           {% for val, label in store_platforms %}
             <button type="button" data-platform="{{ val }}" class="{% if current_platform == val %}on{% endif %}">{{ label }}</button>
@@ -140,10 +141,9 @@
           </div>
           {% with best=live_offers.0 %}
           <div class="best-tip">
-            <strong style="color:#86efac;">Best GBP pick right now:</strong>
+            <strong style="color:#86efac;">Best GBP pick:</strong>
             {{ best.store }} at
             {% if best.currency == 'GBP' %}£{{ best.price }}{% else %}{{ best.price }} {{ best.currency }} (≈ £{{ best.price_gbp }}){% endif %}
-            · Prefer <span class="kind official">official</span> over <span class="kind third-party">third-party</span> when the gap is small.
           </div>
           {% endwith %}
         {% endif %}
@@ -151,10 +151,12 @@
         {% if launch %}
           <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.55rem;">
             Launch: <strong style="color: var(--text);">{{ launch }} {{ launch_currency }}</strong>
+            {% if savings_vs_launch %} · <span style="color:#86efac;">{{ savings_vs_launch }}% under launch</span>{% endif %}
           </p>
         {% endif %}
 
         {% include "games/_detail_actions.html" %}
+        <p class="kbd-hint">Tip: press <kbd>/</kbd> to search · Esc closes tracked drawer</p>
 
         {% if user.is_authenticated and already_tracked %}
           <div class="watch-box">
@@ -174,10 +176,12 @@
       </div>
     </div>
 
+    {% deal_prediction_panel %}
+
     {% if has_chart %}
     <div class="panel" style="padding: 0.9rem 1rem;">
       <h2 style="padding: 0;">Price changes only (GBP)</h2>
-      <p style="font-size: 0.75rem; color: var(--muted); margin: 0.25rem 0 0.5rem;">Flat periods collapsed — next point is the next real change.</p>
+      <p style="font-size: 0.75rem; color: var(--muted); margin: 0.25rem 0 0.5rem;">Flat periods collapsed.</p>
       <div class="chart-toolbar">
         <label for="sellerSelect" style="font-size:0.8rem;color:var(--muted);">Show</label>
         <select id="sellerSelect">
@@ -197,9 +201,8 @@
             {% for row in psn_rows %}
               <div class="deal-row">
                 <div>
-                  <strong>{{ row.name }}</strong>
+                  <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
                   {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.3rem;">Full</span>{% endif %}
-                  <div style="font-size:0.78rem;"><a href="{{ row.url }}" target="_blank" rel="noopener">PSN →</a></div>
                 </div>
                 <div class="price-now">{% if row.display_price %}{{ row.display_price }}{% else %}{{ row.price }} {{ row.currency }}{% endif %}</div>
               </div>
@@ -210,41 +213,24 @@
         </div>
       </div>
 
-      <div class="panel" data-plat-group="physical">
-        <h2>UK physical & local</h2>
-        <div id="ukList">
-          {% if cex_rows %}
-            {% for row in cex_rows %}
-              <div class="deal-row"><div><strong>{{ row.name }}</strong> <span class="kind used">used</span></div><div class="price-now">{{ row.price }} {{ row.currency }}</div></div>
-            {% endfor %}
-          {% elif cex_search_url %}
-            <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
-          {% endif %}
-          {% if ebay_rows %}
-            {% for row in ebay_rows %}
-              <div class="deal-row"><div><strong>{{ row.name }}</strong></div><div class="price-now">{{ row.price }} {{ row.currency }}</div></div>
-            {% endfor %}
-          {% elif ebay_search_url %}
-            <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK →</a></p>
-          {% endif %}
-          <div style="padding:0.65rem 1rem 1rem;" id="ukLinks">
-            {% for link in uk_links %}
-              <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener">{{ link.name }}</a>
-            {% endfor %}
-          </div>
-        </div>
-      </div>
+      {% include "games/_uk_physical_panel.html" %}
 
       <div class="panel" data-plat-group="physical">
         <h2>Amazon UK</h2>
         <div id="amazonList">
           {% if amazon_blocked %}
             <div class="disclaimer">Amazon may block bots.
-              {% if amazon_search_url %}<a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Search →</a>{% endif %}
+              {% if amazon_search_url %}<a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Search Amazon →</a>{% endif %}
             </div>
           {% endif %}
           {% for row in amazon_rows %}
-            <div class="deal-row"><div><strong>{{ row.name }}</strong></div><div class="price-now">{{ row.price }} {{ row.currency }}</div></div>
+            <div class="deal-row">
+              <div>
+                <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+                {% if row.rating %}<span class="badge" style="margin-left:0.25rem;">{{ row.rating }}★</span>{% endif %}
+              </div>
+              <div class="price-now">{{ row.price }} {{ row.currency }}</div>
+            </div>
           {% empty %}
             {% if not amazon_blocked %}<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No rows.</p>{% endif %}
           {% endfor %}
@@ -253,11 +239,11 @@
 
       <div class="panel" data-plat-group="pc">
         <h2>Other PC digital</h2>
-        <div class="disclaimer">May include keyshops — verify seller & region before buying.</div>
+        <div class="disclaimer">May include keyshops — verify seller & region.</div>
         {% for deal in store_deals %}
           <div class="deal-row">
             <div>
-              <strong>{{ deal.store_name }}</strong>
+              <strong>{% if deal.url %}<a href="{{ deal.url }}" target="_blank" rel="noopener">{{ deal.store_name }}</a>{% else %}{{ deal.store_name }}{% endif %}</strong>
               {% if deal.savings %}<span class="badge lowest" style="margin-left:0.3rem;">-{{ deal.savings }}%</span>{% endif %}
             </div>
             <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
@@ -287,8 +273,8 @@
       <h2>Stay safe</h2>
       <ul class="safe-list">
         <li>Official stores first when prices are close.</li>
-        <li>Keyshops: check region, refunds, seller score.</li>
-        <li>Used discs: condition grade + returns.</li>
+        <li>Keyshops: region, refunds, seller score.</li>
+        <li>Used discs: condition + returns.</li>
         <li>Confirm the final price on the store page.</li>
       </ul>
     </div>
@@ -321,7 +307,7 @@
   function datasetsFor(mode) {
     const ds = [];
     if (mode === '__avg__') {
-      ds.push({ label: 'Average (change pts)', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.2, pointRadius: 4 });
+      ds.push({ label: 'Average', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.2, pointRadius: 4 });
     } else if (mode === '__all__') {
       (data.sellers || []).forEach((s, i) => {
         ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.2, pointRadius: 3, borderWidth: 1.5 });
@@ -363,21 +349,44 @@
   const panels = document.getElementById('platformPanels');
 
   function focusPanels(plat) {
-    const groups = panels.querySelectorAll('[data-plat-group]');
-    groups.forEach(el => {
+    if (!panels) return;
+    panels.querySelectorAll('[data-plat-group]').forEach(el => {
       const g = el.getAttribute('data-plat-group');
       let show = true;
       if (plat === 'pc') show = (g === 'pc' || g === 'physical');
       else if (plat === 'ps4' || plat === 'ps5') show = (g === 'ps' || g === 'physical');
       else if (plat === 'xbox' || plat === 'switch') show = (g === 'physical');
-      else show = true;
       el.classList.toggle('plat-dim', !show);
       el.style.display = show ? '' : 'none';
     });
   }
 
-  function rowHtml(name, price, extra) {
-    return `<div class="deal-row"><div><strong>${name}</strong>${extra || ''}</div><div class="price-now">${price}</div></div>`;
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&').replace(/</g,'<').replace(/"/g,'"');
+  }
+
+  function rowHtml(name, price, extra, url) {
+    const title = url
+      ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>`
+      : esc(name);
+    return `<div class="deal-row"><div><strong>${title}</strong>${extra || ''}</div><div class="price-now">${esc(price)}</div></div>`;
+  }
+
+  function renderStoreBlock(rows, searchUrl, label, kindClass) {
+    let html = '';
+    (rows || []).forEach(r => {
+      html += rowHtml(
+        r.name,
+        (r.price != null ? r.price + ' ' + (r.currency || 'GBP') : ''),
+        ` <span class="kind ${kindClass || ''}">${esc(label)}</span>` +
+          (r.rating ? ` <span class="badge">${esc(r.rating)}★</span>` : ''),
+        r.url
+      );
+    });
+    if (!(rows || []).length && searchUrl) {
+      html += `<p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="${esc(searchUrl)}" target="_blank" rel="noopener">Search ${esc(label)} →</a></p>`;
+    }
+    return html;
   }
 
   function renderPlatform(data) {
@@ -387,7 +396,8 @@
         psn.innerHTML = data.psn_rows.map(r => rowHtml(
           r.name,
           r.display_price || (r.price + ' ' + (r.currency || 'GBP')),
-          r.is_full_game ? ' <span class="badge digital">Full</span>' : ''
+          r.is_full_game ? ' <span class="badge digital">Full</span>' : '',
+          r.url
         )).join('');
       } else {
         psn.innerHTML = '<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No PSN matches.</p>';
@@ -396,19 +406,28 @@
     const uk = document.getElementById('ukList');
     if (uk) {
       let html = '';
-      (data.cex_rows || []).forEach(r => { html += rowHtml(r.name + ' <span class="kind used">used</span>', r.price + ' ' + (r.currency || 'GBP')); });
-      if (!(data.cex_rows || []).length && data.cex_search_url) html += `<p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="${data.cex_search_url}" target="_blank" rel="noopener">Search CeX →</a></p>`;
-      (data.ebay_rows || []).forEach(r => { html += rowHtml(r.name, r.price + ' ' + (r.currency || 'GBP')); });
-      if (!(data.ebay_rows || []).length && data.ebay_search_url) html += `<p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="${data.ebay_search_url}" target="_blank" rel="noopener">Search eBay UK →</a></p>`;
-      html += '<div style="padding:0.65rem 1rem 1rem;">' + (data.uk_links || []).map(l => `<a class="link-chip" href="${l.url}" target="_blank" rel="noopener">${l.name}</a>`).join('') + '</div>';
+      html += renderStoreBlock(data.cex_rows, data.cex_search_url, 'CeX', 'used');
+      html += renderStoreBlock(data.ebay_rows, data.ebay_search_url, 'eBay', 'marketplace');
+      html += renderStoreBlock(data.game_rows, data.game_search_url, 'GAME', 'retail');
+      html += renderStoreBlock(data.argos_rows, data.argos_search_url, 'Argos', 'retail');
+      html += renderStoreBlock(data.currys_rows, data.currys_search_url, 'Currys', 'retail');
+      html += '<div style="padding:0.65rem 1rem 1rem;">' +
+        (data.uk_links || []).map(l => `<a class="link-chip" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`).join('') +
+        '</div>';
       uk.innerHTML = html;
     }
     const amz = document.getElementById('amazonList');
     if (amz) {
       let html = '';
-      if (data.amazon_blocked) html += `<div class="disclaimer">Amazon may block bots. ${data.amazon_search_url ? `<a href="${data.amazon_search_url}" target="_blank" rel="noopener">Search →</a>` : ''}</div>`;
-      (data.amazon_rows || []).forEach(r => { html += rowHtml(r.name, r.price + ' ' + (r.currency || 'GBP')); });
-      if (!(data.amazon_rows || []).length && !data.amazon_blocked) html += '<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No rows.</p>';
+      if (data.amazon_blocked) {
+        html += `<div class="disclaimer">Amazon may block bots. ${data.amazon_search_url ? `<a href="${esc(data.amazon_search_url)}" target="_blank" rel="noopener">Search →</a>` : ''}</div>`;
+      }
+      (data.amazon_rows || []).forEach(r => {
+        html += rowHtml(r.name, r.price + ' ' + (r.currency || 'GBP'), r.rating ? ` <span class="badge">${esc(r.rating)}★</span>` : '', r.url);
+      });
+      if (!(data.amazon_rows || []).length && !data.amazon_blocked) {
+        html += '<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No rows.</p>';
+      }
       amz.innerHTML = html;
     }
   }
@@ -420,13 +439,15 @@
       const plat = btn.getAttribute('data-platform') || '';
       chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
       focusPanels(plat);
-      panels?.classList.add('plat-loading');
-      const url = `/api/platform/${appId}/?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`;
-      fetch(url)
+      panels && panels.classList.add('plat-loading');
+      fetch(`/api/platform/${appId}/?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`)
         .then(r => r.json())
-        .then(data => { renderPlatform(data); history.replaceState(null, '', `?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`); })
+        .then(data => {
+          renderPlatform(data);
+          history.replaceState(null, '', `?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`);
+        })
         .catch(() => {})
-        .finally(() => panels?.classList.remove('plat-loading'));
+        .finally(() => panels && panels.classList.remove('plat-loading'));
     });
   });
 })();
