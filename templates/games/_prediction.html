@@ -1,0 +1,22 @@
+{% if pred %}
+<div class="panel" style="margin-bottom:1rem;">
+  <h2>Deal outlook</h2>
+  <div style="padding:0.65rem 1rem 0.9rem;">
+    <p style="font-weight:600;margin-bottom:0.35rem;">{{ pred.verdict }}</p>
+    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.55rem;">{{ pred.wait_note }}</p>
+    <div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.55rem;font-size:0.8rem;">
+      <span>Buy-now score <strong style="color:var(--accent2);">{{ pred.buy_score }}</strong>/100</span>
+      <span>Further-drop chance <strong style="color:var(--muted);">{{ pred.drop_likelihood }}</strong>/100</span>
+      {% if pred.under_launch_pct is not None %}
+        <span>{{ pred.under_launch_pct }}% vs launch</span>
+      {% endif %}
+    </div>
+    {% if pred.signals %}
+      <ul style="margin:0 0 0.5rem 1.1rem;font-size:0.82rem;color:var(--muted);">
+        {% for s in pred.signals %}<li style="margin-bottom:0.25rem;">{{ s }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+    <p style="font-size:0.72rem;color:var(--muted);">{{ pred.disclaimer }}</p>
+  </div>
+</div>
+{% endif %}
