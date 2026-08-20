@@ -1,8 +1,7 @@
 import json
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal
-from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.utils.text import slugify
@@ -22,12 +21,17 @@ from .fx import to_gbp, to_gbp_or_zero
 from .clients.steam import search_store, get_app_details, suggest_store
 from .clients.cheapshark import deals_for_title
 from .clients.external_stores import ensure_uk_stores
-from .clients.psn import search_psn, best_psn_deal
+from .clients.psn import search_psn
 from .clients.amazon_uk import search_amazon_uk
-from .clients.uk_stores import uk_search_links, try_cex_search, try_ebay_uk, platform_query
+from .clients.uk_stores import (
+    uk_search_links,
+    try_cex_search,
+    try_ebay_uk,
+    platform_query,
+    fetch_uk_physical_bundle,
+)
 from .clients.news import steam_news, social_news_links
 
-# Re-export for urls.py
 from .views_best_deals import best_deals  # noqa: F401,E402
 
 POPULAR_APP_IDS = [
@@ -96,15 +100,6 @@ def _unique_slug(name: str, app_id: int) -> str:
             slug = f"steam-{app_id}"
             break
     return slug[:180]
-
-
-def _snapshot_since(game: Game, hours: int = 24) -> list:
-    since = timezone.now() - timezone.timedelta(hours=hours)
-    return list(
-        PriceRecord.objects.filter(game=game, recorded_at__gte=since)
-        .select_related("store")
-        .order_by("recorded_at")[:12]
-    )
 
 
 def _gbp_point(amount, currency="GBP") -> float | None:
@@ -223,15 +218,19 @@ def _platform_bundle(title: str, platform: str = "") -> dict:
     psn_query = platform_query(title, platform) if platform.startswith("ps") else title
     amz_extra = platform.upper() if platform else ""
 
-    with ThreadPoolExecutor(max_workers=5) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         f_psn = pool.submit(search_psn, psn_query, 8)
         f_amz = pool.submit(search_amazon_uk, title, amz_extra, 6)
-        f_cex = pool.submit(try_cex_search, title, platform, 6)
-        f_ebay = pool.submit(try_ebay_uk, title, platform, 6)
+        f_uk = pool.submit(fetch_uk_physical_bundle, title, platform, 5)
         psn_rows = f_psn.result()
         amazon = f_amz.result()
-        cex = f_cex.result()
-        ebay = f_ebay.result()
+        uk = f_uk.result()
+
+    cex = uk.get("cex") or {}
+    ebay = uk.get("ebay") or {}
+    game = uk.get("game") or {}
+    argos = uk.get("argos") or {}
+    currys = uk.get("currys") or {}
 
     return {
         "platform": platform,
@@ -245,7 +244,16 @@ def _platform_bundle(title: str, platform: str = "") -> dict:
         "ebay_rows": [_serialize_deal_row(r) for r in (ebay.get("results") or [])],
         "ebay_blocked": ebay.get("blocked", True),
         "ebay_search_url": ebay.get("search_url"),
-        "uk_links": uk_search_links(title, platform=platform),
+        "game_rows": [_serialize_deal_row(r) for r in (game.get("results") or [])],
+        "game_blocked": game.get("blocked", True),
+        "game_search_url": game.get("search_url"),
+        "argos_rows": [_serialize_deal_row(r) for r in (argos.get("results") or [])],
+        "argos_blocked": argos.get("blocked", True),
+        "argos_search_url": argos.get("search_url"),
+        "currys_rows": [_serialize_deal_row(r) for r in (currys.get("results") or [])],
+        "currys_blocked": currys.get("blocked", True),
+        "currys_search_url": currys.get("search_url"),
+        "uk_links": uk.get("uk_links") or uk_search_links(title, platform=platform),
     }
 
 
@@ -373,22 +381,19 @@ def steam_detail(request, app_id: int):
                 "url": detail.get("url"),
             }
         )
-    best_psn = None
     for row in psn_rows:
         if float(row.get("price") or 0) > 0:
-            best_psn = row
+            live_offers.append(
+                {
+                    "store": "PSN UK",
+                    "price": row["price"],
+                    "price_gbp": to_gbp_or_zero(row["price"], "GBP"),
+                    "currency": "GBP",
+                    "kind": "official",
+                    "url": row.get("url"),
+                }
+            )
             break
-    if best_psn:
-        live_offers.append(
-            {
-                "store": "PSN UK",
-                "price": best_psn["price"],
-                "price_gbp": to_gbp_or_zero(best_psn["price"], "GBP"),
-                "currency": "GBP",
-                "kind": "official",
-                "url": best_psn.get("url"),
-            }
-        )
     if amazon_rows:
         live_offers.append(
             {
@@ -400,28 +405,25 @@ def steam_detail(request, app_id: int):
                 "url": amazon_rows[0].get("url"),
             }
         )
-    if plat["cex_rows"]:
-        live_offers.append(
-            {
-                "store": "CeX",
-                "price": plat["cex_rows"][0]["price"],
-                "price_gbp": to_gbp_or_zero(plat["cex_rows"][0]["price"], "GBP"),
-                "currency": "GBP",
-                "kind": "used",
-                "url": plat.get("cex_search_url"),
-            }
-        )
-    if plat["ebay_rows"]:
-        live_offers.append(
-            {
-                "store": "eBay UK",
-                "price": plat["ebay_rows"][0]["price"],
-                "price_gbp": to_gbp_or_zero(plat["ebay_rows"][0]["price"], "GBP"),
-                "currency": "GBP",
-                "kind": "marketplace",
-                "url": plat["ebay_rows"][0].get("url"),
-            }
-        )
+    for key, label, kind in (
+        ("cex_rows", "CeX", "used"),
+        ("ebay_rows", "eBay UK", "marketplace"),
+        ("game_rows", "GAME UK", "retail"),
+        ("argos_rows", "Argos", "retail"),
+        ("currys_rows", "Currys", "retail"),
+    ):
+        rows = plat.get(key) or []
+        if rows:
+            live_offers.append(
+                {
+                    "store": label,
+                    "price": rows[0]["price"],
+                    "price_gbp": to_gbp_or_zero(rows[0]["price"], "GBP"),
+                    "currency": "GBP",
+                    "kind": kind,
+                    "url": rows[0].get("url") or plat.get(key.replace("_rows", "_search_url")),
+                }
+            )
     if store_deals:
         live_offers.append(
             {
@@ -480,6 +482,15 @@ def steam_detail(request, app_id: int):
             "ebay_rows": plat["ebay_rows"],
             "ebay_blocked": plat.get("ebay_blocked", True),
             "ebay_search_url": plat.get("ebay_search_url"),
+            "game_rows": plat.get("game_rows") or [],
+            "game_blocked": plat.get("game_blocked", True),
+            "game_search_url": plat.get("game_search_url"),
+            "argos_rows": plat.get("argos_rows") or [],
+            "argos_blocked": plat.get("argos_blocked", True),
+            "argos_search_url": plat.get("argos_search_url"),
+            "currys_rows": plat.get("currys_rows") or [],
+            "currys_blocked": plat.get("currys_blocked", True),
+            "currys_search_url": plat.get("currys_search_url"),
             "uk_links": plat["uk_links"],
             "news_items": news_items,
             "social_links": social_links,
