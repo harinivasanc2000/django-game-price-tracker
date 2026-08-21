@@ -36,7 +36,6 @@ def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
     def key(o: dict):
         store = (o.get("store") or "").strip()
         is_pref = 0 if store in preferred else 1
-        # When no platform filter: still bias official digital slightly ahead of same price
         kind_bias = 0 if (not preferred and o.get("kind") == "official") else 1
         return (is_pref, kind_bias if is_pref else 0, float(o.get("price_gbp") or 9999))
 
@@ -84,8 +83,6 @@ def steam_detail(request, app_id: int):
     similar = []
 
     workers = 3 + (1 if want_pc_deals else 0)
-    # All optional sources share one response budget. A blocked store must not
-    # prevent the official Steam detail page from rendering.
     pool = ThreadPoolExecutor(max_workers=workers)
     try:
         f_plat = pool.submit(platform_bundle, detail["name"], platform)
@@ -126,7 +123,8 @@ def steam_detail(request, app_id: int):
     xbox_rows = plat.get("xbox_rows") or []
     nintendo_rows = plat.get("nintendo_rows") or []
     amazon_rows = plat.get("amazon_rows") or []
-    social_links = social_news_links(detail["name"])
+    # Platform-aware deal communities (still link-outs only)
+    social_links = social_news_links(detail["name"], platform=platform)
 
     launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
     launch_currency = (catalog.launch_currency if catalog else None) or "GBP"
@@ -145,7 +143,6 @@ def steam_detail(request, app_id: int):
 
     live_offers: list[dict] = []
 
-    # --- Official digital first (platform-aware) ---
     if detail.get("price_status") == "paid" and detail.get("price") is not None:
         live_offers.append(
             {
@@ -197,7 +194,6 @@ def steam_detail(request, app_id: int):
             )
             break
 
-    # --- Then local / marketplace ---
     if amazon_rows:
         live_offers.append(
             {
@@ -308,7 +304,6 @@ def steam_detail(request, app_id: int):
             "savings_vs_launch": savings_vs_launch,
             "best_third_party": store_deals[0] if store_deals else None,
             "chart_json": json.dumps(chart),
-            # A placeholder "Now" label alone is not enough to draw a chart.
             "has_chart": bool(chart.get("has_data")),
             "watched": watched,
             "is_watched": watched is not None,
