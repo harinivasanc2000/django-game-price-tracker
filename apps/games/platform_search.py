@@ -3,16 +3,18 @@ Parallel multi-platform search — Steam + PSN + Xbox + Nintendo.
 
 Designed to be light:
   - short timeouts inside clients
-  - Django cache on every client
+  - Django cache on every client + top-level result cache
   - limited result counts
   - soft-fail per platform
 """
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from decimal import Decimal
 from typing import Any
+
+from django.core.cache import cache
 
 from .clients.nintendo import nintendo_search_url, search_nintendo
 from .clients.psn import search_psn
@@ -20,6 +22,8 @@ from .clients.steam import search_store
 from .clients.uk_stores import platform_query
 from .clients.xbox import microsoft_store_search_url, search_xbox, xbox_search_url
 from .fx import to_gbp_or_zero
+
+MPS_TTL = 180  # whole multi-platform search cache
 
 
 def _ser(row: dict) -> dict:
@@ -43,9 +47,24 @@ def multi_platform_search(
     """
     q = (query or "").strip()
     plat = (platform or "").strip().lower()
-    empty = {"steam": [], "psn": [], "xbox": [], "nintendo": [], "links": []}
+    empty = {
+        "steam": [],
+        "psn": [],
+        "xbox": [],
+        "nintendo": [],
+        "links": [],
+        "nintendo_blocked": True,
+        "nintendo_search_url": nintendo_search_url(q) if q else "",
+        "query": q,
+        "platform": plat,
+    }
     if not q:
         return empty
+
+    cache_key = f"mps:v2:{q.lower()}:{plat}:{country}:{limit}"
+    hit = cache.get(cache_key)
+    if hit is not None:
+        return hit
 
     want_steam = plat in ("", "pc")
     want_psn = plat in ("", "ps4", "ps5")
@@ -84,33 +103,56 @@ def multi_platform_search(
         except Exception:
             return {"results": [], "blocked": True, "search_url": nintendo_search_url(q)}
 
-    # Fewer workers when filtered to one platform
     workers = sum([want_steam, want_psn, want_xbox, want_switch]) or 1
+    futures = {}
     with ThreadPoolExecutor(max_workers=min(workers, 4)) as pool:
-        f_st = pool.submit(run_steam) if want_steam else None
-        f_ps = pool.submit(run_psn) if want_psn else None
-        f_xb = pool.submit(run_xbox) if want_xbox else None
-        f_ni = pool.submit(run_nint) if want_switch else None
-        if f_st:
-            steam_rows = f_st.result() or []
-        if f_ps:
-            psn_rows = [_ser(r) for r in (f_ps.result() or [])]
-        if f_xb:
-            xbox_rows = [_ser(r) for r in (f_xb.result() or [])]
-        if f_ni:
-            nint_block = f_ni.result() or nint_block
+        if want_steam:
+            futures[pool.submit(run_steam)] = "steam"
+        if want_psn:
+            futures[pool.submit(run_psn)] = "psn"
+        if want_xbox:
+            futures[pool.submit(run_xbox)] = "xbox"
+        if want_switch:
+            futures[pool.submit(run_nint)] = "nint"
+
+        try:
+            for fut in as_completed(futures, timeout=8):
+                kind = futures[fut]
+                try:
+                    result = fut.result()
+                except Exception:
+                    continue
+                if kind == "steam":
+                    steam_rows = result or []
+                elif kind == "psn":
+                    psn_rows = [_ser(r) for r in (result or [])]
+                elif kind == "xbox":
+                    xbox_rows = [_ser(r) for r in (result or [])]
+                elif kind == "nint":
+                    nint_block = result or nint_block
+        except TimeoutError:
+            # Partial results better than hanging the page
+            pass
 
     nint_rows = [_ser(r) for r in (nint_block.get("results") or [])]
 
     links = [
         {"name": "Steam", "platform": "pc", "url": f"https://store.steampowered.com/search/?term={q}"},
-        {"name": "PlayStation Store", "platform": "ps5", "url": f"https://store.playstation.com/en-gb/search/{q}"},
+        {
+            "name": "PlayStation Store",
+            "platform": "ps5",
+            "url": f"https://store.playstation.com/en-gb/search/{q}",
+        },
         {"name": "Xbox", "platform": "xbox", "url": xbox_search_url(q)},
         {"name": "Microsoft Store", "platform": "xbox", "url": microsoft_store_search_url(q)},
-        {"name": "Nintendo eShop UK", "platform": "switch", "url": nint_block.get("search_url") or nintendo_search_url(q)},
+        {
+            "name": "Nintendo eShop UK",
+            "platform": "switch",
+            "url": nint_block.get("search_url") or nintendo_search_url(q),
+        },
     ]
 
-    return {
+    payload = {
         "steam": steam_rows,
         "psn": psn_rows,
         "xbox": xbox_rows,
@@ -121,6 +163,8 @@ def multi_platform_search(
         "query": q,
         "platform": plat,
     }
+    cache.set(cache_key, payload, MPS_TTL)
+    return payload
 
 
 def cheapest_hint(buckets: dict[str, Any]) -> dict[str, Any] | None:

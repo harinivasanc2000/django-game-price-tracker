@@ -5,8 +5,10 @@ Tracked list stays in the side drawer (not on the main screen).
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
 
 from django.contrib import messages
+from django.core.cache import cache
 from django.shortcuts import render
 
 from .clients.public_deals import steam_featured
@@ -15,12 +17,20 @@ from .constants import POPULAR_APP_IDS
 from .fx import to_gbp_or_zero
 from .models import Game, PriceRecord
 
+HOME_CACHE_KEY = "home:cards:v2"
+HOME_CACHE_TTL = 180  # 3 minutes — balances freshness vs Steam rate limits
+
 
 def _steam_cdn_header(app_id: int) -> str:
     return f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg"
 
 
-def _card_from_detail(app_id: int, detail: dict | None, catalog: Game | None) -> dict:
+def _card_from_detail(
+    app_id: int,
+    detail: dict | None,
+    catalog: Game | None,
+    latest_by_game: dict[int, list],
+) -> dict:
     if detail:
         price = detail.get("price")
         currency = detail.get("currency") or "GBP"
@@ -42,12 +52,8 @@ def _card_from_detail(app_id: int, detail: dict | None, catalog: Game | None) ->
 
     lowest_gbp = None
     lowest_label = None
-    if catalog:
-        for r in (
-            PriceRecord.objects.filter(game=catalog)
-            .select_related("store")
-            .order_by("-recorded_at")[:8]
-        ):
+    if catalog and catalog.id in latest_by_game:
+        for r in latest_by_game[catalog.id]:
             if float(r.price) <= 0:
                 continue
             gbp = float(to_gbp_or_zero(r.price, r.currency))
@@ -82,14 +88,33 @@ def _card_from_detail(app_id: int, detail: dict | None, catalog: Game | None) ->
     }
 
 
-def home(request):
-    list(messages.get_messages(request))
-
+def _build_home_payload() -> dict:
     catalogs = {
         g.steam_app_id: g
-        for g in Game.objects.filter(steam_app_id__in=POPULAR_APP_IDS)
+        for g in Game.objects.filter(steam_app_id__in=POPULAR_APP_IDS).only(
+            "id",
+            "steam_app_id",
+            "title",
+            "cover_url",
+            "launch_price",
+            "launch_currency",
+        )
         if g.steam_app_id
     }
+    catalog_ids = [g.id for g in catalogs.values()]
+
+    # One query for recent price rows (avoid N+1)
+    latest_by_game: dict[int, list] = defaultdict(list)
+    if catalog_ids:
+        rows = (
+            PriceRecord.objects.filter(game_id__in=catalog_ids)
+            .select_related("store")
+            .order_by("-recorded_at")[: max(8 * len(catalog_ids), 24)]
+        )
+        for r in rows:
+            bucket = latest_by_game[r.game_id]
+            if len(bucket) < 8:
+                bucket.append(r)
 
     details: dict[int, dict | None] = {}
     public_specials: list = []
@@ -100,7 +125,8 @@ def home(request):
         except Exception:
             return aid, None
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    # Cap workers — popular list is ~12, no need for 12 simultaneous sockets
+    with ThreadPoolExecutor(max_workers=6) as pool:
         futs = [pool.submit(fetch, aid) for aid in POPULAR_APP_IDS]
         f_feat = pool.submit(steam_featured, "GB")
         for fut in as_completed(futs):
@@ -113,7 +139,7 @@ def home(request):
             public_specials = []
 
     cards = [
-        _card_from_detail(aid, details.get(aid), catalogs.get(aid))
+        _card_from_detail(aid, details.get(aid), catalogs.get(aid), latest_by_game)
         for aid in POPULAR_APP_IDS
     ]
 
@@ -122,12 +148,30 @@ def home(request):
         key=lambda c: (-(c.get("savings") or c.get("discount") or 0), c.get("lowest_gbp") or 999),
     )[:6]
 
+    return {
+        "popular_cards": cards,
+        "hot_deals": hot,
+        "public_specials": public_specials,
+    }
+
+
+def home(request):
+    list(messages.get_messages(request))
+
+    payload = cache.get(HOME_CACHE_KEY)
+    if payload is None:
+        try:
+            payload = _build_home_payload()
+        except Exception:
+            payload = {"popular_cards": [], "hot_deals": [], "public_specials": []}
+        cache.set(HOME_CACHE_KEY, payload, HOME_CACHE_TTL)
+
     return render(
         request,
         "games/home.html",
         {
-            "popular_cards": cards,
-            "hot_deals": hot,
-            "public_specials": public_specials,
+            "popular_cards": payload.get("popular_cards") or [],
+            "hot_deals": payload.get("hot_deals") or [],
+            "public_specials": payload.get("public_specials") or [],
         },
     )

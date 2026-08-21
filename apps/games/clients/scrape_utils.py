@@ -18,6 +18,8 @@ from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -27,6 +29,7 @@ DEFAULT_HEADERS = {
     "User-Agent": UA,
     "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-GB,en;q=0.9",
+    "Connection": "keep-alive",
 }
 
 # Prefer lxml if installed; otherwise stdlib html.parser (no extra install).
@@ -38,16 +41,39 @@ try:
 except ImportError:
     pass
 
+# Shared session with connection pooling — fewer TCP handshakes across scrapes.
+_SESSION: requests.Session | None = None
 
-def fetch_html(url: str, timeout: int = 12) -> tuple[str | None, int]:
+
+def _session() -> requests.Session:
+    global _SESSION
+    if _SESSION is None:
+        s = requests.Session()
+        s.headers.update(DEFAULT_HEADERS)
+        retry = Retry(
+            total=1,
+            connect=1,
+            read=1,
+            backoff_factor=0.3,
+            status_forcelist=(502, 503, 504),
+            allowed_methods=frozenset(["GET"]),
+        )
+        adapter = HTTPAdapter(pool_connections=8, pool_maxsize=8, max_retries=retry)
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+        _SESSION = s
+    return _SESSION
+
+
+def fetch_html(url: str, timeout: int = 10) -> tuple[str | None, int]:
     try:
-        r = requests.get(url, headers=DEFAULT_HEADERS, timeout=timeout)
+        r = _session().get(url, timeout=timeout)
     except requests.RequestException:
         return None, 0
     if r.status_code != 200 or not r.text or len(r.text) < 400:
         return None, r.status_code
     low = r.text.lower()
-    if "captcha" in low and "robot" in low:
+    if "captcha" in low and ("robot" in low or "are you a" in low):
         return None, r.status_code
     return r.text, r.status_code
 
