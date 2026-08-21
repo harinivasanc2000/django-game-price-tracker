@@ -8,12 +8,13 @@ from decimal import Decimal
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
 
 from apps.games.cache import cached
 
 STORE_SEARCH = "https://store.steampowered.com/api/storesearch/"
 STORE_DETAILS = "https://store.steampowered.com/api/appdetails"
-USER_AGENT = "GamePriceTracker/0.1 (personal; polite)"
+USER_AGENT = "GamePriceTracker/0.2 (personal; polite)"
 
 SEARCH_ALIASES: dict[str, list[str]] = {
     "gta": ["Grand Theft Auto", "GTA"],
@@ -28,14 +29,44 @@ SEARCH_ALIASES: dict[str, list[str]] = {
     "gow": ["God of War"],
     "yakuza": ["Yakuza", "Like a Dragon"],
     "kiwami": ["Yakuza Kiwami"],
+    "bg3": ["Baldur's Gate 3"],
+    "elden": ["ELDEN RING"],
+    "tlou": ["The Last of Us"],
+    "spider-man": ["Marvel's Spider-Man"],
+    "spiderman": ["Marvel's Spider-Man"],
 }
 
 DLC_HINTS = (
-    "dlc", "soundtrack", "ost", "cosmetic", "skin pack", "weapon pack",
-    "season pass", "expansion pass", "bonus content", "digital artbook",
-    "art book", "wallpapers", "avatar", "theme", "upgrade",
-    "pre-order bonus", "preorder",
+    "dlc",
+    "soundtrack",
+    "ost",
+    "cosmetic",
+    "skin pack",
+    "weapon pack",
+    "season pass",
+    "expansion pass",
+    "bonus content",
+    "digital artbook",
+    "art book",
+    "wallpapers",
+    "avatar",
+    "theme",
+    "upgrade",
+    "pre-order bonus",
+    "preorder",
 )
+
+_SESSION: requests.Session | None = None
+
+
+def _session() -> requests.Session:
+    global _SESSION
+    if _SESSION is None:
+        s = requests.Session()
+        s.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
+        s.mount("https://", HTTPAdapter(pool_connections=6, pool_maxsize=6))
+        _SESSION = s
+    return _SESSION
 
 
 def expand_query(term: str) -> list[str]:
@@ -137,13 +168,13 @@ def _search_store_uncached(term: str, country: str = "GB", limit: int = 30) -> l
     if not queries:
         return []
 
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     merged: dict[int, dict] = {}
+    sess = _session()
 
-    for q in queries[:4]:
+    for q in queries[:3]:
         params = {"term": q, "l": "english", "cc": country.lower()}
         try:
-            r = requests.get(STORE_SEARCH, params=params, headers=headers, timeout=12)
+            r = sess.get(STORE_SEARCH, params=params, timeout=10)
             r.raise_for_status()
             data = r.json()
         except (requests.RequestException, ValueError):
@@ -183,7 +214,7 @@ def _search_store_uncached(term: str, country: str = "GB", limit: int = 30) -> l
 
 
 def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[str, Any]]:
-    key = f"steam:search:{country}:{term.strip().lower()}"
+    key = f"steam:search:v2:{country}:{term.strip().lower()}:{limit}"
     return cached(key, lambda: _search_store_uncached(term, country=country, limit=limit), 300)
 
 
@@ -209,10 +240,8 @@ def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[s
 
 def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any] | None:
     params = {"appids": app_id, "cc": country.lower()}
-    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
-
     try:
-        r = requests.get(STORE_DETAILS, params=params, headers=headers, timeout=15)
+        r = _session().get(STORE_DETAILS, params=params, timeout=12)
         r.raise_for_status()
         data = r.json()
     except (requests.RequestException, ValueError):
@@ -227,10 +256,7 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
     header = app_data.get("header_image") or (
         f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/header.jpg"
     )
-    # Fan/dev-style wide art used as live wallpaper (Steam CDN public assets)
-    library_hero = (
-        f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/library_hero.jpg"
-    )
+    library_hero = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/library_hero.jpg"
     page_bg = app_data.get("background") or ""
     screenshots = []
     for s in (app_data.get("screenshots") or [])[:6]:
@@ -291,8 +317,14 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
         "dlc_ids": app_data.get("dlc") or [],
         "parent_app_id": int(parent_id) if parent_id else None,
         "parent_name": fullgame.get("name") or "",
-        "categories": [c.get("description") for c in (app_data.get("categories") or []) if c.get("description")],
-        "genres": [g.get("description") for g in (app_data.get("genres") or []) if g.get("description")],
+        "categories": [
+            c.get("description")
+            for c in (app_data.get("categories") or [])
+            if c.get("description")
+        ],
+        "genres": [
+            g.get("description") for g in (app_data.get("genres") or []) if g.get("description")
+        ],
         "launch_price_note": (
             "Steam does not expose historic launch MSRP via public API. "
             "We use the current list/initial price as retail baseline."

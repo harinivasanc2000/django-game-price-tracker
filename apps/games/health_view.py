@@ -1,29 +1,46 @@
-"""Simple health / diagnostics endpoint."""
-from django.http import JsonResponse
+"""Lightweight health check for local monitoring."""
+from __future__ import annotations
+
+from django.core.cache import cache
 from django.db import connection
+from django.http import JsonResponse
+from django.utils import timezone
+
+from .models import Game
 
 
 def health(request):
-    db_ok = False
+    ok = True
+    checks: dict = {}
+
+    # DB
     try:
         with connection.cursor() as c:
             c.execute("SELECT 1")
-            db_ok = True
+            c.fetchone()
+        checks["database"] = "ok"
     except Exception as e:
-        return JsonResponse({"ok": False, "db": False, "error": str(e)[:120]}, status=503)
+        checks["database"] = f"error: {e.__class__.__name__}"
+        ok = False
 
-    extras = {}
+    # Cache
     try:
-        from bs4 import BeautifulSoup  # noqa: F401
+        cache.set("health:ping", "1", 10)
+        checks["cache"] = "ok" if cache.get("health:ping") == "1" else "miss"
+    except Exception as e:
+        checks["cache"] = f"error: {e.__class__.__name__}"
+        ok = False
 
-        extras["beautifulsoup4"] = True
-    except ImportError:
-        extras["beautifulsoup4"] = False
     try:
-        import lxml  # noqa: F401
+        checks["tracked_active"] = Game.objects.filter(is_active=True).count()
+    except Exception:
+        checks["tracked_active"] = None
 
-        extras["lxml"] = True
-    except ImportError:
-        extras["lxml"] = False
-
-    return JsonResponse({"ok": True, "db": db_ok, **extras})
+    return JsonResponse(
+        {
+            "status": "ok" if ok else "degraded",
+            "time": timezone.now().isoformat(),
+            "checks": checks,
+        },
+        status=200 if ok else 503,
+    )

@@ -33,12 +33,10 @@ def microsoft_store_search_url(title: str) -> str:
 
 
 def _price_from_sku(sku: dict) -> tuple[Decimal | None, str]:
-    """Extract GBP-ish price from display catalog SKU shape."""
     try:
         avail = (sku.get("Availabilities") or [None])[0] or {}
         order = avail.get("OrderManagementData") or {}
         price = order.get("Price") or {}
-        # ListPrice / MSRP often in major units already for some markets
         amount = price.get("ListPrice")
         if amount is None:
             amount = price.get("MSRP")
@@ -60,7 +58,7 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
                 "query": title,
             },
             headers=headers,
-            timeout=10,
+            timeout=8,
         )
         if r.status_code != 200:
             return []
@@ -68,7 +66,6 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
     except (requests.RequestException, ValueError):
         return []
 
-    # Shape varies: ResultSets / Results / ProductFamilies
     candidates: list[dict] = []
     if isinstance(data, list):
         candidates = [x for x in data if isinstance(x, dict)]
@@ -106,7 +103,6 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
         )
         product_id = str(product_id)
 
-        # Some suggest payloads already include price-ish fields
         price = None
         currency = "GBP"
         for key in ("Price", "DisplayPrice", "ListPrice"):
@@ -123,7 +119,7 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
 
         row: dict[str, Any] = {
             "name": name[:200],
-            "price": price if price is not None else Decimal("0"),
+            "price": price if price is not None else None,
             "currency": currency,
             "product_id": product_id,
             "url": url,
@@ -132,12 +128,10 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
             "image": item.get("ImageUrl") or item.get("Image") or "",
             "has_price": price is not None and price > 0,
         }
-        # Prefer items that look like games
         out.append(row)
         if len(out) >= limit:
             break
 
-    # If we got IDs but no prices, one batched products call (cheap)
     ids = [r["product_id"] for r in out if r.get("product_id") and not r.get("has_price")]
     if ids:
         try:
@@ -149,7 +143,7 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
                     "languages": "en-GB",
                 },
                 headers=headers,
-                timeout=10,
+                timeout=8,
             )
             if pr.status_code == 200:
                 pdata = pr.json() or {}
@@ -167,15 +161,18 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
                         row["price"] = amount
                         row["currency"] = cur
                         row["has_price"] = amount > 0
-                    # title refresh
                     loc = (p.get("LocalizedProperties") or [{}])[0]
                     if loc.get("ProductTitle"):
                         row["name"] = loc["ProductTitle"][:200]
         except (requests.RequestException, ValueError, KeyError):
             pass
 
-    # Drop pure zero-price unknowns from ranking (keep as link-only via has_price flag)
-    out.sort(key=lambda x: (not x.get("has_price"), float(x.get("price") or 9999)))
+    out.sort(
+        key=lambda x: (
+            not x.get("has_price"),
+            float(x["price"]) if x.get("price") is not None else 9999,
+        )
+    )
     return out
 
 
@@ -184,7 +181,7 @@ def search_xbox(title: str, limit: int = 8) -> list[dict[str, Any]]:
     if not title:
         return []
     return cached(
-        f"xbox:search:v1:{title.lower()}",
+        f"xbox:search:v2:{title.lower()}:{limit}",
         lambda: _search_xbox_uncached(title, limit),
         900,
     )

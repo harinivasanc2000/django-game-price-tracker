@@ -37,7 +37,7 @@ def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
     }
 
     try:
-        r = requests.get(url, params=params, headers=headers, timeout=14)
+        r = requests.get(url, params=params, headers=headers, timeout=10)
         r.raise_for_status()
         data = r.json()
     except (requests.RequestException, ValueError):
@@ -54,7 +54,6 @@ def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
 
         name = item.get("name") or sku.get("name") or "PlayStation title"
         content = item.get("game_contentType") or ""
-        # Prefer full games; still include but flag others
         is_full = "full" in content.lower() or content == "Full Game"
 
         price_cents = sku.get("price")
@@ -65,7 +64,6 @@ def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
         if price_cents is not None:
             price = Decimal(price_cents) / 100
         else:
-            # parse £12.99 style
             cleaned = display.replace("£", "").replace(",", "").strip()
             try:
                 price = Decimal(cleaned)
@@ -77,7 +75,6 @@ def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
         playable = (meta.get("playable_platform") or {}).get("values") or []
         platforms = [str(x) for x in playable]
 
-        # Image
         image = ""
         for img in item.get("images") or []:
             if img.get("url"):
@@ -102,7 +99,6 @@ def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
         if len(results) >= limit:
             break
 
-    # Full games first
     results.sort(key=lambda x: (not x["is_full_game"], x["price"]))
     return results
 
@@ -112,7 +108,7 @@ def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
     if not title:
         return []
     return cached(
-        f"psn:search:{title.lower()}",
+        f"psn:search:v2:{title.lower()}:{limit}",
         lambda: _search_psn_uncached(title, limit=limit),
         timeout=600,
     )
