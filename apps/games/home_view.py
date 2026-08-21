@@ -9,6 +9,7 @@ from collections import defaultdict
 
 from django.contrib import messages
 from django.core.cache import cache
+from django.db.models import OuterRef, Subquery
 from django.shortcuts import render
 
 from .clients.public_deals import steam_featured
@@ -103,18 +104,26 @@ def _build_home_payload() -> dict:
     }
     catalog_ids = [g.id for g in catalogs.values()]
 
-    # One query for recent price rows (avoid N+1)
+    # Fetch only each store's current snapshot.  Looking at the most recent
+    # handful of history rows can accidentally advertise an expired sale.
     latest_by_game: dict[int, list] = defaultdict(list)
     if catalog_ids:
+        newest_for_store = (
+            PriceRecord.objects.filter(
+                game_id=OuterRef("game_id"), store_id=OuterRef("store_id")
+            )
+            .order_by("-recorded_at", "-pk")
+            .values("pk")[:1]
+        )
         rows = (
-            PriceRecord.objects.filter(game_id__in=catalog_ids)
+            PriceRecord.objects.filter(
+                game_id__in=catalog_ids, pk=Subquery(newest_for_store)
+            )
             .select_related("store")
-            .order_by("-recorded_at")[: max(8 * len(catalog_ids), 24)]
+            .order_by("-recorded_at")
         )
         for r in rows:
-            bucket = latest_by_game[r.game_id]
-            if len(bucket) < 8:
-                bucket.append(r)
+            latest_by_game[r.game_id].append(r)
 
     details: dict[int, dict | None] = {}
     public_specials: list = []

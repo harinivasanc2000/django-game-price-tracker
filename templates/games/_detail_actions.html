@@ -18,7 +18,10 @@
       <button type="submit" class="btn btn-ghost">Untrack</button>
     </form>
   {% else %}
-    <a class="btn btn-track" href="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">Track</a>
+    <form method="post" action="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-track">Track</button>
+    </form>
   {% endif %}
   <a class="btn btn-ghost" href="{{ d.url }}" target="_blank" rel="noopener">Steam</a>
   <button type="button" class="btn btn-ghost" id="copyLinkBtn">Copy link</button>

@@ -13,7 +13,6 @@ them out (console backend in dev).
 
 from __future__ import annotations
 
-from decimal import Decimal
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
@@ -91,37 +90,32 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
             "https://store.steampowered.com", "Official PC digital",
         )
         status = detail.get("price_status") or "unknown"
-        if status == "unknown" or detail.get("price") is None:
-            price = Decimal("0.00")
-            original = None
-            discount = None
-            notes = f"{detail['name'][:180]} [unknown] @ {timezone.now():%Y-%m-%d}"
-        else:
-            price = detail["price"] or Decimal("0.00")
+        if status != "unknown" and detail.get("price") is not None:
+            # Only persist a zero price when the source explicitly reports a free game.
+            price = detail["price"]
             original = detail.get("original")
             discount = detail.get("discount") or None
             notes = detail["name"][:255]
-
-        rec = PriceRecord.objects.create(
-            game=game,
-            store=steam,
-            price=price,
-            currency=detail.get("currency") or "GBP",
-            original_price=original,
-            discount_percent=discount,
-            url=detail.get("url") or "",
-            is_physical=False,
-            is_used=False,
-            in_stock=True,
-            notes=notes,
-        )
-        _check_watch_targets(
-            game, rec.price, rec.currency, steam.name, rec.url
-        )
+            rec = PriceRecord.objects.create(
+                game=game,
+                store=steam,
+                price=price,
+                currency=detail.get("currency") or "GBP",
+                original_price=original,
+                discount_percent=discount,
+                url=detail.get("url") or "",
+                is_physical=False,
+                is_used=False,
+                in_stock=True,
+                notes=notes,
+            )
+            _check_watch_targets(game, rec.price, rec.currency, steam.name, rec.url)
+            result["steam"] = True
+        else:
+            result["errors"].append("steam price unavailable")
         if detail.get("header_image") and not game.cover_url:
             game.cover_url = detail["header_image"]
             game.save(update_fields=["cover_url", "updated_at"])
-        result["steam"] = True
     else:
         result["errors"].append("steam fetch failed")
 

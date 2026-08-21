@@ -111,7 +111,10 @@
           {% for p in r.platforms %}<span class="badge" style="margin-left:0.2rem;">{{ p }}</span>{% endfor %}
           {% if r.discount %}<span class="badge lowest" style="margin-left:0.2rem;">-{{ r.discount }}%</span>{% endif %}
         </div>
-        <a href="{% url 'games:track_steam' r.app_id %}?cc={{ country }}" style="display:inline-block; margin-top:0.35rem; font-size:0.8rem; padding:0.25rem 0.55rem; border-radius:6px; background: var(--accent); color:#fff; text-decoration:none;">Track</a>
+        <form method="post" action="{% url 'games:track_steam' r.app_id %}?cc={{ country }}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" style="display:inline-block; margin-top:0.35rem; font-size:0.8rem; padding:0.25rem 0.55rem; border:0; border-radius:6px; background: var(--accent); color:#fff; cursor:pointer;">Track</button>
+        </form>
       </div>
       <div style="text-align:right; white-space:nowrap;">
         {% if r.price_status == "paid" %}

@@ -7,7 +7,7 @@ Works without Redis/Celery — useful for local testing:
     python manage.py refresh_prices --game-id 1
 """
 
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from apps.games.models import Game
 from apps.games.tasks import refresh_one_game, refresh_all_tracked_prices
 
@@ -39,7 +39,11 @@ class Command(BaseCommand):
             return
 
         if options["game_id"]:
-            game = Game.objects.get(pk=options["game_id"])
+            # A bad shell argument should be actionable, not a Python traceback.
+            try:
+                game = Game.objects.get(pk=options["game_id"])
+            except Game.DoesNotExist as exc:
+                raise CommandError(f"Tracked game id {options['game_id']} does not exist.") from exc
             r = refresh_one_game(game, country=country)
             self.stdout.write(str(r))
         else:

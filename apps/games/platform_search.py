@@ -105,7 +105,8 @@ def multi_platform_search(
 
     workers = sum([want_steam, want_psn, want_xbox, want_switch]) or 1
     futures = {}
-    with ThreadPoolExecutor(max_workers=min(workers, 4)) as pool:
+    pool = ThreadPoolExecutor(max_workers=min(workers, 4))
+    try:
         if want_steam:
             futures[pool.submit(run_steam)] = "steam"
         if want_psn:
@@ -131,8 +132,13 @@ def multi_platform_search(
                 elif kind == "nint":
                     nint_block = result or nint_block
         except TimeoutError:
-            # Partial results better than hanging the page
+            # Do not use a context manager here: its implicit wait would undo
+            # this timeout by waiting for slow network workers on exit.
             pass
+    finally:
+        # Running requests may finish and warm their own caches, but they must
+        # never hold this web request open after the eight-second budget.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     nint_rows = [_ser(r) for r in (nint_block.get("results") or [])]
 

@@ -199,14 +199,17 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
 
 
 def steam_suggest(request):
-    q = request.GET.get("q", "").strip()
+    # Keep a public endpoint from sending unexpectedly large search strings to Steam.
+    q = request.GET.get("q", "").strip()[:150]
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     if len(q) < 2:
         return JsonResponse({"suggestions": []})
     return JsonResponse({"suggestions": suggest_store(q, country=country, limit=8)})
 
 
+@require_POST
 def track_steam(request, app_id: int):
+    """Add (or reactivate) a Steam game without treating an unknown price as free."""
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     detail = get_app_details(app_id, country=country)
     if not detail:
@@ -230,39 +233,36 @@ def track_steam(request, app_id: int):
     game, _ = Game.objects.update_or_create(steam_app_id=app_id, defaults=defaults)
     ensure_uk_stores()
 
-    store, _ = Store.objects.get_or_create(
-        slug="steam",
-        defaults={
-            "name": "Steam",
-            "website": "https://store.steampowered.com",
-            "store_type": Store.StoreType.OFFICIAL,
-            "country": "GB",
-        },
-    )
-
     status = detail.get("price_status") or "unknown"
-    if status == "unknown" or detail.get("price") is None:
-        price, original, discount = Decimal("0.00"), None, None
-        notes = f"{name[:200]} [price unknown]"
-    else:
-        price = detail["price"] or Decimal("0.00")
+    if status != "unknown" and detail.get("price") is not None:
+        # A £0 record is legitimate only when Steam explicitly marks the game free.
+        store, _ = Store.objects.get_or_create(
+            slug="steam",
+            defaults={
+                "name": "Steam",
+                "website": "https://store.steampowered.com",
+                "store_type": Store.StoreType.OFFICIAL,
+                "country": "GB",
+            },
+        )
+        price = detail["price"]
         original = detail.get("original") or detail.get("list_price")
         discount = detail.get("discount") or None
-        notes = name[:255]
-
-    PriceRecord.objects.create(
-        game=game,
-        store=store,
-        price=price,
-        currency=detail.get("currency") or "GBP",
-        original_price=original,
-        discount_percent=discount,
-        url=detail.get("url") or "",
-        is_physical=False,
-        is_used=False,
-        in_stock=True,
-        notes=notes,
-    )
+        PriceRecord.objects.create(
+            game=game,
+            store=store,
+            price=price,
+            currency=detail.get("currency") or "GBP",
+            original_price=original,
+            discount_percent=discount,
+            url=detail.get("url") or "",
+            is_physical=False,
+            is_used=False,
+            in_stock=True,
+            notes=name[:255],
+        )
+    else:
+        messages.info(request, "Game tracked, but Steam has no current price to save yet.")
 
     try:
         from .tasks import refresh_single_game
@@ -374,10 +374,12 @@ def watch_game(request, slug):
     if target_raw:
         try:
             target = Decimal(target_raw)
-            if target < 0:
+            # Decimal accepts values such as NaN/Infinity, which cannot be a
+            # meaningful watch threshold or reliably fit in the database.
+            if not target.is_finite() or target < 0 or target > Decimal("99999999.99"):
                 raise ValueError
         except Exception:
-            messages.error(request, "Target price must be a positive number.")
+            messages.error(request, "Target price must be a finite zero or positive number.")
             return _redirect_after_watch(game)
     Watch.objects.update_or_create(
         user=request.user,

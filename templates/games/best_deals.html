@@ -65,6 +65,7 @@
           <div style="font-weight:600;">{{ row.game.title }}</div>
           <div style="font-size:0.78rem;color:var(--muted);margin-top:0.15rem;">
             {{ row.store }} · {{ row.recorded_at|date:"d M H:i" }}
+            {% if row.is_stale %} · <span style="color:#fbbf24;">Needs refresh</span>{% endif %}
             {% if row.vs_launch_pct is not None %}
               · <span style="color:{% if row.vs_launch_pct >= 20 %}#86efac{% else %}var(--muted){% endif %}">{{ row.vs_launch_pct }}% under launch</span>
             {% endif %}

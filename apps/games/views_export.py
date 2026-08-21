@@ -5,6 +5,7 @@ import csv
 import io
 
 from django.http import HttpResponse, JsonResponse
+from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
 from .fx import to_gbp_or_zero
@@ -13,14 +14,22 @@ from .models import Game, PriceRecord
 
 def export_tracked_json(request):
     games = list(Game.objects.filter(is_active=True).order_by("title")[:100])
+    game_ids = [game.id for game in games]
+    # One query for all newest rows instead of one query per exported game.
+    newest_price = (
+        PriceRecord.objects.filter(game_id=OuterRef("game_id"))
+        .order_by("-recorded_at", "-pk")
+        .values("pk")[:1]
+    )
+    latest_by_game = {
+        record.game_id: record
+        for record in PriceRecord.objects.filter(
+            game_id__in=game_ids, pk=Subquery(newest_price)
+        ).select_related("store")
+    }
     payload = []
     for g in games:
-        rec = (
-            PriceRecord.objects.filter(game=g)
-            .select_related("store")
-            .order_by("-recorded_at")
-            .first()
-        )
+        rec = latest_by_game.get(g.id)
         item = {
             "title": g.title,
             "slug": g.slug,
@@ -57,7 +66,12 @@ def export_training_csv(request):
     Flat CSV of price snapshots for offline ML (pandas / notebooks).
     Columns are product + public price fields only — no personal data.
     """
-    limit = min(int(request.GET.get("limit", 5000) or 5000), 20000)
+    # Query parameters are user input: malformed or negative limits should not 500.
+    try:
+        limit = int(request.GET.get("limit", 5000) or 5000)
+    except (TypeError, ValueError):
+        limit = 5000
+    limit = max(1, min(limit, 20000))
     qs = (
         PriceRecord.objects.select_related("game", "store")
         .order_by("-recorded_at")[:limit]
