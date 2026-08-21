@@ -1,7 +1,6 @@
 """
-Home page — clean deal-site style.
-No tracked / recently viewed on the main screen (use drawer + History).
-Popular grid with Steam header art + live UK prices + public specials.
+Home page — popular grid + public Steam specials.
+Tracked list stays in the side drawer (not on the main screen).
 """
 from __future__ import annotations
 
@@ -12,23 +11,9 @@ from django.shortcuts import render
 
 from .clients.public_deals import steam_featured
 from .clients.steam import get_app_details
+from .constants import POPULAR_APP_IDS
 from .fx import to_gbp_or_zero
 from .models import Game, PriceRecord
-
-POPULAR_APP_IDS = [
-    1091500,  # Cyberpunk 2077
-    1245620,  # ELDEN RING
-    271590,   # GTA V
-    1174180,  # RDR2
-    1593500,  # God of War
-    1086940,  # Baldur's Gate 3
-    292030,   # Witcher 3
-    1817070,  # Spider-Man Remastered
-    814380,   # Sekiro
-    1888930,  # The Last of Us Part I
-    2050650,  # Resident Evil 4
-    1145360,  # Hades
-]
 
 
 def _steam_cdn_header(app_id: int) -> str:
@@ -58,12 +43,11 @@ def _card_from_detail(app_id: int, detail: dict | None, catalog: Game | None) ->
     lowest_gbp = None
     lowest_label = None
     if catalog:
-        rec = (
+        for r in (
             PriceRecord.objects.filter(game=catalog)
             .select_related("store")
             .order_by("-recorded_at")[:8]
-        )
-        for r in rec:
+        ):
             if float(r.price) <= 0:
                 continue
             gbp = float(to_gbp_or_zero(r.price, r.currency))
