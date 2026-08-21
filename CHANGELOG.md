@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-08-21 18:45 BST — Deal links, graphs + CDKeys/Loaded resilience
+
+### Store links
+- **CDKeys now redirects to Loaded**: replaced the broken automated CDKeys scrape with a clearly labelled **Loaded (CDKeys)** browser-search fallback
+- The fallback does not repeatedly hit the store's Cloudflare challenge; users can still open the live search in a normal browser
+- CheapShark cards in Deals and Buy guide now open the **actual retailer redirect**, instead of silently opening the local comparison page
+- Offer cards with no source URL are no longer fake `#` links
+
+### Price and graph correctness
+- Price graph internal points use ISO timestamps and are sorted chronologically before Chart.js renders them
+- Multiple sellers' history can no longer be grouped by store order or overwrite same-minute points
+- Home / Deals / JSON export use latest per-store/current snapshots; stale tracked offers show **Needs refresh** after seven days
+
+### Reliability
+- External-title cache keys are hashed when required so Memcached-compatible deployments accept spaces, Unicode and punctuation in game names
+- Platform-search workers now return partial results at the timeout instead of waiting again on executor shutdown
+- Steam detail and platform-store bundles now use shared 12s / 10s deadlines; slow or blocked scrapers return their normal search-link fallback instead of freezing the page
+- Added regression coverage for graph order, Loaded fallback, current offers, exports, tracking and alerts
+
+---
+
 ## 2026-08-21 18:35 BST — Performance polish + bug fixes
 
 ### Performance

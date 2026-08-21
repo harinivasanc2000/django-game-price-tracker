@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from decimal import Decimal
 
 from django.http import JsonResponse
@@ -84,28 +84,40 @@ def steam_detail(request, app_id: int):
     similar = []
 
     workers = 3 + (1 if want_pc_deals else 0)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
+    # All optional sources share one response budget. A blocked store must not
+    # prevent the official Steam detail page from rendering.
+    pool = ThreadPoolExecutor(max_workers=workers)
+    try:
         f_plat = pool.submit(platform_bundle, detail["name"], platform)
         f_news = pool.submit(steam_news, app_id, 5)
         f_deals = pool.submit(deals_for_title, detail["name"], 10) if want_pc_deals else None
         f_sim = pool.submit(similar_steam_titles, detail["name"], app_id, country, 4)
-        try:
-            plat = f_plat.result()
-        except Exception:
-            plat = empty_platform_bundle(detail["name"], platform)
-        try:
-            news_items = f_news.result() or []
-        except Exception:
-            news_items = []
-        if f_deals:
+        completed, _ = wait(
+            [future for future in (f_plat, f_news, f_deals, f_sim) if future], timeout=12
+        )
+
+        if f_plat in completed:
+            try:
+                plat = f_plat.result() or plat
+            except Exception:
+                pass
+        if f_news in completed:
+            try:
+                news_items = f_news.result() or []
+            except Exception:
+                pass
+        if f_deals and f_deals in completed:
             try:
                 store_deals = f_deals.result() or []
             except Exception:
-                store_deals = []
-        try:
-            similar = f_sim.result() or []
-        except Exception:
-            similar = []
+                pass
+        if f_sim in completed:
+            try:
+                similar = f_sim.result() or []
+            except Exception:
+                pass
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     digital_links = digital_search_links(detail["name"]) if want_pc_deals else []
     digital_rows: list = []

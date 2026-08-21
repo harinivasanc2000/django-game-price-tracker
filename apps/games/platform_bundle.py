@@ -11,7 +11,7 @@ Light by design: only runs the APIs needed for the selected platform.
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from decimal import Decimal
 from typing import Any
 
@@ -86,22 +86,37 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
         except Exception:
             return {}
 
-    with ThreadPoolExecutor(max_workers=5) as pool:
+    # Store sites can be slow or deliberately challenge bots. Keep the detail
+    # view useful by returning completed sources after one shared deadline.
+    pool = ThreadPoolExecutor(max_workers=5)
+    try:
         f_ps = pool.submit(run_psn) if want_psn else None
         f_xb = pool.submit(run_xbox) if want_xbox else None
         f_ni = pool.submit(run_nint) if want_switch else None
         f_am = pool.submit(run_amz) if want_amazon else None
         f_uk = pool.submit(run_uk) if want_physical else None
-        if f_ps:
-            psn_rows = f_ps.result() or []
-        if f_xb:
-            xbox_rows = f_xb.result() or []
-        if f_ni:
-            nint = f_ni.result() or nint
-        if f_am:
-            amazon = f_am.result() or amazon
-        if f_uk:
-            uk = f_uk.result() or {}
+        completed, _ = wait(
+            [future for future in (f_ps, f_xb, f_ni, f_am, f_uk) if future],
+            timeout=10,
+        )
+
+        def result_if_done(future, fallback):
+            if not future or future not in completed:
+                return fallback
+            try:
+                return future.result() or fallback
+            except Exception:
+                return fallback
+
+        psn_rows = result_if_done(f_ps, [])
+        xbox_rows = result_if_done(f_xb, [])
+        nint = result_if_done(f_ni, nint)
+        amazon = result_if_done(f_am, amazon)
+        uk = result_if_done(f_uk, {})
+    finally:
+        # `wait=False` is essential: a context manager would wait for an
+        # unresponsive retailer after this function's ten-second deadline.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     cex = uk.get("cex") or {}
     ebay = uk.get("ebay") or {}

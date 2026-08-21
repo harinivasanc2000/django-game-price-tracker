@@ -46,7 +46,7 @@
   <div class="sec">Multi-store PC (CheapShark public API)</div>
   <div class="deals-grid">
     {% for d in public_cs %}
-      <a class="deal-card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path %}target="_blank" rel="noopener"{% endif %}>
+      <a class="deal-card" href="{% if d.url %}{{ d.url }}{% else %}{{ d.detail_path }}{% endif %}" {% if d.url %}target="_blank" rel="noopener"{% endif %}>
         <div class="t">{{ d.title }}</div>
         <div class="p">{% if d.price_gbp %}£{{ d.price_gbp|floatformat:2 }}{% else %}{{ d.price }} USD{% endif %}{% if d.discount %} · -{{ d.discount }}%{% endif %}</div>
         <div class="m">{{ d.store_name }} · {{ d.kind }}</div>

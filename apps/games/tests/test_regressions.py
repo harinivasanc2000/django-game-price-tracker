@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from apps.games.models import Game, PriceRecord, Store
 from apps.games.tasks import refresh_one_game
+from apps.games.views import _build_chart_payload
 
 
 class TrackingRegressionTests(TestCase):
@@ -83,6 +84,24 @@ class TrackingRegressionTests(TestCase):
         response = self.client.post(reverse("games:watch", args=[game.slug]), {"target_price": "NaN"})
 
         self.assertRedirects(response, reverse("games:compare", args=[game.slug]), fetch_redirect_response=False)
+
+    def test_chart_orders_history_before_the_live_now_point(self):
+        """Store insertion order must not scramble a multi-seller time series."""
+        game = Game.objects.create(title="Charted", slug="charted", platform=Game.Platform.PC)
+        steam = Store.objects.create(name="Steam", slug="steam")
+        record = PriceRecord.objects.create(game=game, store=steam, price=Decimal("20.00"))
+        PriceRecord.objects.filter(pk=record.pk).update(recorded_at=timezone.now() - timedelta(days=1))
+
+        chart = _build_chart_payload(
+            game,
+            {"price": Decimal("10.00"), "currency": "GBP", "price_status": "paid"},
+            [],
+            None,
+            [], [], [], [],
+        )
+
+        self.assertEqual(chart["labels"][-1], "Now")
+        self.assertEqual(chart["series"]["Steam"], [20.0, 10.0])
 
 
 class ExportRegressionTests(TestCase):

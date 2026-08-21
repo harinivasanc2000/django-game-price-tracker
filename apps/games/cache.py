@@ -9,6 +9,8 @@ Empty / blocked results get a shorter TTL so we retry sooner without hammering.
 
 from __future__ import annotations
 
+import hashlib
+import re
 from typing import Any, Callable, TypeVar
 
 from django.core.cache import cache
@@ -16,6 +18,19 @@ from django.core.cache import cache
 T = TypeVar("T")
 
 EMPTY_TTL = 90  # seconds — soft-fail stores (Amazon/CeX WAF) not re-hit every request
+_MEMCACHE_SAFE_KEY = re.compile(r"^[A-Za-z0-9_.:-]{1,240}$")
+
+
+def _cache_key(key: str) -> str:
+    """Make externally-derived cache keys safe for every Django cache backend.
+
+    Store titles commonly include spaces, Unicode, or punctuation. LocMem
+    accepts them, while Memcached rejects them, so hash only unsafe keys.
+    """
+    key = str(key)
+    if _MEMCACHE_SAFE_KEY.fullmatch(key):
+        return key
+    return "gpt:" + hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
 def _is_empty(value: Any) -> bool:
@@ -34,6 +49,7 @@ def _is_empty(value: Any) -> bool:
 
 def cached(key: str, producer: Callable[[], T], timeout: int = 300) -> T:
     """Return the cached value for `key`, computing it via `producer` on a miss."""
+    key = _cache_key(key)
     value = cache.get(key)
     if value is not None:
         return value

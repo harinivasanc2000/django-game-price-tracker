@@ -131,12 +131,12 @@
         {% if live_offers %}
           <div class="offer-grid" id="offerGrid">
             {% for o in live_offers %}
-              <a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url|default:'#' }}" {% if o.url %}target="_blank" rel="noopener"{% endif %}>
+              {% if o.url %}<a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url }}" target="_blank" rel="noopener">{% else %}<div class="offer-chip {% if forloop.first %}best{% endif %}" aria-disabled="true">{% endif %}
                 <div class="s">{{ o.store }}{% if forloop.first %} · top pick{% endif %}</div>
                 <div class="p">{{ o.price }} {{ o.currency }}</div>
                 {% if o.currency != 'GBP' %}<div class="g">≈ £{{ o.price_gbp }}</div>{% endif %}
                 <span class="kind {{ o.kind }}">{{ o.kind }}</span>
-              </a>
+              {% if o.url %}</a>{% else %}</div>{% endif %}
             {% endfor %}
           </div>
           {% with best=live_offers.0 %}

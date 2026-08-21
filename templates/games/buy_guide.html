@@ -73,7 +73,7 @@
   <div class="sec"><span>Free / giveaways (public aggregator)</span></div>
   <div class="grid">
     {% for d in free_picks %}
-      <a class="card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path %}target="_blank" rel="noopener"{% endif %}>
+      <a class="card" href="{% if d.url %}{{ d.url }}{% else %}{{ d.detail_path }}{% endif %}" {% if d.url %}target="_blank" rel="noopener"{% endif %}>
         <div class="t">{{ d.title }}</div>
         <div class="p">Free</div>
         <div class="m">
@@ -90,7 +90,7 @@
   <div class="sec"><span>Smart multi-store picks (≥40% off)</span></div>
   <div class="grid">
     {% for d in smart_picks %}
-      <a class="card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path %}target="_blank" rel="noopener"{% endif %}>
+      <a class="card" href="{% if d.url %}{{ d.url }}{% else %}{{ d.detail_path }}{% endif %}" {% if d.url %}target="_blank" rel="noopener"{% endif %}>
         <div class="t">{{ d.title }}</div>
         <div class="p">
           {% if d.price_gbp %}£{{ d.price_gbp|floatformat:2 }}{% else %}{{ d.price }} {{ d.currency }}{% endif %}
@@ -127,7 +127,7 @@
   <div class="sec"><span>More PC digital deals</span></div>
   <div class="grid">
     {% for d in multi_store %}
-      <a class="card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path and d.url %}target="_blank" rel="noopener"{% endif %}>
+      <a class="card" href="{% if d.url %}{{ d.url }}{% else %}{{ d.detail_path }}{% endif %}" {% if d.url %}target="_blank" rel="noopener"{% endif %}>
         <div class="t">{{ d.title }}</div>
         <div class="p">
           {% if d.price_gbp %}£{{ d.price_gbp|floatformat:2 }}{% else %}{{ d.price }} USD{% endif %}

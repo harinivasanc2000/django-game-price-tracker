@@ -43,7 +43,9 @@ def digital_search_links(title: str) -> list[dict[str, str]]:
         {"name": "Green Man Gaming", "kind": "retail", "url": f"https://www.greenmangaming.com/search?query={q}"},
         {"name": "GOG", "kind": "official", "url": f"https://www.gog.com/en/games?query={q}"},
         {"name": "Epic Games Store", "kind": "official", "url": f"https://store.epicgames.com/en-US/browse?q={q}&sortBy=relevancy"},
-        {"name": "CDKeys", "kind": "third-party", "url": f"https://www.cdkeys.com/?q={q}"},
+        # CDKeys currently redirects to Loaded. Browser search remains useful,
+        # but its Cloudflare page blocks server-side HTML extraction.
+        {"name": "Loaded (CDKeys)", "kind": "third-party", "url": f"https://www.loaded.com/catalogsearch/result/?q={q}"},
         {"name": "Eneba", "kind": "third-party", "url": f"https://www.eneba.com/store?text={q}"},
         {"name": "AllKeyShop", "kind": "meta", "url": f"https://www.allkeyshop.com/blog/catalogue/search-{q}/"},
         {"name": "GG.deals", "kind": "meta", "url": f"https://gg.deals/games/?title={q}"},
@@ -186,27 +188,10 @@ def try_gog(title: str, limit: int = 5) -> dict[str, Any]:
 
 
 def _try_cdkeys(title: str, limit: int = 5) -> dict[str, Any]:
-    url = f"https://www.cdkeys.com/?q={quote_plus(title)}"
-    out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url)
-    if not html:
-        return _empty(url)
-    soup = soup_from(html)
-    for card in soup.select(".product-item, .product, li.item")[: limit + 12]:
-        a = card.find("a", href=True)
-        name_el = card.find(["h2", "h3", "a", "strong"])
-        name = (name_el or a).get_text(" ", strip=True) if (name_el or a) else ""
-        price_el = card.find(class_=lambda c: c and "price" in str(c).lower())
-        price = parse_money(price_el.get_text() if price_el else card.get_text(" ", strip=True))
-        href = urljoin(url, a["href"]) if a else url
-        row = product_row(name=name, price=price, currency="GBP", url=href, store_name="CDKeys")
-        if row:
-            out["results"].append(row)
-        if len(out["results"]) >= limit:
-            break
-    if not out["results"]:
-        out["blocked"] = True
-    return out
+    # Do not repeatedly trigger Cloudflare challenges. The labelled search URL
+    # is rendered in the UI so a real browser can still open the current store.
+    url = f"https://www.loaded.com/catalogsearch/result/?q={quote_plus(title)}"
+    return _empty(url)
 
 
 def try_cdkeys(title: str, limit: int = 5) -> dict[str, Any]:

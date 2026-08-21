@@ -113,6 +113,11 @@ def _collapse_changes(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]
 
 
 def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows, cex_rows, ebay_rows):
+    """Return chronologically ordered GBP series for Chart.js.
+
+    ISO timestamps are used as internal keys so prices from several stores at
+    the same minute cannot overwrite one another before display labels exist.
+    """
     points: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
     if already:
@@ -122,12 +127,13 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
             .order_by("recorded_at")[:200]
         )
         for h in history:
-            label = h.recorded_at.strftime("%d %b %H:%M")
+            label = h.recorded_at.isoformat()
             gbp = _gbp_point(h.price, h.currency)
             if gbp is not None:
                 points[h.store.name].append((label, gbp))
 
-    now = "Now"
+    # Every live quote belongs to the same final point on the chart.
+    now = timezone.now().isoformat()
     if detail.get("price") is not None and detail.get("price_status") == "paid":
         g = _gbp_point(detail["price"], detail.get("currency") or "GBP")
         if g is not None:
@@ -157,15 +163,9 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
     for seller in list(points.keys()):
         points[seller] = _collapse_changes(points[seller])
 
-    labels: list[str] = []
-    seen = set()
-    for pairs in points.values():
-        for lab, _ in pairs:
-            if lab not in seen:
-                seen.add(lab)
-                labels.append(lab)
+    labels = sorted({lab for pairs in points.values() for lab, _ in pairs})
     if not labels:
-        labels = ["Now"]
+        labels = [now]
 
     series: dict[str, list] = {}
     for seller, pairs in points.items():
@@ -185,10 +185,14 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
             by_lab = {lab: price for lab, price in points.get(seller, [])}
             series[seller] = [by_lab.get(lab) for lab in labels]
 
+    display_labels = [
+        "Now" if label == now else datetime.fromisoformat(label).strftime("%d %b %H:%M")
+        for label in labels
+    ]
     launch_series = [launch for _ in labels] if launch is not None else [None for _ in labels]
     sellers = sorted(series.keys(), key=lambda s: (s != "Steam", s.lower()))
     return {
-        "labels": labels,
+        "labels": display_labels,
         "series": series,
         "average": avg,
         "launch": launch_series,
