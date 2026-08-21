@@ -7,6 +7,7 @@ from . import settings_view
 from . import health_view
 from . import views_steam_detail
 from . import research_view
+from . import buy_guide_view
 
 app_name = "games"
 
@@ -14,6 +15,7 @@ urlpatterns = [
     path("", home_view.home, name="home"),
     path("search/", search_view.steam_search, name="steam_search"),
     path("deals/", views.best_deals, name="best_deals"),
+    path("guide/", buy_guide_view.buy_guide, name="buy_guide"),
     path("research/", research_view.research_lab, name="research"),
     path("settings/", settings_view.appearance_settings, name="appearance"),
     path("health/", health_view.health, name="health"),
