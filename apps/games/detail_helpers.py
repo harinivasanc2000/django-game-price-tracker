@@ -11,6 +11,10 @@ def empty_platform_bundle(title: str = "", platform: str = "") -> dict[str, Any]
     return {
         "platform": platform or "",
         "psn_rows": [],
+        "xbox_rows": [],
+        "nintendo_rows": [],
+        "nintendo_blocked": True,
+        "nintendo_search_url": "",
         "amazon_rows": [],
         "amazon_blocked": True,
         "amazon_search_url": "",
@@ -40,11 +44,10 @@ def similar_steam_titles(
     name = (name or "").strip()
     if len(name) < 3:
         return []
-    # Use a shortened query (first meaningful words) for series matches
-    parts = [p for p in name.replace(":", " ").split() if len(p) > 1][:4]
+    parts = [p for p in name.replace(":", " ").split() if len(p) > 1][:3]
     q = " ".join(parts) if parts else name
     try:
-        rows = search_store(q, country=country, limit=20)
+        rows = search_store(q, country=country, limit=12)
     except Exception:
         return []
     out = []
