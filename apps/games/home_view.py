@@ -1,21 +1,20 @@
 """
 Home page — clean deal-site style.
 No tracked / recently viewed on the main screen (use drawer + History).
-Popular grid with Steam header art + live UK prices.
+Popular grid with Steam header art + live UK prices + public specials.
 """
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from decimal import Decimal
 
 from django.contrib import messages
 from django.shortcuts import render
 
+from .clients.public_deals import steam_featured
 from .clients.steam import get_app_details
 from .fx import to_gbp_or_zero
 from .models import Game, PriceRecord
 
-# Curated popular titles (Steam app IDs) — order = display order
 POPULAR_APP_IDS = [
     1091500,  # Cyberpunk 2077
     1245620,  # ELDEN RING
@@ -56,7 +55,6 @@ def _card_from_detail(app_id: int, detail: dict | None, catalog: Game | None) ->
             app_id
         )
 
-    # Prefer stored PriceRecord if cheaper / more recent multi-store
     lowest_gbp = None
     lowest_label = None
     if catalog:
@@ -73,7 +71,6 @@ def _card_from_detail(app_id: int, detail: dict | None, catalog: Game | None) ->
                 lowest_gbp = gbp
                 lowest_label = r.store.name
 
-    steam_gbp = None
     if status == "paid" and price is not None:
         steam_gbp = float(to_gbp_or_zero(price, currency))
         if lowest_gbp is None or steam_gbp < lowest_gbp:
@@ -111,6 +108,7 @@ def home(request):
     }
 
     details: dict[int, dict | None] = {}
+    public_specials: list = []
 
     def fetch(aid: int):
         try:
@@ -120,16 +118,21 @@ def home(request):
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         futs = [pool.submit(fetch, aid) for aid in POPULAR_APP_IDS]
+        f_feat = pool.submit(steam_featured, "GB")
         for fut in as_completed(futs):
             aid, det = fut.result()
             details[aid] = det
+        try:
+            public_specials = (f_feat.result() or {}).get("specials") or []
+            public_specials = public_specials[:8]
+        except Exception:
+            public_specials = []
 
     cards = [
         _card_from_detail(aid, details.get(aid), catalogs.get(aid))
         for aid in POPULAR_APP_IDS
     ]
 
-    # Hot deals = biggest positive savings vs launch, then discount
     hot = sorted(
         [c for c in cards if (c.get("savings") or 0) > 0 or (c.get("discount") or 0) > 0],
         key=lambda c: (-(c.get("savings") or c.get("discount") or 0), c.get("lowest_gbp") or 999),
@@ -141,5 +144,6 @@ def home(request):
         {
             "popular_cards": cards,
             "hot_deals": hot,
+            "public_specials": public_specials,
         },
     )
