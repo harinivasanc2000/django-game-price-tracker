@@ -18,11 +18,34 @@ from apps.games.cache import cached
 STEAM_NEWS = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
 
 DEAL_KEYWORDS = (
-    "sale", "sales", "discount", "discounts", "deal", "deals", "free",
-    "weekend", "price", "priced", "offer", "offers", "promo", "promotion",
-    "bundle", "% off", "percent off", "half-price", "half price",
-    "launch price", "msrp", "reduced", "cheaper", "giveaway",
-    "free to play", "free weekend", "on sale", "now free",
+    "sale",
+    "sales",
+    "discount",
+    "discounts",
+    "deal",
+    "deals",
+    "free",
+    "weekend",
+    "price",
+    "priced",
+    "offer",
+    "offers",
+    "promo",
+    "promotion",
+    "bundle",
+    "% off",
+    "percent off",
+    "half-price",
+    "half price",
+    "launch price",
+    "msrp",
+    "reduced",
+    "cheaper",
+    "giveaway",
+    "free to play",
+    "free weekend",
+    "on sale",
+    "now free",
 )
 
 
@@ -32,7 +55,6 @@ def _is_deal_related(title: str, summary: str = "") -> bool:
 
 
 def _steam_news_uncached(app_id: int, count: int = 8, deals_only: bool = True) -> list[dict[str, Any]]:
-    # Fetch extra so filtering still fills the sidebar
     fetch_n = max(count * 4, 20) if deals_only else count
     try:
         r = requests.get(
@@ -65,7 +87,6 @@ def _steam_news_uncached(app_id: int, count: int = 8, deals_only: bool = True) -
         if len(out) >= count:
             break
 
-    # If filter was too strict, fall back to a few latest headlines marked as general
     if deals_only and not out:
         for n in items[: min(3, count)]:
             out.append(
@@ -89,10 +110,13 @@ def steam_news(app_id: int, count: int = 6, deals_only: bool = True) -> list[dic
     )
 
 
-def social_news_links(title: str) -> list[dict[str, str]]:
+def social_news_links(title: str, platform: str = "") -> list[dict[str, str]]:
+    """Link-outs only. Platform filter prioritises relevant subreddits."""
     q = quote_plus(title)
-    deal_q = quote_plus(f"{title} (deal OR sale OR discount OR free OR \"on sale\")")
-    return [
+    deal_q = quote_plus(f'{title} (deal OR sale OR discount OR free OR "on sale")')
+    plat = (platform or "").strip().lower()
+
+    links = [
         {
             "name": "X · deals & chatter",
             "url": f"https://x.com/search?q={deal_q}&src=typed_query&f=live",
@@ -105,16 +129,47 @@ def social_news_links(title: str) -> list[dict[str, str]]:
             "name": "HotUKDeals · newest",
             "url": f"https://www.hotukdeals.com/search?q={q}&sort=latest",
         },
-        {
-            "name": "Reddit · r/PS5",
-            "url": f"https://www.reddit.com/r/PS5/search/?q={q}&restrict_sr=1&sort=new",
-        },
-        {
-            "name": "IsThereAnyDeal",
-            "url": f"https://isthereanydeal.com/search/?q={q}",
-        },
-        {
-            "name": "GG.deals",
-            "url": f"https://gg.deals/games/?title={q}",
-        },
     ]
+
+    if plat in ("", "ps4", "ps5"):
+        links.append(
+            {
+                "name": "Reddit · r/PS5",
+                "url": f"https://www.reddit.com/r/PS5/search/?q={q}&restrict_sr=1&sort=new",
+            }
+        )
+    if plat in ("", "xbox"):
+        links.append(
+            {
+                "name": "Reddit · r/XboxGamePass",
+                "url": f"https://www.reddit.com/r/XboxGamePass/search/?q={q}&restrict_sr=1&sort=new",
+            }
+        )
+    if plat in ("", "switch"):
+        links.append(
+            {
+                "name": "Reddit · r/NintendoSwitchDeals",
+                "url": f"https://www.reddit.com/r/NintendoSwitchDeals/search/?q={q}&restrict_sr=1&sort=new",
+            }
+        )
+    if plat in ("", "pc"):
+        links.append(
+            {
+                "name": "Reddit · r/SteamDeals",
+                "url": f"https://www.reddit.com/r/steamdeals/search/?q={q}&restrict_sr=1&sort=new",
+            }
+        )
+
+    links.extend(
+        [
+            {
+                "name": "IsThereAnyDeal",
+                "url": f"https://isthereanydeal.com/search/?q={q}",
+            },
+            {
+                "name": "GG.deals",
+                "url": f"https://gg.deals/games/?title={q}",
+            },
+        ]
+    )
+    return links

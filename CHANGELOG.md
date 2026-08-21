@@ -4,6 +4,25 @@
 
 ---
 
+## 2026-08-21 19:50 BST — Build on matching + deal links
+
+### UK relevance (extends 19:05 title matching)
+- Accessory reject list (controller, DualSense, headset, carry case, docks…)
+- Matched UK rows **sorted by price ascending** so cheapest relevant listing is first
+- Extra regression tests for accessories + sort order
+
+### Deal / social links
+- `social_news_links(title, platform=…)` — platform-aware Reddit links (PS5 / Xbox Game Pass / Switch Deals / Steam Deals)
+- Still link-outs only; HotUKDeals + ITAD + GG.deals kept
+
+```bash
+git pull
+python manage.py test apps.games.tests.test_uk_stores
+python manage.py runserver
+```
+
+---
+
 ## 2026-08-21 19:05 BST — Graph quality + UK BS4 price matching
 
 ### Graphs
@@ -48,77 +67,23 @@
 ## 2026-08-21 18:35 BST — Performance polish + bug fixes
 
 ### Performance
-- **Shared `requests.Session`** + connection pool in `scrape_utils` and Steam client (fewer TCP handshakes)
-- **Home page cache** (3 min) + **single PriceRecord query** (no N+1 per popular card)
-- **Multi-platform search top-level cache** (3 min) with hard 8s parallel timeout → partial results instead of hangs
-- Empty / blocked scrape results cached only **90s** (retry sooner without hammering)
-- Steam search aliases expanded (bg3, elden, tlou, spiderman…); max 3 query expansions
+- **Shared `requests.Session`** + connection pool in `scrape_utils` and Steam client
+- **Home page cache** (3 min) + **single PriceRecord query**
+- **Multi-platform search top-level cache** (3 min) with hard 8s parallel timeout
+- Empty / blocked scrape results cached only **90s**
+- Steam search aliases expanded; max 3 query expansions
 
 ### Bug fixes
-- Cache keys now include **limit** (PSN / Xbox / Nintendo / Steam) — no stale short lists
-- Xbox rows use `price=None` when unknown (not `0`) so ranking stays honest
-- History prune uses proper `datetime.fromisoformat` + aware TZ (was fragile)
-- Track / untrack **busts** tracked drawer + home caches immediately
-- `views.py` slimmed: dead duplicate home/search/detail paths removed; keep track/profile/history/suggest
+- Cache keys include **limit**; Xbox `price=None` when unknown; history prune TZ fix; track/untrack cache bust; slimmed `views.py`
 
 ### Ops
-- `/health/` reports DB + cache + tracked count (503 if degraded)
-
-```bash
-git pull
-python manage.py runserver
-# curl http://127.0.0.1:8000/health/
-```
+- `/health/` reports DB + cache + tracked count
 
 ---
 
 ## 2026-08-21 17:55 BST — Official stores first + full UK local scrapes
 
-### Behaviour
-- **PS4 / PS5:** PlayStation Store (UK) listed and ranked **first**, then local UK shops
-- **Xbox:** Microsoft / Xbox Store **first**, then local
-- **Switch:** Nintendo eShop **first**, then local
-- **PC:** Steam first, then CheapShark / keyshops
-- Offer chips sort: preferred official store → other official → price
-
-### Local UK scraping (public product search only)
-- **Full parallel scrapes:** CeX, eBay, GAME, Argos, Currys, **Smyths Toys** (new)
-- Higher row limits (up to 10–12 on console filters)
-- Always keep clickable search URLs when a site blocks bots
-- No personal seller PII — title, price, public rating, product URL only
-
-### UI
-- Detail panels order: Official digital (PSN / Xbox / Nintendo) → UK physical → Amazon → PC third-party
-- Platform chips show the matching official panel + physical for that platform
-- Search page labels sections with **Official** badges
-
----
-
-## 2026-08-21 07:35 BST — Code cleanup + About + free deals
-
-### For you (readability)
-- **`DEVELOPER.md`** — full map of folders, “I want to change…”, request flow
-- **`apps/games/constants.py`** — `POPULAR_APP_IDS` + platform lists in one place
-- **`urls.py`** — grouped + commented routes
-- **README** rewritten to match the real stack
-- **`run.sh`** updated (seed_launch_prices, useful URLs)
-
-### Features
-- **`/about/`** — pages, keyboard shortcuts, safety, dev pointers
-- **Free / giveaway** section on `/guide/` (CheapShark `upperPrice=0`)
-- Home imports popular IDs from `constants.py` (easier to edit)
-
----
-
-## 2026-08-21 04:35 BST — Buy guide + public Steam / CheapShark feeds
-
-- `/guide/`, Steam specials on home, multi-store deals on `/deals/`
-
----
-
-## 2026-08-21 04:25 BST — Training CSV + detail digital panel
-
-- `/export/training.csv`, digital store panel, similar games
+- Official storefront first per platform; full UK scrapes including Smyths
 
 ---
 

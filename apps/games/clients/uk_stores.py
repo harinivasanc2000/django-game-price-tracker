@@ -28,6 +28,14 @@ from apps.games.clients.scrape_utils import (
     soup_from,
 )
 
+# Hard rejects for UK search noise (controllers, cases, etc.)
+_ACCESSORY_HINTS = (
+    "controller", "dualsense", "dualshock", "gamepad", "headset", "earbud",
+    "carry case", "travel case", "charging dock", "charge station", "thumb grip",
+    "silicone", "skin cover", "screen protector", "stand only", "mount only",
+    "microfibre", "cleaning kit", "battery pack", "power bank",
+)
+
 
 def platform_query(title: str, platform: str = "") -> str:
     t = (title or "").strip()
@@ -123,24 +131,45 @@ def _empty(url: str) -> dict[str, Any]:
 
 def _title_matches(name: str, title: str) -> bool:
     """Reject accessory/unrelated cards from broad retailer search pages."""
-    ignored = {"the", "and", "for", "with", "edition", "game", "ps4", "ps5", "xbox", "pc", "switch"}
+    haystack = (name or "").lower()
+    if any(h in haystack for h in _ACCESSORY_HINTS):
+        # Still allow if the listing is clearly "Game + controller" style bundle
+        # and contains enough title tokens — otherwise drop pure accessories.
+        pass
+
+    ignored = {
+        "the", "and", "for", "with", "edition", "game", "ps4", "ps5",
+        "xbox", "pc", "switch", "nintendo", "playstation", "sony", "microsoft",
+    }
     tokens = [
-        token for token in re.findall(r"[a-z0-9]+", (title or "").lower())
+        token
+        for token in re.findall(r"[a-z0-9]+", (title or "").lower())
         if len(token) > 2 and token not in ignored
     ]
     if not tokens:
         return True
-    haystack = (name or "").lower()
+
     required = 1 if len(tokens) == 1 else 2
-    return sum(token in haystack for token in tokens) >= required
+    hits = sum(token in haystack for token in tokens)
+    if hits < required:
+        return False
+
+    # Pure accessory with weak game signal
+    if any(h in haystack for h in _ACCESSORY_HINTS) and hits < max(required + 1, 2):
+        return False
+    return True
 
 
 def _keep_matching_rows(source: dict[str, Any], title: str) -> dict[str, Any]:
-    """Keep the source contract while discarding weak title matches."""
+    """Keep the source contract while discarding weak title matches; sort by price."""
     source = dict(source or {})
-    source["results"] = [
+    rows = [
         row for row in (source.get("results") or []) if _title_matches(row.get("name", ""), title)
     ]
+    rows.sort(
+        key=lambda r: float(r["price"]) if r.get("price") is not None else 999999.0
+    )
+    source["results"] = rows
     if not source["results"]:
         source["blocked"] = True
     return source
@@ -279,7 +308,6 @@ def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 8) -> dic
         return _empty(url)
     soup = soup_from(html)
 
-    # JSON-LD first (stable when present)
     for script in soup.find_all("script", type="application/ld+json"):
         text = script.string or ""
         for m in re.finditer(
@@ -550,7 +578,6 @@ def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 8) -> 
         currys = result_if_done(f_currys, fallback_urls["Currys"])
         smyths = result_if_done(f_smyths, fallback_urls["Smyths Toys"])
     finally:
-        # A blocked retailer should not make the caller wait beyond eight seconds.
         pool.shutdown(wait=False, cancel_futures=True)
 
     return {
