@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-08-21 17:55 BST — Official stores first + full UK local scrapes
+
+### Behaviour
+- **PS4 / PS5:** PlayStation Store (UK) listed and ranked **first**, then local UK shops
+- **Xbox:** Microsoft / Xbox Store **first**, then local
+- **Switch:** Nintendo eShop **first**, then local
+- **PC:** Steam first, then CheapShark / keyshops
+- Offer chips sort: preferred official store → other official → price
+
+### Local UK scraping (public product search only)
+- **Full parallel scrapes:** CeX, eBay, GAME, Argos, Currys, **Smyths Toys** (new)
+- Higher row limits (up to 10–12 on console filters)
+- Always keep clickable search URLs when a site blocks bots
+- No personal seller PII — title, price, public rating, product URL only
+
+### UI
+- Detail panels order: Official digital (PSN / Xbox / Nintendo) → UK physical → Amazon → PC third-party
+- Platform chips show the matching official panel + physical for that platform
+- Search page labels sections with **Official** badges
+
+```bash
+git pull
+python manage.py runserver
+# Open a game → filter PS5 / Xbox / Switch
+# Compare official price chips vs CeX / GAME / Smyths rows
+```
+
+---
+
 ## 2026-08-21 07:35 BST — Code cleanup + About + free deals
 
 ### For you (readability)
@@ -17,13 +46,6 @@
 - **`/about/`** — pages, keyboard shortcuts, safety, dev pointers
 - **Free / giveaway** section on `/guide/` (CheapShark `upperPrice=0`)
 - Home imports popular IDs from `constants.py` (easier to edit)
-
-```bash
-git pull
-# read DEVELOPER.md
-python manage.py runserver
-# http://127.0.0.1:8000/about/
-```
 
 ---
 

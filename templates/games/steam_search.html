@@ -21,6 +21,10 @@
   }
   .chk { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); }
   .plat-sec { margin: 1.35rem 0 0.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .plat-sec .off {
+    display: inline-block; margin-left: 0.4rem; font-size: 0.65rem; padding: 0.1rem 0.4rem;
+    border-radius: 4px; background: #1a3a2a; color: #86efac; text-transform: none; letter-spacing: 0;
+  }
   .console-row {
     display: flex; justify-content: space-between; gap: 0.75rem; align-items: center;
     padding: 0.65rem 0.85rem; border: 1px solid var(--border); border-radius: 10px;
@@ -43,7 +47,7 @@
 <a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.85rem;">← Home</a>
 <h1 style="font-size: 1.35rem; margin: 0.5rem 0 0.35rem;">Search all platforms</h1>
 <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">
-  Steam (PC), PlayStation, Xbox, Nintendo Switch. Use the platform filter to load only one store family (faster).
+  Official storefronts first (Steam, PSN, Xbox, Nintendo), then open a title for full UK local scrapes (GAME, Smyths, CeX, Argos…).
 </p>
 
 {% include "games/_search_box.html" with q=q placeholder="Search any game…" %}
@@ -69,7 +73,7 @@
 {% endif %}
 
 {% if results %}
-  <div class="plat-sec">Steam / PC</div>
+  <div class="plat-sec">Steam / PC <span class="off">Official</span></div>
   <div class="toolbar">
     <p style="color: var(--muted); margin: 0;">{{ results|length }} match{{ results|length|pluralize }}</p>
     <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
@@ -125,7 +129,7 @@
 {% endif %}
 
 {% if psn_results %}
-  <div class="plat-sec">PlayStation Store (UK)</div>
+  <div class="plat-sec">PlayStation Store (UK) <span class="off">Official</span></div>
   {% for r in psn_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
       <div>
@@ -139,7 +143,7 @@
 {% endif %}
 
 {% if xbox_results %}
-  <div class="plat-sec">Xbox / Microsoft Store</div>
+  <div class="plat-sec">Xbox / Microsoft Store <span class="off">Official</span></div>
   {% for r in xbox_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
       <div><strong>{{ r.name }}</strong></div>
@@ -151,7 +155,7 @@
 {% endif %}
 
 {% if nintendo_results %}
-  <div class="plat-sec">Nintendo Switch (UK)</div>
+  <div class="plat-sec">Nintendo eShop (UK) <span class="off">Official</span></div>
   {% for r in nintendo_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
       <div><strong>{{ r.name }}</strong></div>
@@ -160,11 +164,11 @@
       </div>
     </a>
   {% endfor %}
-{% elif q and nintendo_search_url and current_platform == 'switch' or q and nintendo_blocked and not nintendo_results %}
-  {% if nintendo_search_url %}
-  <div class="plat-sec">Nintendo Switch</div>
+{% elif q and nintendo_search_url %}
+  {% if current_platform == 'switch' or nintendo_blocked %}
+  <div class="plat-sec">Nintendo eShop (UK) <span class="off">Official</span></div>
   <p style="font-size:0.88rem;color:var(--muted);">
-    Live scrape blocked or empty —
+    Live scrape empty or blocked —
     <a href="{{ nintendo_search_url }}" target="_blank" rel="noopener">Search Nintendo eShop UK →</a>
   </p>
   {% endif %}
