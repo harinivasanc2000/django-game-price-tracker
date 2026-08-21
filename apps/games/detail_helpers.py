@@ -33,6 +33,9 @@ def empty_platform_bundle(title: str = "", platform: str = "") -> dict[str, Any]
         "currys_rows": [],
         "currys_blocked": True,
         "currys_search_url": "",
+        "smyths_rows": [],
+        "smyths_blocked": True,
+        "smyths_search_url": "",
         "uk_links": uk_search_links(title, platform=platform) if title else [],
     }
 

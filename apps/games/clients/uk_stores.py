@@ -1,12 +1,14 @@
 """
-UK local / marketplace sources.
+UK local / marketplace sources — full public product search scrapes.
 
 Public product search only (BeautifulSoup):
   - product title, price, public rating aggregates, product link
   - never personal seller PII
 
-Facebook Marketplace / social: search URL only (login wall).
-Many sites block bots → always return search_url for click-through.
+Stores scraped:
+  CeX, eBay UK, GAME, Argos, Currys, Smyths Toys
+Amazon is separate (amazon_uk.py).
+Facebook Marketplace / Gumtree / social: search URL only.
 """
 
 from __future__ import annotations
@@ -71,6 +73,12 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
             "url": f"https://www.currys.co.uk/search?q={qe}",
         },
         {
+            "name": "Smyths Toys",
+            "kind": "retail",
+            "note": "Boxed games / consoles",
+            "url": f"https://www.smythstoys.com/uk/en-gb/search/?text={qe}",
+        },
+        {
             "name": "Amazon UK",
             "kind": "marketplace",
             "note": "New & marketplace",
@@ -81,12 +89,6 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
             "kind": "marketplace",
             "note": "Auction & Buy It Now",
             "url": f"https://www.ebay.co.uk/sch/i.html?_nkw={qe}&_sacat=139973",
-        },
-        {
-            "name": "Smyths Toys",
-            "kind": "retail",
-            "note": "Often strong on boxed games",
-            "url": f"https://www.smythstoys.com/uk/en-gb/search/?text={qe}",
         },
         {
             "name": "Facebook Marketplace",
@@ -119,18 +121,11 @@ def _empty(url: str) -> dict[str, Any]:
     return {"results": [], "blocked": True, "search_url": url}
 
 
-def _safe(fn, *args, **kwargs) -> dict[str, Any]:
-    try:
-        return fn(*args, **kwargs)
-    except Exception:
-        return {"results": [], "blocked": True, "search_url": kwargs.get("url") or ""}
-
-
-def _try_cex_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def _try_cex_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
     url = f"https://uk.webuy.com/search?stext={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url)
+    html, _ = fetch_html(url, timeout=14)
     if not html:
         return _empty(url)
 
@@ -161,7 +156,7 @@ def _try_cex_uncached(title: str, platform: str = "", limit: int = 6) -> dict[st
                 return out
 
     if not out["results"]:
-        for card in soup.select("[class*='product'], [class*='search-product'], .superbox")[: limit + 8]:
+        for card in soup.select("[class*='product'], [class*='search-product'], .superbox")[: limit + 12]:
             name_el = card.find(["h2", "h3", "a"], class_=re.compile(r"name|title", re.I))
             if not name_el:
                 name_el = card.find("a", href=True)
@@ -186,22 +181,22 @@ def _try_cex_uncached(title: str, platform: str = "", limit: int = 6) -> dict[st
     return out
 
 
-def try_cex_search(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def try_cex_search(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return _empty("")
     return cached(
-        f"cex:v2:{title.lower()}:{platform}",
+        f"cex:v3:{title.lower()}:{platform}:{limit}",
         lambda: _try_cex_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
 
-def _try_ebay_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def _try_ebay_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
-    url = f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(q)}&_sacat=139973"
+    url = f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(q)}&_sacat=139973&LH_BIN=1"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url)
+    html, _ = fetch_html(url, timeout=14)
     if not html:
         return _empty(url)
 
@@ -239,26 +234,47 @@ def _try_ebay_uncached(title: str, platform: str = "", limit: int = 6) -> dict[s
     return out
 
 
-def try_ebay_uk(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def try_ebay_uk(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return _empty("")
     return cached(
-        f"ebay:v2:{title.lower()}:{platform}",
+        f"ebay:v3:{title.lower()}:{platform}:{limit}",
         lambda: _try_ebay_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
 
-def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
     url = f"https://www.game.co.uk/en/search?q={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url)
+    html, _ = fetch_html(url, timeout=14)
     if not html:
         return _empty(url)
     soup = soup_from(html)
-    for card in soup.select("article, .product, [data-product], .product-card, li")[: limit + 20]:
+
+    # JSON-LD first (stable when present)
+    for script in soup.find_all("script", type="application/ld+json"):
+        text = script.string or ""
+        for m in re.finditer(
+            r'"name"\s*:\s*"([^"]{3,160})".{0,500}?"price"\s*:\s*"?([0-9.]+)',
+            text,
+            re.DOTALL,
+        ):
+            try:
+                price = Decimal(m.group(2))
+            except InvalidOperation:
+                continue
+            row = product_row(name=m.group(1), price=price, store_name="GAME UK", url=url)
+            if row:
+                out["results"].append(row)
+            if len(out["results"]) >= limit:
+                return out
+
+    for card in soup.select(
+        "article, .product, [data-product], .product-card, li.product, [class*='ProductCard']"
+    )[: limit + 24]:
         a = card.find("a", href=True)
         if not a:
             continue
@@ -281,22 +297,22 @@ def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 6) -> dic
     return out
 
 
-def try_game_uk(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def try_game_uk(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return _empty("")
     return cached(
-        f"gameuk:v2:{title.lower()}:{platform}",
+        f"gameuk:v3:{title.lower()}:{platform}:{limit}",
         lambda: _try_game_uk_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
 
-def _try_argos_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def _try_argos_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
     url = f"https://www.argos.co.uk/search/{quote(q)}/"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url)
+    html, _ = fetch_html(url, timeout=14)
     if not html:
         return _empty(url)
     soup = soup_from(html)
@@ -322,7 +338,9 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 6) -> dict[
             if len(out["results"]) >= limit:
                 return out
 
-    for card in soup.select("[data-test='component-product-card'], article, .ProductCard")[: limit + 10]:
+    for card in soup.select(
+        "[data-test='component-product-card'], article, .ProductCard, [class*='ProductCard']"
+    )[: limit + 14]:
         a = card.find("a", href=True)
         name_el = card.find(["h2", "h3", "span"], class_=re.compile(r"title|name", re.I))
         name = (name_el or a).get_text(" ", strip=True) if (name_el or a) else ""
@@ -340,28 +358,28 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 6) -> dict[
     return out
 
 
-def try_argos(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def try_argos(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return _empty("")
     return cached(
-        f"argos:v1:{title.lower()}:{platform}",
+        f"argos:v2:{title.lower()}:{platform}:{limit}",
         lambda: _try_argos_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
 
-def _try_currys_uncached(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def _try_currys_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
     url = f"https://www.currys.co.uk/search?q={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url)
+    html, _ = fetch_html(url, timeout=14)
     if not html:
         return _empty(url)
     soup = soup_from(html)
     for card in soup.select(
         "[data-component='product-card'], .product, article, [class*='ProductCard']"
-    )[: limit + 12]:
+    )[: limit + 16]:
         a = card.find("a", href=True)
         name_el = card.find(["h2", "h3", "span"], class_=re.compile(r"name|title", re.I))
         name = (name_el or a).get_text(" ", strip=True) if (name_el or a) else ""
@@ -395,20 +413,81 @@ def _try_currys_uncached(title: str, platform: str = "", limit: int = 6) -> dict
     return out
 
 
-def try_currys(title: str, platform: str = "", limit: int = 6) -> dict[str, Any]:
+def try_currys(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return _empty("")
     return cached(
-        f"currys:v1:{title.lower()}:{platform}",
+        f"currys:v2:{title.lower()}:{platform}:{limit}",
         lambda: _try_currys_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
 
-def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 5) -> dict[str, Any]:
+def _try_smyths_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
+    q = platform_query(title, platform)
+    url = f"https://www.smythstoys.com/uk/en-gb/search/?text={quote_plus(q)}"
+    out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
+    html, _ = fetch_html(url, timeout=14)
+    if not html:
+        return _empty(url)
+    soup = soup_from(html)
+
+    for script in soup.find_all("script", type="application/ld+json"):
+        text = script.string or ""
+        for m in re.finditer(
+            r'"name"\s*:\s*"([^"]{3,160})".{0,500}?"price"\s*:\s*"?([0-9.]+)',
+            text,
+            re.DOTALL,
+        ):
+            try:
+                price = Decimal(m.group(2))
+            except InvalidOperation:
+                continue
+            row = product_row(name=m.group(1), price=price, store_name="Smyths Toys", url=url)
+            if row:
+                out["results"].append(row)
+            if len(out["results"]) >= limit:
+                return out
+
+    for card in soup.select(
+        ".product-item, .product, article, [class*='product'], [data-product]"
+    )[: limit + 20]:
+        a = card.find("a", href=True)
+        name_el = card.find(["h2", "h3", "a", "span"], class_=re.compile(r"name|title", re.I))
+        name = (name_el or a).get_text(" ", strip=True) if (name_el or a) else ""
+        if len(name) < 3:
+            continue
+        price_el = card.find(class_=re.compile(r"price", re.I))
+        price = parse_money(price_el.get_text() if price_el else card.get_text(" ", strip=True))
+        href = urljoin(url, a["href"]) if a else url
+        row = product_row(name=name, price=price, store_name="Smyths Toys", url=href)
+        if row:
+            out["results"].append(row)
+        if len(out["results"]) >= limit:
+            break
+
+    if not out["results"]:
+        out["blocked"] = True
+    return out
+
+
+def try_smyths(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
+    title = (title or "").strip()
+    if not title:
+        return _empty("")
+    return cached(
+        f"smyths:v1:{title.lower()}:{platform}:{limit}",
+        lambda: _try_smyths_uncached(title, platform=platform, limit=limit),
+        timeout=1800,
+    )
+
+
+def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
+    """Full parallel scrape of UK local retailers (public search pages)."""
     title = (title or "").strip()
     links = uk_search_links(title, platform)
+    limit = max(4, min(int(limit or 8), 12))
 
     def _wrap(fn):
         def run():
@@ -425,11 +504,13 @@ def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 5) -> 
         f_game = pool.submit(_wrap(try_game_uk))
         f_argos = pool.submit(_wrap(try_argos))
         f_currys = pool.submit(_wrap(try_currys))
+        f_smyths = pool.submit(_wrap(try_smyths))
         cex = f_cex.result()
         ebay = f_ebay.result()
         game = f_game.result()
         argos = f_argos.result()
         currys = f_currys.result()
+        smyths = f_smyths.result()
 
     return {
         "cex": cex,
@@ -437,5 +518,6 @@ def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 5) -> 
         "game": game,
         "argos": argos,
         "currys": currys,
+        "smyths": smyths,
         "uk_links": links,
     }

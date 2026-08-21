@@ -1,10 +1,12 @@
 """
 Fetch store rows for a title + platform filter.
 
-Light by design:
-  - only runs the APIs needed for the selected platform
-  - short result limits
-  - soft-fail each source
+Order philosophy:
+  1. Official digital storefront for the selected platform (PSN / Xbox / Nintendo / Steam)
+  2. UK physical + local retailers (full public-search scrapes)
+  3. Marketplaces
+
+Light by design: only runs the APIs needed for the selected platform.
 """
 
 from __future__ import annotations
@@ -35,13 +37,15 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
     if not title:
         return base
 
+    # Official digital first for the chosen console family
     want_psn = platform in ("", "ps4", "ps5")
     want_xbox = platform in ("", "xbox")
     want_switch = platform in ("", "switch")
-    # Physical UK always useful for discs / gift cards search links
-    want_physical = True
-    # Amazon is heavy / often blocked — only when All or physical-ish platforms
-    want_amazon = platform in ("", "ps4", "ps5", "xbox", "switch")
+    want_physical = True  # always scrape UK locals (user asked for full local scrapes)
+    want_amazon = platform in ("", "ps4", "ps5", "xbox", "switch", "pc")
+
+    # More rows when focused on one console
+    limit = 10 if platform in ("ps4", "ps5", "xbox", "switch") else 8
 
     psn_query = platform_query(title, platform) if platform.startswith("ps") else title
     amz_extra = platform.upper() if platform else ""
@@ -54,35 +58,34 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
 
     def run_psn():
         try:
-            return search_psn(psn_query, limit=6)
+            return search_psn(psn_query, limit=limit)
         except Exception:
             return []
 
     def run_xbox():
         try:
-            return search_xbox(title, limit=6)
+            return search_xbox(title, limit=limit)
         except Exception:
             return []
 
     def run_nint():
         try:
-            return search_nintendo(title, limit=5)
+            return search_nintendo(title, limit=min(limit, 8))
         except Exception:
             return {"results": [], "blocked": True, "search_url": ""}
 
     def run_amz():
         try:
-            return search_amazon_uk(title, amz_extra, 4)
+            return search_amazon_uk(title, amz_extra, limit)
         except Exception:
             return {"results": [], "blocked": True, "search_url": ""}
 
     def run_uk():
         try:
-            return fetch_uk_physical_bundle(title, platform, 4)
+            return fetch_uk_physical_bundle(title, platform, limit)
         except Exception:
             return {}
 
-    jobs = []
     with ThreadPoolExecutor(max_workers=5) as pool:
         f_ps = pool.submit(run_psn) if want_psn else None
         f_xb = pool.submit(run_xbox) if want_xbox else None
@@ -105,6 +108,7 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
     game = uk.get("game") or {}
     argos = uk.get("argos") or {}
     currys = uk.get("currys") or {}
+    smyths = uk.get("smyths") or {}
 
     base.update(
         {
@@ -131,6 +135,9 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
             "currys_rows": [_ser(r) for r in (currys.get("results") or [])],
             "currys_blocked": currys.get("blocked", True),
             "currys_search_url": currys.get("search_url"),
+            "smyths_rows": [_ser(r) for r in (smyths.get("results") or [])],
+            "smyths_blocked": smyths.get("blocked", True),
+            "smyths_search_url": smyths.get("search_url"),
             "uk_links": uk.get("uk_links") or uk_search_links(title, platform=platform),
         }
     )
