@@ -238,7 +238,7 @@
       </div>
 
       <div class="panel" data-plat-group="pc">
-        <h2>Other PC digital</h2>
+        <h2>Other PC digital (CheapShark)</h2>
         <div class="disclaimer">May include keyshops — verify seller & region.</div>
         {% for deal in store_deals %}
           <div class="deal-row">
@@ -252,6 +252,8 @@
           <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No deals.</p>
         {% endfor %}
       </div>
+
+      {% include "games/_digital_store_links.html" %}
     </div>
   </div>
 
@@ -269,6 +271,7 @@
         <p style="padding:0.75rem 0.85rem;color:var(--muted);font-size:0.85rem;">No sale/price headlines right now.</p>
       {% endif %}
     </div>
+    {% include "games/_similar_games.html" %}
     <div class="panel" style="margin-bottom: 0.85rem;">
       <h2>Stay safe</h2>
       <ul class="safe-list">
@@ -362,7 +365,11 @@
   }
 
   function esc(s) {
-    return String(s || '').replace(/&/g,'&').replace(/</g,'<').replace(/"/g,'"');
+    return String(s || '')
+      .replace(/&/g, '&')
+      .replace(/</g, '<')
+      .replace(/>/g, '>')
+      .replace(/"/g, '"');
   }
 
   function rowHtml(name, price, extra, url) {
