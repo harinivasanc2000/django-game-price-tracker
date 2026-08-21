@@ -1,6 +1,62 @@
 <div class="panel" data-plat-group="physical">
-  <h2>UK physical & local</h2>
+  <h2>UK physical &amp; local (scraped)</h2>
   <div id="ukList">
+    {% for row in game_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+          <span class="kind retail">GAME</span>
+        </div>
+        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
+      </div>
+    {% empty %}
+      {% if game_search_url %}
+        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ game_search_url }}" target="_blank" rel="noopener">Search GAME UK →</a></p>
+      {% endif %}
+    {% endfor %}
+
+    {% for row in smyths_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+          <span class="kind retail">Smyths</span>
+        </div>
+        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
+      </div>
+    {% empty %}
+      {% if smyths_search_url %}
+        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ smyths_search_url }}" target="_blank" rel="noopener">Search Smyths Toys →</a></p>
+      {% endif %}
+    {% endfor %}
+
+    {% for row in argos_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+          <span class="kind retail">Argos</span>
+        </div>
+        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
+      </div>
+    {% empty %}
+      {% if argos_search_url %}
+        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ argos_search_url }}" target="_blank" rel="noopener">Search Argos →</a></p>
+      {% endif %}
+    {% endfor %}
+
+    {% for row in currys_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+          <span class="kind retail">Currys</span>
+        </div>
+        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
+      </div>
+    {% empty %}
+      {% if currys_search_url %}
+        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ currys_search_url }}" target="_blank" rel="noopener">Search Currys →</a></p>
+      {% endif %}
+    {% endfor %}
+
     {% for row in cex_rows %}
       <div class="deal-row">
         <div>
@@ -30,57 +86,15 @@
       {% endif %}
     {% endfor %}
 
-    {% for row in game_rows %}
-      <div class="deal-row">
-        <div>
-          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-          <span class="kind official">GAME</span>
-        </div>
-        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
-      </div>
-    {% empty %}
-      {% if game_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ game_search_url }}" target="_blank" rel="noopener">Search GAME UK →</a></p>
-      {% endif %}
-    {% endfor %}
-
-    {% for row in argos_rows %}
-      <div class="deal-row">
-        <div>
-          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-          <span class="kind official">Argos</span>
-        </div>
-        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
-      </div>
-    {% empty %}
-      {% if argos_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ argos_search_url }}" target="_blank" rel="noopener">Search Argos →</a></p>
-      {% endif %}
-    {% endfor %}
-
-    {% for row in currys_rows %}
-      <div class="deal-row">
-        <div>
-          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-          <span class="kind official">Currys</span>
-        </div>
-        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
-      </div>
-    {% empty %}
-      {% if currys_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ currys_search_url }}" target="_blank" rel="noopener">Search Currys →</a></p>
-      {% endif %}
-    {% endfor %}
-
     <div style="padding:0.65rem 1rem 0.35rem;">
-      <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.4rem;">Open store search (always works, even if scrape is blocked):</p>
+      <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.4rem;">Open store search (always works if scrape is blocked):</p>
       <div id="ukLinks">
         {% for link in uk_links %}
           <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener" title="{{ link.note }}">{{ link.name }}</a>
         {% endfor %}
       </div>
       <p style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;padding-bottom:0.75rem;">
-        Facebook Marketplace & Gumtree are <strong>link-only</strong> (login / ToS). Prices from public search pages only.
+        Facebook Marketplace &amp; Gumtree are <strong>link-only</strong>. Prices from public search pages only — no seller personal data.
       </p>
     </div>
   </div>

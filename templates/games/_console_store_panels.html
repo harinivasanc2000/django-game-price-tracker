@@ -1,6 +1,26 @@
-{# Xbox + Nintendo panels for detail page #}
+{# Official digital storefronts — shown first on detail #}
+<div class="panel" data-plat-group="ps">
+  <h2>PlayStation Store (UK) <span class="badge digital">Official</span></h2>
+  <div id="psnList">
+    {% if psn_rows %}
+      {% for row in psn_rows %}
+        <div class="deal-row">
+          <div>
+            <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+            {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.3rem;">Full</span>{% endif %}
+            {% if row.platforms %}<span style="font-size:0.72rem;color:var(--muted);margin-left:0.35rem;">{{ row.platforms|join:", " }}</span>{% endif %}
+          </div>
+          <div class="price-now">{% if row.display_price %}{{ row.display_price }}{% else %}{{ row.price }} {{ row.currency }}{% endif %}</div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No PSN matches for this title.</p>
+    {% endif %}
+  </div>
+</div>
+
 <div class="panel" data-plat-group="xbox">
-  <h2>Xbox / Microsoft Store</h2>
+  <h2>Xbox / Microsoft Store <span class="badge digital">Official</span></h2>
   {% if xbox_rows %}
     {% for row in xbox_rows %}
       <div class="deal-row">
@@ -16,7 +36,7 @@
 </div>
 
 <div class="panel" data-plat-group="switch">
-  <h2>Nintendo Switch (UK)</h2>
+  <h2>Nintendo eShop (UK) <span class="badge digital">Official</span></h2>
   {% if nintendo_rows %}
     {% for row in nintendo_rows %}
       <div class="deal-row">

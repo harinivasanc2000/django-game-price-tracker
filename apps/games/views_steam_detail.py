@@ -1,4 +1,4 @@
-"""Detail page — soft-fail external calls, platform-aware light loading."""
+"""Detail page — official storefronts first, then local UK scrapes."""
 from __future__ import annotations
 
 import json
@@ -18,6 +18,29 @@ from .detail_helpers import empty_platform_bundle, similar_steam_titles
 from .fx import to_gbp_or_zero
 from .models import Game, Watch
 from .platform_bundle import platform_bundle
+
+# Preferred official store name(s) when a platform filter is active.
+_OFFICIAL_FOR_PLATFORM = {
+    "pc": ("Steam",),
+    "ps4": ("PSN UK", "PlayStation Store (UK)"),
+    "ps5": ("PSN UK", "PlayStation Store (UK)"),
+    "xbox": ("Xbox", "Xbox / Microsoft Store"),
+    "switch": ("Nintendo UK", "Nintendo eShop (UK)"),
+}
+
+
+def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
+    """Official storefront for the selected platform first, then by GBP price."""
+    preferred = _OFFICIAL_FOR_PLATFORM.get((platform or "").lower(), ())
+
+    def key(o: dict):
+        store = (o.get("store") or "").strip()
+        is_pref = 0 if store in preferred else 1
+        # When no platform filter: still bias official digital slightly ahead of same price
+        kind_bias = 0 if (not preferred and o.get("kind") == "official") else 1
+        return (is_pref, kind_bias if is_pref else 0, float(o.get("price_gbp") or 9999))
+
+    return sorted(offers, key=key)
 
 
 def platform_deals_api(request, app_id: int):
@@ -55,14 +78,12 @@ def steam_detail(request, app_id: int):
         "id", "launch_price", "launch_currency", "launch_price_source"
     ).first()
 
-    # Light path: no digital BS4 scrapes on detail (links only).
-    # CheapShark only for PC / All. News/similar capped.
     want_pc_deals = platform in ("", "pc")
     store_deals, news_items = [], []
     plat = empty_platform_bundle(detail["name"], platform)
     similar = []
 
-    workers = 2 + (1 if want_pc_deals else 0)
+    workers = 3 + (1 if want_pc_deals else 0)
     with ThreadPoolExecutor(max_workers=workers) as pool:
         f_plat = pool.submit(platform_bundle, detail["name"], platform)
         f_news = pool.submit(steam_news, app_id, 5)
@@ -110,7 +131,9 @@ def steam_detail(request, app_id: int):
         plat.get("ebay_rows") or [],
     )
 
-    live_offers = []
+    live_offers: list[dict] = []
+
+    # --- Official digital first (platform-aware) ---
     if detail.get("price_status") == "paid" and detail.get("price") is not None:
         live_offers.append(
             {
@@ -161,6 +184,8 @@ def steam_detail(request, app_id: int):
                 }
             )
             break
+
+    # --- Then local / marketplace ---
     if amazon_rows:
         live_offers.append(
             {
@@ -173,11 +198,12 @@ def steam_detail(request, app_id: int):
             }
         )
     for key, label, kind in (
-        ("cex_rows", "CeX", "used"),
-        ("ebay_rows", "eBay UK", "marketplace"),
         ("game_rows", "GAME UK", "retail"),
+        ("smyths_rows", "Smyths", "retail"),
         ("argos_rows", "Argos", "retail"),
         ("currys_rows", "Currys", "retail"),
+        ("cex_rows", "CeX", "used"),
+        ("ebay_rows", "eBay UK", "marketplace"),
     ):
         rows = plat.get(key) or []
         if rows:
@@ -204,7 +230,8 @@ def steam_detail(request, app_id: int):
                 "url": store_deals[0].get("url"),
             }
         )
-    live_offers.sort(key=lambda x: float(x["price_gbp"]))
+
+    live_offers = _sort_live_offers(live_offers, platform)
 
     watched = None
     if request.user.is_authenticated and already:
@@ -254,6 +281,9 @@ def steam_detail(request, app_id: int):
             "currys_rows": plat.get("currys_rows") or [],
             "currys_blocked": plat.get("currys_blocked", True),
             "currys_search_url": plat.get("currys_search_url"),
+            "smyths_rows": plat.get("smyths_rows") or [],
+            "smyths_blocked": plat.get("smyths_blocked", True),
+            "smyths_search_url": plat.get("smyths_search_url"),
             "uk_links": plat.get("uk_links") or [],
             "digital_rows": digital_rows,
             "digital_links": digital_links,
