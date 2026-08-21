@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}About · features{% endblock %}
+
+{% block extra_css %}
+<style>
+  .about h1 { font-size: 1.4rem; margin: 0.5rem 0 0.35rem; }
+  .about .lead { color: var(--muted); max-width: 40rem; margin-bottom: 1.2rem; }
+  .about section {
+    background: rgba(18,8,8,0.88); border: 1px solid var(--border);
+    border-radius: 14px; padding: 1rem 1.15rem; margin-bottom: 0.9rem;
+  }
+  .about h2 {
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--muted); margin-bottom: 0.55rem;
+  }
+  .about ul { margin: 0.25rem 0 0 1.1rem; color: var(--muted); font-size: 0.88rem; }
+  .about li { margin-bottom: 0.3rem; }
+  .about strong { color: var(--text); }
+  .about code { background: var(--border); padding: 0.08rem 0.35rem; border-radius: 4px; font-size: 0.8rem; }
+  .about a.btn {
+    display: inline-block; margin: 0.25rem 0.35rem 0.25rem 0; padding: 0.4rem 0.75rem;
+    border-radius: 8px; border: 1px solid var(--border); color: var(--text);
+    text-decoration: none !important; font-size: 0.85rem;
+  }
+  .about a.btn:hover { border-color: var(--accent2); color: var(--accent2); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="about">
+  <a href="{% url 'games:home' %}" style="color:var(--muted);font-size:0.85rem;">← Home</a>
+  <h1>About this tracker</h1>
+  <p class="lead">
+    Personal tool to compare <strong>public</strong> game prices (Steam, multi-store PC, UK shops)
+    and track drops. Not a store. Prices can be wrong or blocked — always confirm on the seller site.
+  </p>
+
+  <section>
+    <h2>Pages</h2>
+    <p style="margin-bottom:0.5rem;">
+      <a class="btn" href="{% url 'games:home' %}">Home</a>
+      <a class="btn" href="{% url 'games:steam_search' %}">Search</a>
+      <a class="btn" href="{% url 'games:best_deals' %}">Deals</a>
+      <a class="btn" href="{% url 'games:buy_guide' %}">Guide</a>
+      <a class="btn" href="{% url 'games:research' %}">Research</a>
+      <a class="btn" href="{% url 'games:appearance' %}">Settings</a>
+      <a class="btn" href="{% url 'games:history' %}">History</a>
+    </p>
+    <ul>
+      <li><strong>Home</strong> — popular titles + live Steam specials</li>
+      <li><strong>Search</strong> — Steam keyword search + autocomplete</li>
+      <li><strong>Detail</strong> — multi-store compare, chart, track, prediction heuristic</li>
+      <li><strong>Guide</strong> — public “what to buy & where”</li>
+      <li><strong>Research</strong> — offline ML plan + CSV export</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Keyboard</h2>
+    <ul>
+      <li><code>/</code> — focus search (anywhere except inside an input)</li>
+      <li><code>Esc</code> — close tracked drawer</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>For developers</h2>
+    <ul>
+      <li>Read <code>DEVELOPER.md</code> in the repo root (file map + “I want to change…” table)</li>
+      <li>Edit popular games: <code>apps/games/constants.py</code></li>
+      <li>New store client: <code>apps/games/clients/</code></li>
+      <li>Changelog: always prepend at the top of <code>CHANGELOG.md</code></li>
+      <li>Exports: <code>/export/tracked.json</code>, <code>/export/training.csv</code>, <code>/health/</code></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Safety</h2>
+    <ul>
+      <li>Prefer official stores when prices are close</li>
+      <li>Keyshops / grey market can be cheaper but riskier</li>
+      <li>Author is not responsible for purchases or losses</li>
+    </ul>
+  </section>
+</div>
+{% endblock %}
