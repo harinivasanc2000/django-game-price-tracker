@@ -3,6 +3,7 @@ Public deal feeds for "what to buy / where".
 
 - Steam store featuredcategories (GB) — specials + top sellers
 - CheapShark /deals — multi-store PC digital with savings %
+- Free / near-free highlights (salePrice ~ 0)
 
 No API keys. Soft-fail + cache.
 """
@@ -22,18 +23,15 @@ STEAM_FEATURED = "https://store.steampowered.com/api/featuredcategories/"
 CHEAPSHARK_DEALS = "https://www.cheapshark.com/api/1.0/deals"
 CHEAPSHARK_STORES = "https://www.cheapshark.com/api/1.0/stores"
 
-
-def _money(cents_or_str) -> Decimal | None:
-    if cents_or_str is None:
-        return None
-    try:
-        # Steam often gives final in minor units when from featured
-        if isinstance(cents_or_str, (int, float)) and cents_or_str > 50:
-            # could be pence or dollars as float string elsewhere
-            pass
-        return Decimal(str(cents_or_str))
-    except (InvalidOperation, ValueError, TypeError):
-        return None
+SAFER_STORES = {
+    "steam",
+    "gog",
+    "humble store",
+    "fanatical",
+    "greenmangaming",
+    "epic games store",
+    "microsoft store",
+}
 
 
 def _steam_featured_uncached(country: str = "GB") -> dict[str, list[dict[str, Any]]]:
@@ -59,7 +57,6 @@ def _steam_featured_uncached(country: str = "GB") -> dict[str, list[dict[str, An
                 app_id = int(app_id)
             except (TypeError, ValueError):
                 continue
-            # final/original often in minor currency units
             final_raw = it.get("final")
             original_raw = it.get("original")
             discount = it.get("discount_percent") or 0
@@ -130,6 +127,49 @@ def cheapshark_stores() -> dict[str, str]:
     return cached("cheapshark:stores:v2", _cheapshark_stores_uncached, 86400)
 
 
+def _row_from_cheapshark_deal(d: dict, stores: dict[str, str]) -> dict[str, Any] | None:
+    title = (d.get("title") or "").strip()
+    if not title:
+        return None
+    try:
+        price = Decimal(str(d.get("salePrice", "0")))
+        retail = Decimal(str(d.get("normalPrice", "0")))
+    except (InvalidOperation, ValueError):
+        return None
+    savings = int(round(float(d.get("savings") or 0)))
+    sid = str(d.get("storeID", ""))
+    store_name = stores.get(sid, f"Store {sid}")
+    deal_id = d.get("dealID") or ""
+    steam_app = d.get("steamAppID")
+    try:
+        steam_app = int(steam_app) if steam_app else None
+    except (TypeError, ValueError):
+        steam_app = None
+    safer = store_name.lower() in SAFER_STORES
+    gbp = float(to_gbp_or_zero(price, "USD")) if price > 0 else 0.0
+    return {
+        "source": "CheapShark",
+        "kind": "official" if safer else "third-party",
+        "app_id": steam_app,
+        "title": title,
+        "price": float(price),
+        "original": float(retail) if retail else None,
+        "currency": "USD",
+        "price_gbp": gbp,
+        "discount": savings,
+        "store_name": store_name,
+        "image": d.get("thumb") or "",
+        "url": f"https://www.cheapshark.com/redirect?dealID={deal_id}" if deal_id else "",
+        "detail_path": f"/steam/{steam_app}/" if steam_app else "",
+        "metacritic": d.get("metacriticScore"),
+        "advice": (
+            "Official / major retailer — good first choice."
+            if safer
+            else "Third-party keyshop — check region & seller reputation before buying."
+        ),
+    }
+
+
 def _cheapshark_top_uncached(limit: int = 24, upper_price: float = 40.0) -> list[dict[str, Any]]:
     stores = cheapshark_stores()
     try:
@@ -156,69 +196,17 @@ def _cheapshark_top_uncached(limit: int = 24, upper_price: float = 40.0) -> list
         title = (d.get("title") or "").strip()
         if not title or title.lower() in seen_titles:
             continue
-        seen_titles.add(title.lower())
         try:
             price = Decimal(str(d.get("salePrice", "0")))
-            retail = Decimal(str(d.get("normalPrice", "0")))
         except (InvalidOperation, ValueError):
             continue
         if price <= 0:
             continue
-        savings = int(round(float(d.get("savings") or 0)))
-        sid = str(d.get("storeID", ""))
-        store_name = stores.get(sid, f"Store {sid}")
-        deal_id = d.get("dealID") or ""
-        steam_app = d.get("steamAppID")
-        try:
-            steam_app = int(steam_app) if steam_app else None
-        except (TypeError, ValueError):
-            steam_app = None
-        gbp = float(to_gbp_or_zero(price, "USD"))
-        is_keyshop = store_name.lower() in {
-            "gamesload",
-            "gamersgate",
-            "voidu",
-            "dlgamer",
-            "wingamestore",
-        }
-        # Humble/Fanatical/GOG/Steam treated as safer retail
-        safer = store_name.lower() in {
-            "steam",
-            "gog",
-            "humble store",
-            "fanatical",
-            "greenmangaming",
-            "epic games store",
-            "microsoft store",
-        }
-        advice = (
-            "Official / major retailer — good first choice."
-            if safer
-            else (
-                "Third-party keyshop — check region & seller reputation before buying."
-                if is_keyshop or not safer
-                else "Compare with Steam before buying."
-            )
-        )
-        out.append(
-            {
-                "source": "CheapShark",
-                "kind": "official" if safer else "third-party",
-                "app_id": steam_app,
-                "title": title,
-                "price": float(price),
-                "original": float(retail) if retail else None,
-                "currency": "USD",
-                "price_gbp": gbp,
-                "discount": savings,
-                "store_name": store_name,
-                "image": d.get("thumb") or "",
-                "url": f"https://www.cheapshark.com/redirect?dealID={deal_id}" if deal_id else "",
-                "detail_path": f"/steam/{steam_app}/" if steam_app else "",
-                "metacritic": d.get("metacriticScore"),
-                "advice": advice,
-            }
-        )
+        row = _row_from_cheapshark_deal(d, stores)
+        if not row:
+            continue
+        seen_titles.add(title.lower())
+        out.append(row)
         if len(out) >= limit:
             break
     return out
@@ -232,18 +220,69 @@ def cheapshark_top_deals(limit: int = 24, upper_price: float = 40.0) -> list[dic
     )
 
 
+def _free_pc_uncached(limit: int = 12) -> list[dict[str, Any]]:
+    """Deals with sale price 0 (giveaways / free-to-claim keys)."""
+    stores = cheapshark_stores()
+    try:
+        r = requests.get(
+            CHEAPSHARK_DEALS,
+            params={
+                "pageSize": 40,
+                "sortBy": "Savings",
+                "desc": 1,
+                "upperPrice": 0,
+                "onSale": 1,
+            },
+            headers={"User-Agent": UA},
+            timeout=14,
+        )
+        r.raise_for_status()
+        rows = r.json() or []
+    except (requests.RequestException, ValueError):
+        return []
+
+    out = []
+    seen = set()
+    for d in rows:
+        title = (d.get("title") or "").strip()
+        if not title or title.lower() in seen:
+            continue
+        try:
+            price = Decimal(str(d.get("salePrice", "1")))
+        except (InvalidOperation, ValueError):
+            continue
+        if price > 0:
+            continue
+        row = _row_from_cheapshark_deal(d, stores)
+        if not row:
+            continue
+        row["price"] = 0.0
+        row["price_gbp"] = 0.0
+        row["advice"] = (
+            "Listed free via aggregator — claim only on official store pages when possible; "
+            "watch for region-locked keys."
+        )
+        seen.add(title.lower())
+        out.append(row)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def free_pc_deals(limit: int = 12) -> list[dict[str, Any]]:
+    return cached(f"cheapshark:free:v1:{limit}", lambda: _free_pc_uncached(limit), 600)
+
+
 def buy_recommendations(
     country: str = "GB",
     limit_steam: int = 10,
     limit_cs: int = 16,
 ) -> dict[str, Any]:
-    """
-    Combined public snapshot for the buy guide page.
-    """
+    """Combined public snapshot for the buy guide page."""
     featured = steam_featured(country=country)
     cs = cheapshark_top_deals(limit=limit_cs)
+    free = free_pc_deals(limit=10)
 
-    # Pick "smart buys": high discount + not pure keyshop first
     smart = sorted(
         [d for d in cs if (d.get("discount") or 0) >= 40],
         key=lambda d: (
@@ -259,5 +298,6 @@ def buy_recommendations(
         "steam_new": (featured.get("new_releases") or [])[:6],
         "multi_store": cs,
         "smart_picks": smart,
+        "free_picks": free,
         "country": country,
     }
