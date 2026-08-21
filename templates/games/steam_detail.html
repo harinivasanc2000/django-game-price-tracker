@@ -95,6 +95,10 @@
   .safe-list { padding: 0.5rem 1rem 0.9rem; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
   .safe-list li { margin: 0.25rem 0 0.25rem 1rem; }
   .kbd-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.5rem; }
+  .deal-filters select, .deal-filters input {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.35rem 0.5rem; font-size: 0.85rem; font-family: inherit;
+  }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -120,13 +124,16 @@
         </div>
         {% endif %}
 
-        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 0.55rem;">Platform filter — official store first, then local UK shops</p>
-        <div class="plat-row" id="platformChips" data-app="{{ app_id }}" data-cc="{{ country }}">
+        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 0.55rem;">Platform + price filters (public stores only, no login)</p>
+        <div class="plat-row" id="platformChips" data-app="{{ app_id }}" data-cc="{{ country }}"
+             data-min="{{ min_price }}" data-max="{{ max_price }}" data-condition="{{ condition }}">
           {% for val, label in store_platforms %}
             <button type="button" data-platform="{{ val }}" class="{% if current_platform == val %}on{% endif %}">{{ label }}</button>
           {% endfor %}
           <button type="button" data-platform="" class="{% if not current_platform %}on{% endif %}">All</button>
         </div>
+
+        {% include "games/_deal_filters.html" with platforms=store_platforms %}
 
         {% if live_offers %}
           <div class="offer-grid" id="offerGrid">
@@ -194,10 +201,7 @@
     {% endif %}
 
     <div id="platformPanels">
-      {# 1. Official digital storefronts first #}
       {% include "games/_console_store_panels.html" %}
-
-      {# 2. UK local scrapes #}
       {% include "games/_uk_physical_panel.html" %}
 
       <div class="panel" data-plat-group="physical">
@@ -222,7 +226,6 @@
         </div>
       </div>
 
-      {# 3. PC third-party #}
       <div class="panel" data-plat-group="pc">
         <h2>Other PC digital (CheapShark)</h2>
         <div class="disclaimer">May include keyshops — verify seller &amp; region.</div>
@@ -340,6 +343,9 @@
   if (!chips) return;
   const appId = chips.dataset.app;
   const cc = chips.dataset.cc || 'GB';
+  const minP = chips.dataset.min || '';
+  const maxP = chips.dataset.max || '';
+  const condition = chips.dataset.condition || '';
   const panels = document.getElementById('platformPanels');
 
   function focusPanels(plat) {
@@ -351,7 +357,6 @@
       else if (plat === 'ps4' || plat === 'ps5') show = (g === 'ps' || g === 'physical');
       else if (plat === 'xbox') show = (g === 'xbox' || g === 'physical');
       else if (plat === 'switch') show = (g === 'switch' || g === 'physical');
-      // All → show everything
       el.classList.toggle('plat-dim', !show);
       el.style.display = show ? '' : 'none';
     });
@@ -379,6 +384,7 @@
         r.name,
         (r.price != null ? r.price + ' ' + (r.currency || 'GBP') : ''),
         ` <span class="kind ${kindClass || ''}">${esc(label)}</span>` +
+          (r.condition ? ` <span class="badge">${esc(r.condition)}</span>` : '') +
           (r.rating ? ` <span class="badge">${esc(r.rating)}★</span>` : ''),
         r.url
       );
@@ -433,6 +439,16 @@
     }
   }
 
+  function filterQs(plat) {
+    const p = new URLSearchParams();
+    p.set('platform', plat || '');
+    p.set('cc', cc);
+    if (minP) p.set('min_price', minP);
+    if (maxP) p.set('max_price', maxP);
+    if (condition) p.set('condition', condition);
+    return p.toString();
+  }
+
   focusPanels('{{ current_platform|default:"" }}');
 
   chips.querySelectorAll('button[data-platform]').forEach(btn => {
@@ -441,11 +457,12 @@
       chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
       focusPanels(plat);
       panels && panels.classList.add('plat-loading');
-      fetch(`/api/platform/${appId}/?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`)
+      const qs = filterQs(plat);
+      fetch(`/api/platform/${appId}/?${qs}`)
         .then(r => r.json())
         .then(data => {
           renderPlatform(data);
-          history.replaceState(null, '', `?platform=${encodeURIComponent(plat)}&cc=${encodeURIComponent(cc)}`);
+          history.replaceState(null, '', `?${qs}`);
         })
         .catch(() => {})
         .finally(() => panels && panels.classList.remove('plat-loading'));
