@@ -1,7 +1,10 @@
-"""Export tracked game prices as JSON."""
+"""Export tracked game prices as JSON / CSV (for offline ML)."""
 from __future__ import annotations
 
-from django.http import JsonResponse
+import csv
+import io
+
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 
 from .fx import to_gbp_or_zero
@@ -47,3 +50,71 @@ def export_tracked_json(request):
         },
         json_dumps_params={"indent": 2},
     )
+
+
+def export_training_csv(request):
+    """
+    Flat CSV of price snapshots for offline ML (pandas / notebooks).
+    Columns are product + public price fields only — no personal data.
+    """
+    limit = min(int(request.GET.get("limit", 5000) or 5000), 20000)
+    qs = (
+        PriceRecord.objects.select_related("game", "store")
+        .order_by("-recorded_at")[:limit]
+    )
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "recorded_at",
+            "game_title",
+            "game_slug",
+            "steam_app_id",
+            "platform",
+            "launch_price",
+            "launch_currency",
+            "store_name",
+            "store_type",
+            "price",
+            "currency",
+            "price_gbp",
+            "original_price",
+            "discount_percent",
+            "is_physical",
+            "is_used",
+            "in_stock",
+            "url",
+        ]
+    )
+    for rec in qs:
+        g = rec.game
+        writer.writerow(
+            [
+                rec.recorded_at.isoformat(),
+                g.title,
+                g.slug,
+                g.steam_app_id or "",
+                g.platform,
+                str(g.launch_price) if g.launch_price is not None else "",
+                g.launch_currency or "GBP",
+                rec.store.name,
+                rec.store.store_type,
+                str(rec.price),
+                rec.currency,
+                f"{float(to_gbp_or_zero(rec.price, rec.currency)):.4f}",
+                str(rec.original_price) if rec.original_price is not None else "",
+                rec.discount_percent if rec.discount_percent is not None else "",
+                int(rec.is_physical),
+                int(rec.is_used),
+                int(rec.in_stock),
+                rec.url or "",
+            ]
+        )
+
+    body = buf.getvalue()
+    resp = HttpResponse(body, content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = (
+        f'attachment; filename="price_training_{timezone.now():%Y%m%d_%H%M}.csv"'
+    )
+    return resp
