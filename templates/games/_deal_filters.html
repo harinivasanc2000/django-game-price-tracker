@@ -1,0 +1,39 @@
+{# Shared deal filters — works without login. Keep params on same page. #}
+<form method="get" class="deal-filters" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:end;margin:0.75rem 0 1rem;">
+  {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+  {% if app_id %}<input type="hidden" name="cc" value="{{ country|default:'GB' }}">{% endif %}
+
+  <label style="font-size:0.78rem;color:var(--muted);">
+    Platform
+    <select name="platform" style="display:block;min-width:7rem;">
+      {% for val, label in platforms %}
+        <option value="{{ val }}" {% if current_platform == val %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label style="font-size:0.78rem;color:var(--muted);">
+    Condition
+    <select name="condition" style="display:block;min-width:7rem;">
+      {% for val, label in condition_choices %}
+        <option value="{{ val }}" {% if condition == val %}selected{% endif %}>{{ label }}</option>
+      {% empty %}
+        <option value="">Any</option>
+        <option value="new" {% if condition == 'new' %}selected{% endif %}>New</option>
+        <option value="used" {% if condition == 'used' %}selected{% endif %}>Used</option>
+      {% endfor %}
+    </select>
+  </label>
+
+  <label style="font-size:0.78rem;color:var(--muted);">
+    Min £
+    <input type="number" name="min_price" min="0" step="0.01" value="{{ min_price }}" placeholder="0" style="display:block;width:5.5rem;">
+  </label>
+
+  <label style="font-size:0.78rem;color:var(--muted);">
+    Max £
+    <input type="number" name="max_price" min="0" step="0.01" value="{{ max_price }}" placeholder="any" style="display:block;width:5.5rem;">
+  </label>
+
+  <button type="submit" class="btn" style="margin-bottom:0.1rem;">Apply filters</button>
+</form>

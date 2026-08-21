@@ -1,11 +1,23 @@
 <div class="panel" data-plat-group="physical">
   <h2>UK physical &amp; local (scraped)</h2>
+
+  {% if min_price or max_price or condition or current_platform %}
+  <p style="padding:0.35rem 1rem 0;font-size:0.78rem;color:var(--muted);">
+    Filters active:
+    {% if current_platform %}<span class="badge">{{ current_platform|upper }}</span>{% endif %}
+    {% if condition %}<span class="badge">{{ condition }}</span>{% endif %}
+    {% if min_price %}<span class="badge">≥ £{{ min_price }}</span>{% endif %}
+    {% if max_price %}<span class="badge">≤ £{{ max_price }}</span>{% endif %}
+  </p>
+  {% endif %}
+
   <div id="ukList">
     {% for row in game_rows %}
       <div class="deal-row">
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
           <span class="kind retail">GAME</span>
+          {% if row.condition %}<span class="badge" style="margin-left:0.2rem;">{{ row.condition }}</span>{% endif %}
         </div>
         <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
       </div>
@@ -76,13 +88,14 @@
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
           <span class="kind marketplace">eBay</span>
+          {% if row.condition %}<span class="badge" style="margin-left:0.2rem;">{{ row.condition }}</span>{% endif %}
           {% if row.rating %}<span class="badge" style="margin-left:0.25rem;">{{ row.rating }}★</span>{% endif %}
         </div>
         <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
       </div>
     {% empty %}
       {% if ebay_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK →</a></p>
+        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK (filtered) →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -94,7 +107,7 @@
         {% endfor %}
       </div>
       <p style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;padding-bottom:0.75rem;">
-        Facebook Marketplace &amp; Gumtree are <strong>link-only</strong>. Prices from public search pages only — no seller personal data.
+        Facebook Marketplace &amp; Gumtree are <strong>link-only</strong>. Prices from public search pages only — no login, no seller personal data.
       </p>
     </div>
   </div>
