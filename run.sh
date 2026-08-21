@@ -14,10 +14,14 @@ source .venv/bin/activate
 pip install -q -r requirements.txt
 
 python manage.py migrate --noinput
-python manage.py seed_pilot
+
+# Optional seed (ignore if command missing)
+python manage.py seed_launch_prices 2>/dev/null || python manage.py seed_pilot 2>/dev/null || true
 
 echo ""
-echo "Starting server at http://127.0.0.1:8000/"
-echo "God of War: http://127.0.0.1:8000/game/god-of-war-ps4/"
+echo "Server:  http://127.0.0.1:8000/"
+echo "Guide:   http://127.0.0.1:8000/guide/"
+echo "About:   http://127.0.0.1:8000/about/"
+echo "Dev map: DEVELOPER.md"
 echo ""
 python manage.py runserver
