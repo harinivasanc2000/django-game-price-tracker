@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}What to buy & where{% endblock %}
+
+{% block extra_css %}
+<style>
+  .guide h1 { font-size: 1.4rem; margin: 0.5rem 0 0.35rem; }
+  .guide .lead { color: var(--muted); font-size: 0.92rem; margin-bottom: 1.1rem; max-width: 42rem; }
+  .guide .sec {
+    margin: 1.4rem 0 0.6rem; font-size: 0.75rem; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--muted); display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .guide .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.65rem;
+  }
+  .guide .card {
+    background: rgba(18,8,8,0.9); border: 1px solid var(--border); border-radius: 12px;
+    padding: 0.75rem 0.85rem; text-decoration: none !important; color: var(--text);
+    display: flex; flex-direction: column; gap: 0.25rem; min-height: 6.5rem;
+  }
+  .guide .card:hover { border-color: var(--accent2); }
+  .guide .card .t { font-weight: 600; font-size: 0.9rem; line-height: 1.25; }
+  .guide .card .p { font-weight: 700; color: var(--accent2); font-size: 1.05rem; }
+  .guide .card .m { font-size: 0.72rem; color: var(--muted); }
+  .guide .card .tip {
+    font-size: 0.72rem; color: #c4b5a0; margin-top: auto; padding-top: 0.35rem;
+    border-top: 1px solid var(--border); line-height: 1.35;
+  }
+  .guide .pill {
+    display: inline-block; font-size: 0.65rem; padding: 0.12rem 0.4rem; border-radius: 4px;
+    margin-right: 0.25rem;
+  }
+  .guide .pill.off { background: #1a3a2a; color: #86efac; }
+  .guide .pill.tp { background: #3a2a1a; color: #fcd34d; }
+  .guide .pill.sale { background: #14532d; color: #86efac; }
+  .guide .banner {
+    padding: 0.75rem 0.9rem; border-radius: 12px; border: 1px solid #5a4020;
+    background: #1a1008; color: #e8c090; font-size: 0.82rem; margin-bottom: 1rem; line-height: 1.4;
+  }
+  .guide .rules {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.55rem;
+    margin-bottom: 1.25rem;
+  }
+  .guide .rule {
+    background: rgba(18,8,8,0.88); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.65rem 0.75rem; font-size: 0.82rem; color: var(--muted);
+  }
+  .guide .rule strong { color: var(--text); display: block; margin-bottom: 0.2rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="guide">
+  <a href="{% url 'games:home' %}" style="color:var(--muted);font-size:0.85rem;">← Home</a>
+  <h1>What to buy & where</h1>
+  <p class="lead">
+    Live public snapshots from <strong>Steam ({{ country }})</strong> and <strong>CheapShark</strong> multi-store PC deals.
+    Use this as a starting map — always confirm the price on the store page.
+  </p>
+
+  <div class="banner">
+    Official stores first when the gap is small. Keyshops can be cheaper but carry region / refund risk.
+    This site is not a shop and does not guarantee any deal.
+  </div>
+
+  <div class="rules">
+    <div class="rule"><strong>1. Check launch / list</strong>Big % off list is a signal — not always the all-time low.</div>
+    <div class="rule"><strong>2. Prefer official</strong>Steam, PSN, GOG, Humble when within a couple of pounds of the cheapest key.</div>
+    <div class="rule"><strong>3. Match the edition</strong>Standard vs Gold vs DLC — open the product page.</div>
+    <div class="rule"><strong>4. Physical UK</strong>CeX / GAME / Amazon for discs; condition matters on used.</div>
+  </div>
+
+  {% if smart_picks %}
+  <div class="sec"><span>Smart multi-store picks (≥40% off)</span></div>
+  <div class="grid">
+    {% for d in smart_picks %}
+      <a class="card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path %}target="_blank" rel="noopener"{% endif %}>
+        <div class="t">{{ d.title }}</div>
+        <div class="p">
+          {% if d.price_gbp %}£{{ d.price_gbp|floatformat:2 }}{% else %}{{ d.price }} {{ d.currency }}{% endif %}
+          {% if d.discount %}<span class="pill sale">-{{ d.discount }}%</span>{% endif %}
+        </div>
+        <div class="m">
+          <span class="pill {% if d.kind == 'official' %}off{% else %}tp{% endif %}">{{ d.kind }}</span>
+          {{ d.store_name }}
+          {% if d.currency == 'USD' %} · ~USD listed{% endif %}
+        </div>
+        <div class="tip">{{ d.advice }}</div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if steam_specials %}
+  <div class="sec"><span>Steam specials (UK feed)</span><a href="https://store.steampowered.com/specials/?cc=gb" target="_blank" rel="noopener" style="color:var(--muted);font-size:0.8rem;text-transform:none;letter-spacing:0;">Open Steam →</a></div>
+  <div class="grid">
+    {% for d in steam_specials %}
+      <a class="card" href="{{ d.detail_path }}">
+        <div class="t">{{ d.title }}</div>
+        <div class="p">
+          {% if d.price is not None %}{{ d.price }} {{ d.currency }}{% else %}See store{% endif %}
+          {% if d.discount %}<span class="pill sale">-{{ d.discount }}%</span>{% endif %}
+        </div>
+        <div class="m"><span class="pill off">official</span> Steam · compare inside tracker</div>
+        <div class="tip">{{ d.advice }}</div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if multi_store %}
+  <div class="sec"><span>More PC digital deals (public API)</span></div>
+  <div class="grid">
+    {% for d in multi_store %}
+      <a class="card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path and d.url %}target="_blank" rel="noopener"{% endif %}>
+        <div class="t">{{ d.title }}</div>
+        <div class="p">
+          {% if d.price_gbp %}£{{ d.price_gbp|floatformat:2 }} <span class="m">(from {{ d.price }} USD)</span>
+          {% else %}{{ d.price }} USD{% endif %}
+          {% if d.discount %}<span class="pill sale">-{{ d.discount }}%</span>{% endif %}
+        </div>
+        <div class="m">
+          <span class="pill {% if d.kind == 'official' %}off{% else %}tp{% endif %}">{{ d.kind }}</span>
+          {{ d.store_name }}
+        </div>
+        <div class="tip">{{ d.advice }}</div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if steam_top %}
+  <div class="sec"><span>Steam top sellers (popularity, not always on sale)</span></div>
+  <div class="grid">
+    {% for d in steam_top %}
+      <a class="card" href="{{ d.detail_path }}">
+        <div class="t">{{ d.title }}</div>
+        <div class="p">{% if d.price is not None %}{{ d.price }} {{ d.currency }}{% else %}See price{% endif %}</div>
+        <div class="m">Steam · open to compare PSN / UK shops</div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if tracked_tips %}
+  <div class="sec"><span>From your tracked list</span><a href="{% url 'games:best_deals' %}" style="color:var(--muted);font-size:0.8rem;text-transform:none;letter-spacing:0;">All tracked →</a></div>
+  <div class="grid">
+    {% for t in tracked_tips %}
+      <a class="card" href="{% if t.app_id %}{% url 'games:steam_detail' t.app_id %}{% else %}{% url 'games:compare' t.slug %}{% endif %}">
+        <div class="t">{{ t.title }}</div>
+        <div class="p">£{{ t.price_gbp|floatformat:2 }}</div>
+        <div class="m">{{ t.store }}{% if t.vs_launch is not None %} · {{ t.vs_launch }}% under launch{% endif %}</div>
+        <div class="tip">Your latest snapshot — hit Track / refresh for fresher data.</div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not smart_picks and not steam_specials and not multi_store %}
+    <p style="color:var(--muted);">Could not load public feeds right now. Try again in a minute or open Search.</p>
+  {% endif %}
+</div>
+{% endblock %}
