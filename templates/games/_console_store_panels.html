@@ -1,0 +1,38 @@
+{# Xbox + Nintendo panels for detail page #}
+<div class="panel" data-plat-group="xbox">
+  <h2>Xbox / Microsoft Store</h2>
+  {% if xbox_rows %}
+    {% for row in xbox_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+        </div>
+        <div class="price-now">{% if row.has_price %}{{ row.price }} {{ row.currency }}{% else %}See store{% endif %}</div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No Xbox matches — try Search with platform filter Xbox.</p>
+  {% endif %}
+</div>
+
+<div class="panel" data-plat-group="switch">
+  <h2>Nintendo Switch (UK)</h2>
+  {% if nintendo_rows %}
+    {% for row in nintendo_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+        </div>
+        <div class="price-now">{% if row.has_price %}{{ row.price }} {{ row.currency }}{% else %}See store{% endif %}</div>
+      </div>
+    {% endfor %}
+  {% else %}
+    <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">
+      {% if nintendo_search_url %}
+        <a href="{{ nintendo_search_url }}" target="_blank" rel="noopener">Search Nintendo eShop UK →</a>
+      {% else %}
+        No Switch matches.
+      {% endif %}
+    </p>
+  {% endif %}
+</div>
