@@ -1,14 +1,8 @@
 """
-UK local / marketplace sources — full public product search scrapes.
+UK local / marketplace sources — public product search (no login).
 
-Public product search only (BeautifulSoup):
-  - product title, price, public rating aggregates, product link
-  - never personal seller PII
-
-Stores scraped:
-  CeX, eBay UK, GAME, Argos, Currys, Smyths Toys
-Amazon is separate (amazon_uk.py).
-Facebook Marketplace / Gumtree / social: search URL only.
+BeautifulSoup scrapes + URL-level filters where the site supports them
+(e.g. eBay BIN, condition, price band). Soft-fail → search_url always kept.
 """
 
 from __future__ import annotations
@@ -20,6 +14,7 @@ from typing import Any
 from urllib.parse import quote_plus, quote, urljoin
 
 from apps.games.cache import cached
+from apps.games.clients.scrape_filters import filter_source_dict, parse_price_bound
 from apps.games.clients.scrape_utils import (
     fetch_html,
     parse_money,
@@ -28,7 +23,6 @@ from apps.games.clients.scrape_utils import (
     soup_from,
 )
 
-# Hard rejects for UK search noise (controllers, cases, etc.)
 _ACCESSORY_HINTS = (
     "controller", "dualsense", "dualshock", "gamepad", "headset", "earbud",
     "carry case", "travel case", "charging dock", "charge station", "thumb grip",
@@ -52,9 +46,31 @@ def platform_query(title: str, platform: str = "") -> str:
     return t
 
 
-def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
+def uk_search_links(
+    title: str,
+    platform: str = "",
+    *,
+    min_price: str | Decimal | None = None,
+    max_price: str | Decimal | None = None,
+    condition: str = "",
+) -> list[dict[str, str]]:
     q = platform_query(title, platform)
     qe = quote_plus(q)
+    lo = parse_price_bound(str(min_price) if min_price is not None else None)
+    hi = parse_price_bound(str(max_price) if max_price is not None else None)
+    cond = (condition or "").strip().lower()
+
+    # eBay public filter params (no login)
+    ebay = f"https://www.ebay.co.uk/sch/i.html?_nkw={qe}&_sacat=139973&LH_BIN=1&_sop=15"
+    if lo is not None:
+        ebay += f"&_udlo={lo}"
+    if hi is not None:
+        ebay += f"&_udhi={hi}"
+    if cond == "new":
+        ebay += "&LH_ItemCondition=1000"
+    elif cond == "used":
+        ebay += "&LH_ItemCondition=3000"
+
     return [
         {
             "name": "CeX",
@@ -95,8 +111,8 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
         {
             "name": "eBay UK",
             "kind": "marketplace",
-            "note": "Auction & Buy It Now",
-            "url": f"https://www.ebay.co.uk/sch/i.html?_nkw={qe}&_sacat=139973",
+            "note": "Buy It Now · filtered",
+            "url": ebay,
         },
         {
             "name": "Facebook Marketplace",
@@ -110,18 +126,6 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
             "note": "UK classifieds",
             "url": f"https://www.gumtree.com/search?search_category=games&q={qe}",
         },
-        {
-            "name": "X / Twitter",
-            "kind": "social",
-            "note": "Deal chatter",
-            "url": f"https://x.com/search?q={quote_plus(q + ' game deal OR sale')}&f=live",
-        },
-        {
-            "name": "Reddit",
-            "kind": "social",
-            "note": "Community deals",
-            "url": f"https://www.reddit.com/search/?q={qe}&type=link",
-        },
     ]
 
 
@@ -130,13 +134,7 @@ def _empty(url: str) -> dict[str, Any]:
 
 
 def _title_matches(name: str, title: str) -> bool:
-    """Reject accessory/unrelated cards from broad retailer search pages."""
     haystack = (name or "").lower()
-    if any(h in haystack for h in _ACCESSORY_HINTS):
-        # Still allow if the listing is clearly "Game + controller" style bundle
-        # and contains enough title tokens — otherwise drop pure accessories.
-        pass
-
     ignored = {
         "the", "and", "for", "with", "edition", "game", "ps4", "ps5",
         "xbox", "pc", "switch", "nintendo", "playstation", "sony", "microsoft",
@@ -148,38 +146,56 @@ def _title_matches(name: str, title: str) -> bool:
     ]
     if not tokens:
         return True
-
     required = 1 if len(tokens) == 1 else 2
     hits = sum(token in haystack for token in tokens)
     if hits < required:
         return False
-
-    # Pure accessory with weak game signal
     if any(h in haystack for h in _ACCESSORY_HINTS) and hits < max(required + 1, 2):
         return False
     return True
 
 
 def _keep_matching_rows(source: dict[str, Any], title: str) -> dict[str, Any]:
-    """Keep the source contract while discarding weak title matches; sort by price."""
     source = dict(source or {})
-    rows = [
+    source["results"] = [
         row for row in (source.get("results") or []) if _title_matches(row.get("name", ""), title)
     ]
-    rows.sort(
-        key=lambda r: float(r["price"]) if r.get("price") is not None else 999999.0
-    )
-    source["results"] = rows
     if not source["results"]:
         source["blocked"] = True
     return source
+
+
+def _ebay_search_url(
+    title: str,
+    platform: str = "",
+    *,
+    min_price: Decimal | None = None,
+    max_price: Decimal | None = None,
+    condition: str = "",
+) -> str:
+    q = platform_query(title, platform)
+    # Public filters: category Video Games, Buy It Now, price low→high
+    url = (
+        f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(q)}"
+        f"&_sacat=139973&LH_BIN=1&_sop=15"
+    )
+    if min_price is not None:
+        url += f"&_udlo={min_price}"
+    if max_price is not None:
+        url += f"&_udhi={max_price}"
+    cond = (condition or "").strip().lower()
+    if cond == "new":
+        url += "&LH_ItemCondition=1000"
+    elif cond == "used":
+        url += "&LH_ItemCondition=3000"
+    return url
 
 
 def _try_cex_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
     url = f"https://uk.webuy.com/search?stext={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url, timeout=14)
+    html, _ = fetch_html(url, timeout=12)
     if not html:
         return _empty(url)
 
@@ -205,6 +221,7 @@ def _try_cex_uncached(title: str, platform: str = "", limit: int = 8) -> dict[st
                 name=m.group(1), price=price, store_name="CeX", url=href, is_used=True
             )
             if row:
+                row["condition"] = "used"
                 out["results"].append(row)
             if len(out["results"]) >= limit:
                 return out
@@ -226,6 +243,7 @@ def _try_cex_uncached(title: str, platform: str = "", limit: int = 8) -> dict[st
                 href = urljoin(url, name_el["href"])
             row = product_row(name=name, price=price, store_name="CeX", url=href, is_used=True)
             if row:
+                row["condition"] = "used"
                 out["results"].append(row)
             if len(out["results"]) >= limit:
                 break
@@ -240,17 +258,26 @@ def try_cex_search(title: str, platform: str = "", limit: int = 8) -> dict[str, 
     if not title:
         return _empty("")
     return cached(
-        f"cex:v3:{title.lower()}:{platform}:{limit}",
+        f"cex:v4:{title.lower()}:{platform}:{limit}",
         lambda: _try_cex_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
 
-def _try_ebay_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
-    q = platform_query(title, platform)
-    url = f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(q)}&_sacat=139973&LH_BIN=1"
+def _try_ebay_uncached(
+    title: str,
+    platform: str = "",
+    limit: int = 8,
+    *,
+    min_price: Decimal | None = None,
+    max_price: Decimal | None = None,
+    condition: str = "",
+) -> dict[str, Any]:
+    url = _ebay_search_url(
+        title, platform, min_price=min_price, max_price=max_price, condition=condition
+    )
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url, timeout=14)
+    html, _ = fetch_html(url, timeout=12)
     if not html:
         return _empty(url)
 
@@ -270,15 +297,33 @@ def _try_ebay_uncached(title: str, platform: str = "", limit: int = 8) -> dict[s
         rating_el = item.select_one(".s-item__seller-info-text, .x-star-rating")
         if rating_el:
             rating = parse_rating(rating_el.get_text(" ", strip=True))
+
+        # Condition from subtitle / secondary text when present
+        subtitle = ""
+        sub_el = item.select_one(".SECONDARY_INFO, .s-item__subtitle, .s-item__caption")
+        if sub_el:
+            subtitle = sub_el.get_text(" ", strip=True)
+        blob = f"{name} {subtitle}".lower()
+        is_used = any(
+            x in blob for x in ("pre-owned", "preowned", "used", "refurbished")
+        )
+        is_new = any(x in blob for x in ("brand new", "new", "sealed")) and not is_used
+
         row = product_row(
             name=name,
             price=price,
             store_name="eBay UK",
             url=href.split("?")[0],
             rating=rating,
-            is_used=True,
+            is_used=is_used,
         )
         if row:
+            if is_used:
+                row["condition"] = "used"
+            elif is_new:
+                row["condition"] = "new"
+            else:
+                row["condition"] = "unknown"
             out["results"].append(row)
         if len(out["results"]) >= limit:
             break
@@ -288,13 +333,31 @@ def _try_ebay_uncached(title: str, platform: str = "", limit: int = 8) -> dict[s
     return out
 
 
-def try_ebay_uk(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
+def try_ebay_uk(
+    title: str,
+    platform: str = "",
+    limit: int = 8,
+    *,
+    min_price: Decimal | None = None,
+    max_price: Decimal | None = None,
+    condition: str = "",
+) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return _empty("")
+    lo = str(min_price) if min_price is not None else ""
+    hi = str(max_price) if max_price is not None else ""
+    cond = (condition or "").strip().lower()
     return cached(
-        f"ebay:v3:{title.lower()}:{platform}:{limit}",
-        lambda: _try_ebay_uncached(title, platform=platform, limit=limit),
+        f"ebay:v4:{title.lower()}:{platform}:{limit}:{lo}:{hi}:{cond}",
+        lambda: _try_ebay_uncached(
+            title,
+            platform=platform,
+            limit=limit,
+            min_price=min_price,
+            max_price=max_price,
+            condition=condition,
+        ),
         timeout=1800,
     )
 
@@ -303,7 +366,7 @@ def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 8) -> dic
     q = platform_query(title, platform)
     url = f"https://www.game.co.uk/en/search?q={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url, timeout=14)
+    html, _ = fetch_html(url, timeout=12)
     if not html:
         return _empty(url)
     soup = soup_from(html)
@@ -355,7 +418,7 @@ def try_game_uk(title: str, platform: str = "", limit: int = 8) -> dict[str, Any
     if not title:
         return _empty("")
     return cached(
-        f"gameuk:v3:{title.lower()}:{platform}:{limit}",
+        f"gameuk:v4:{title.lower()}:{platform}:{limit}",
         lambda: _try_game_uk_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -365,7 +428,7 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 8) -> dict[
     q = platform_query(title, platform)
     url = f"https://www.argos.co.uk/search/{quote(q)}/"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url, timeout=14)
+    html, _ = fetch_html(url, timeout=12)
     if not html:
         return _empty(url)
     soup = soup_from(html)
@@ -416,7 +479,7 @@ def try_argos(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     if not title:
         return _empty("")
     return cached(
-        f"argos:v2:{title.lower()}:{platform}:{limit}",
+        f"argos:v3:{title.lower()}:{platform}:{limit}",
         lambda: _try_argos_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -426,7 +489,7 @@ def _try_currys_uncached(title: str, platform: str = "", limit: int = 8) -> dict
     q = platform_query(title, platform)
     url = f"https://www.currys.co.uk/search?q={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url, timeout=14)
+    html, _ = fetch_html(url, timeout=12)
     if not html:
         return _empty(url)
     soup = soup_from(html)
@@ -471,7 +534,7 @@ def try_currys(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]
     if not title:
         return _empty("")
     return cached(
-        f"currys:v2:{title.lower()}:{platform}:{limit}",
+        f"currys:v3:{title.lower()}:{platform}:{limit}",
         lambda: _try_currys_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -481,7 +544,7 @@ def _try_smyths_uncached(title: str, platform: str = "", limit: int = 8) -> dict
     q = platform_query(title, platform)
     url = f"https://www.smythstoys.com/uk/en-gb/search/?text={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
-    html, _ = fetch_html(url, timeout=14)
+    html, _ = fetch_html(url, timeout=12)
     if not html:
         return _empty(url)
     soup = soup_from(html)
@@ -530,24 +593,40 @@ def try_smyths(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]
     if not title:
         return _empty("")
     return cached(
-        f"smyths:v1:{title.lower()}:{platform}:{limit}",
+        f"smyths:v2:{title.lower()}:{platform}:{limit}",
         lambda: _try_smyths_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
 
-def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
-    """Full parallel scrape of UK local retailers (public search pages)."""
+def fetch_uk_physical_bundle(
+    title: str,
+    platform: str = "",
+    limit: int = 8,
+    *,
+    min_price: Decimal | None = None,
+    max_price: Decimal | None = None,
+    condition: str = "",
+) -> dict[str, Any]:
+    """Parallel public scrapes + shared filters (price / condition / platform)."""
     title = (title or "").strip()
-    links = uk_search_links(title, platform)
+    links = uk_search_links(
+        title, platform, min_price=min_price, max_price=max_price, condition=condition
+    )
     limit = max(4, min(int(limit or 8), 12))
+    cond = (condition or "").strip().lower()
 
     fallback_urls = {link["name"]: link["url"] for link in links}
 
-    def _wrap(fn, fallback_url: str):
+    def _wrap(fn, fallback_url: str, **extra):
         def run():
             try:
-                return fn(title, platform, limit)
+                return fn(title, platform, limit, **extra) if extra else fn(title, platform, limit)
+            except TypeError:
+                try:
+                    return fn(title, platform, limit)
+                except Exception:
+                    return _empty(fallback_url)
             except Exception:
                 return _empty(fallback_url)
 
@@ -556,7 +635,15 @@ def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 8) -> 
     pool = ThreadPoolExecutor(max_workers=6)
     try:
         f_cex = pool.submit(_wrap(try_cex_search, fallback_urls["CeX"]))
-        f_ebay = pool.submit(_wrap(try_ebay_uk, fallback_urls["eBay UK"]))
+        f_ebay = pool.submit(
+            _wrap(
+                try_ebay_uk,
+                fallback_urls["eBay UK"],
+                min_price=min_price,
+                max_price=max_price,
+                condition=cond,
+            )
+        )
         f_game = pool.submit(_wrap(try_game_uk, fallback_urls["GAME UK"]))
         f_argos = pool.submit(_wrap(try_argos, fallback_urls["Argos"]))
         f_currys = pool.submit(_wrap(try_currys, fallback_urls["Currys"]))
@@ -580,12 +667,37 @@ def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 8) -> 
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
+    # Title match first, then price / condition / platform soft filters
+    def finalize(src):
+        matched = _keep_matching_rows(src, title)
+        return filter_source_dict(
+            matched,
+            title=title,
+            platform=platform,
+            min_price=min_price,
+            max_price=max_price,
+            condition=cond,
+        )
+
+    # CeX is always used — if user asked for new only, empty + keep search link
+    if cond == "new":
+        cex_final = _empty(fallback_urls["CeX"])
+        cex_final["search_url"] = cex.get("search_url") or fallback_urls["CeX"]
+    else:
+        cex_final = finalize(cex)
+
     return {
-        "cex": _keep_matching_rows(cex, title),
-        "ebay": _keep_matching_rows(ebay, title),
-        "game": _keep_matching_rows(game, title),
-        "argos": _keep_matching_rows(argos, title),
-        "currys": _keep_matching_rows(currys, title),
-        "smyths": _keep_matching_rows(smyths, title),
+        "cex": cex_final,
+        "ebay": finalize(ebay),
+        "game": finalize(game),
+        "argos": finalize(argos),
+        "currys": finalize(currys),
+        "smyths": finalize(smyths),
         "uk_links": links,
+        "filters": {
+            "platform": platform,
+            "min_price": str(min_price) if min_price is not None else "",
+            "max_price": str(max_price) if max_price is not None else "",
+            "condition": cond,
+        },
     }
