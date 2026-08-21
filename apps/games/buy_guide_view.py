@@ -19,6 +19,7 @@ def buy_guide(request):
         "steam_new": [],
         "multi_store": [],
         "smart_picks": [],
+        "free_picks": [],
         "country": country,
     }
     try:
@@ -30,7 +31,6 @@ def buy_guide(request):
         except Exception:
             pass
 
-    # Your tracked list: best GBP snapshot + where
     tracked_tips = []
     for g in Game.objects.filter(is_active=True).order_by("title")[:40]:
         rec = (
@@ -71,6 +71,7 @@ def buy_guide(request):
             "steam_new": public.get("steam_new") or [],
             "multi_store": public.get("multi_store") or [],
             "smart_picks": public.get("smart_picks") or [],
+            "free_picks": public.get("free_picks") or [],
             "tracked_tips": tracked_tips[:15],
         },
     )
