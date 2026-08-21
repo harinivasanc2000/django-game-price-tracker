@@ -1,8 +1,9 @@
-"""Best tracked deals listing."""
+"""Best tracked deals + public multi-store highlights."""
 from __future__ import annotations
 
 from django.shortcuts import render
 
+from .clients.public_deals import cheapshark_top_deals, steam_featured
 from .fx import to_gbp_or_zero
 from .models import Game, PriceRecord
 
@@ -37,4 +38,25 @@ def best_deals(request):
             }
         )
     rows.sort(key=lambda r: r["price_gbp"])
-    return render(request, "games/best_deals.html", {"rows": rows})
+
+    public_cs = []
+    steam_specials = []
+    try:
+        public_cs = cheapshark_top_deals(limit=18, upper_price=50)
+    except Exception:
+        public_cs = []
+    try:
+        steam_specials = (steam_featured("GB").get("specials") or [])[:10]
+    except Exception:
+        steam_specials = []
+
+    return render(
+        request,
+        "games/best_deals.html",
+        {
+            "rows": rows,
+            "public_cs": public_cs,
+            "steam_specials": steam_specials,
+            "wide_layout": True,
+        },
+    )
