@@ -130,11 +130,37 @@
   {% include "games/_search_box.html" with placeholder="Search any game…" autofocus=True %}
 </section>
 
+{% if public_specials %}
+<section>
+  <div class="sec-head">
+    <h2>Steam specials right now</h2>
+    <a href="{% url 'games:buy_guide' %}">What to buy & where →</a>
+  </div>
+  <div class="hot-strip">
+    {% for d in public_specials %}
+      <a class="hot-chip" href="{{ d.detail_path }}">
+        {% if d.image %}
+          <div class="ghost" style="background-image:url('{{ d.image }}');" aria-hidden="true"></div>
+        {% endif %}
+        <div class="inner">
+          <div class="ht">{{ d.title }}</div>
+          <div class="hp">
+            {% if d.price is not None %}{{ d.price }} {{ d.currency }}
+            {% else %}See price{% endif %}
+          </div>
+          <div class="hs">{% if d.discount %}-{{ d.discount }}% Steam{% else %}Steam special{% endif %}</div>
+        </div>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if hot_deals %}
 <section>
   <div class="sec-head">
     <h2>On sale vs launch</h2>
-    <a href="{% url 'games:best_deals' %}">All tracked deals →</a>
+    <a href="{% url 'games:best_deals' %}">All deals →</a>
   </div>
   <div class="hot-strip">
     {% for c in hot_deals %}
@@ -213,12 +239,12 @@
 <section class="tips">
   <h2>Deal tips</h2>
   <details open>
-    <summary>How top deal sites think</summary>
-    <p>Compare <strong>live price</strong> to <strong>launch / list</strong>. Prefer official stores when the gap is small.</p>
+    <summary>How to choose where to buy</summary>
+    <p>Open the <a href="{% url 'games:buy_guide' %}">buy guide</a> for live Steam specials + multi-store picks with short advice per store type.</p>
   </details>
   <details>
     <summary>What we show</summary>
-    <p>Steam live UK prices, multi-store lows on detail. Tracked games stay in the side drawer.</p>
+    <p>Steam live UK prices, public specials, multi-store lows on detail. Tracked games stay in the side drawer.</p>
   </details>
 </section>
 
