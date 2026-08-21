@@ -123,6 +123,7 @@
         <a href="{% url 'games:best_deals' %}">Deals</a>
         <a href="{% url 'games:buy_guide' %}">Guide</a>
         <a href="{% url 'games:research' %}">Research</a>
+        <a href="{% url 'games:about' %}">About</a>
         <a href="{% url 'games:history' %}">History</a>
         <a href="{% url 'games:appearance' %}">Settings</a>
         {% if user.is_authenticated %}
@@ -134,7 +135,11 @@
       </nav>
     </header>
     {% block content %}{% endblock %}
-    <footer>{% if site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %} · Press <kbd style="background:var(--border);padding:0.05rem 0.35rem;border-radius:4px;font-size:0.75rem;">/</kbd> to search</footer>
+    <footer>
+      {% if site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}
+      · <a href="{% url 'games:about' %}">About</a>
+      · Press <kbd style="background:var(--border);padding:0.05rem 0.35rem;border-radius:4px;font-size:0.75rem;">/</kbd> to search
+    </footer>
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
