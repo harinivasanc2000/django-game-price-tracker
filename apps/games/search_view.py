@@ -1,10 +1,11 @@
+"""Search page — Steam plus console stores (filtered by platform)."""
 from django.shortcuts import render
 
+from .constants import PLATFORMS
 from .models import BrowseHistory
-from .clients.steam import search_store
-from .clients.uk_stores import platform_query
+from .platform_search import cheapest_hint, multi_platform_search
 from .search_sort import sort_results
-from .views import _log_history, PLATFORMS
+from .views import _log_history
 
 
 def steam_search(request):
@@ -12,14 +13,33 @@ def steam_search(request):
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     platform = request.GET.get("platform", "").strip().lower()
     sort = request.GET.get("sort", "relevance").strip().lower() or "relevance"
+
     results, error = [], None
+    buckets = {
+        "steam": [],
+        "psn": [],
+        "xbox": [],
+        "nintendo": [],
+        "links": [],
+        "nintendo_blocked": True,
+        "nintendo_search_url": "",
+    }
+    best = None
+
     if q:
         _log_history(request, BrowseHistory.Action.SEARCH, query=q)
-        search_q = platform_query(q, platform) if platform else q
-        results = search_store(search_q, country=country, limit=40)
-        results = sort_results(results, sort)
-        if not results:
-            error = "No close matches. Try another spelling or a fuller title."
+        # Parallel multi-platform (only requested platforms)
+        buckets = multi_platform_search(q, platform=platform, country=country, limit=10)
+        results = sort_results(buckets.get("steam") or [], sort)
+        best = cheapest_hint(buckets)
+        if (
+            not results
+            and not buckets.get("psn")
+            and not buckets.get("xbox")
+            and not buckets.get("nintendo")
+        ):
+            error = "No close matches. Try another spelling, or pick a platform filter."
+
     return render(
         request,
         "games/steam_search.html",
@@ -31,5 +51,13 @@ def steam_search(request):
             "platforms": PLATFORMS,
             "current_platform": platform,
             "sort": sort,
+            "psn_results": buckets.get("psn") or [],
+            "xbox_results": buckets.get("xbox") or [],
+            "nintendo_results": buckets.get("nintendo") or [],
+            "nintendo_blocked": buckets.get("nintendo_blocked", True),
+            "nintendo_search_url": buckets.get("nintendo_search_url") or "",
+            "platform_links": buckets.get("links") or [],
+            "best_cross": best,
+            "wide_layout": True,
         },
     )
