@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-21 04:25 BST — Training CSV + detail digital panel wiring
+
+### Added
+- **`/export/training.csv`** — flat PriceRecord snapshots for offline ML (pandas)
+  - Columns: recorded_at, title, steam_app_id, platform, launch, store, price, price_gbp, discount, physical/used, url
+  - Optional `?limit=` (default 5000, max 20000)
+- Research lab download buttons: CSV, tracked JSON, health
+
+### Detail page
+- Included **`_digital_store_links.html`** (Humble / Fanatical / GMG / GOG / CDKeys + meta chips)
+- Included **`_similar_games.html`** in sidebar
+- Fixed JS `esc()` to real HTML entities (`&` / `<` / `"`)
+
+### Next (backlog)
+- Sale calendar overlay on chart
+- Load offline `predictions.json` for display only
+- Edition matcher (Standard vs Gold vs DLC)
+- Bundle vs single price detector
+
+```bash
+git pull && python manage.py runserver
+# http://127.0.0.1:8000/research/
+# http://127.0.0.1:8000/export/training.csv
+```
+
+---
+
 ## 2026-08-20 22:05 BST — More digital BS4 stores + Research lab
 
 ### Scraping (product fields only)
@@ -17,16 +44,6 @@
 - **No ML training on the server** — plan only
 - Data sources: APIs, Kaggle, public pages, your exports
 - Algorithms: classification, quantiles, boosting, anomaly detection
-- Feature ideas: sale calendar, wait curves, training CSV export, model cards
-- Workflow: collect → train offline → publish prediction JSON later
-
-### Template
-Detail page: include `{% include "games/_digital_store_links.html" %}` under PC deals if missing.
-
-```bash
-git pull && python manage.py runserver
-# http://127.0.0.1:8000/research/
-```
 
 ---
 
