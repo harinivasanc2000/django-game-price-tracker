@@ -1,13 +1,14 @@
 """
 Shared constants — edit here instead of hunting through views.
 
-POPULAR_APP_IDS  → home page grid order
+POPULAR_APP_IDS  → home-page fallback grid order when no sale signals exist
 PLATFORMS        → search / filter dropdowns
 STORE_PLATFORMS  → detail page platform chips
 """
 
-# Steam App IDs shown on the home "Popular" grid (order = display order).
-# Add or remove IDs any time; no migration needed.
+# Stable fallback Steam App IDs for the home grid. The home page first ranks
+# tracked price-drop snapshots from the preceding 90 days and current Steam
+# specials; this list fills any remaining slots without an external sales API.
 POPULAR_APP_IDS: list[int] = [
     1091500,  # Cyberpunk 2077
     1245620,  # ELDEN RING

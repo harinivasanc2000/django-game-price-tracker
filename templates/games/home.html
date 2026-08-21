@@ -126,7 +126,7 @@
 {% block content %}
 <section class="hero-search">
   <h1>Compare game prices</h1>
-  <p>Steam, PSN, UK shops & more — find the lowest GBP deal without the clutter.</p>
+  <p>Steam, PSN, UK shops & more — current offers plus 90-day price-drop signals.</p>
   {% include "games/_search_box.html" with placeholder="Search any game…" autofocus=True %}
 </section>
 
@@ -189,10 +189,11 @@
 
 <section>
   <div class="sec-head">
-    <h2>Popular right now</h2>
+    <h2>Seasonal sale signals</h2>
     <a href="{% url 'games:steam_search' %}?q=assassin%27s+creed">Browse more →</a>
   </div>
   {% if popular_cards %}
+  <p style="font-size:0.78rem;color:var(--muted);margin:-0.3rem 0 0.75rem;">Ranked from tracked discounted snapshots in the past {{ seasonal_window_days }} days, then current Steam specials. This measures sale activity, not unit sales.</p>
   <div class="game-grid">
     {% for c in popular_cards %}
       <a class="game-card" href="{% url 'games:steam_detail' c.app_id %}">
@@ -206,7 +207,7 @@
         </div>
         <div class="body">
           <div class="title">{{ c.title }}</div>
-          <div class="meta">{{ c.lowest_label|default:"Steam" }}</div>
+          <div class="meta">{{ c.lowest_label|default:"Steam" }}{% if c.sale_source %} · {{ c.sale_source }}{% endif %}</div>
           <div class="price-row">
             <div>
               {% if c.price_status == 'free' %}

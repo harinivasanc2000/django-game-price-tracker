@@ -9,8 +9,9 @@ from collections import defaultdict
 
 from django.contrib import messages
 from django.core.cache import cache
-from django.db.models import OuterRef, Subquery
+from django.db.models import Count, Max, OuterRef, Q, Subquery
 from django.shortcuts import render
+from django.utils import timezone
 
 from .clients.public_deals import steam_featured
 from .clients.steam import get_app_details
@@ -20,6 +21,8 @@ from .models import Game, PriceRecord
 
 HOME_CACHE_KEY = "home:cards:v2"
 HOME_CACHE_TTL = 180  # 3 minutes — balances freshness vs Steam rate limits
+SEASONAL_SALE_WINDOW_DAYS = 90
+HOME_CARD_LIMIT = 12
 
 
 def _steam_cdn_header(app_id: int) -> str:
@@ -31,6 +34,7 @@ def _card_from_detail(
     detail: dict | None,
     catalog: Game | None,
     latest_by_game: dict[int, list],
+    sale_source: str,
 ) -> dict:
     if detail:
         price = detail.get("price")
@@ -86,13 +90,68 @@ def _card_from_detail(
         "lowest_label": lowest_label or "Steam",
         "launch": launch,
         "savings": savings,
+        "sale_source": sale_source,
     }
 
 
+def _seasonal_app_ids(current_specials: list[dict]) -> tuple[list[int], dict[int, str]]:
+    """Rank home cards from 90-day price-drop signals, then current specials.
+
+    Steam does not expose public unit-sales history. We therefore describe this
+    honestly as a *sale signal*: recorded discounted snapshots over 90 days,
+    followed by Steam's current public specials. A stable fallback keeps the
+    page useful on a new installation with no stored price history.
+    """
+    since = timezone.now() - timezone.timedelta(days=SEASONAL_SALE_WINDOW_DAYS)
+    recent = (
+        Game.objects.filter(steam_app_id__isnull=False)
+        .annotate(
+            sale_events=Count(
+                "prices",
+                filter=Q(prices__recorded_at__gte=since, prices__discount_percent__gt=0),
+            ),
+            latest_sale=Max(
+                "prices__recorded_at",
+                filter=Q(prices__recorded_at__gte=since, prices__discount_percent__gt=0),
+            ),
+        )
+        .filter(sale_events__gt=0)
+        .order_by("-sale_events", "-latest_sale", "title")
+        .values_list("steam_app_id", flat=True)[:HOME_CARD_LIMIT]
+    )
+
+    ordered: list[int] = []
+    sources: dict[int, str] = {}
+
+    def add(app_id, source: str) -> None:
+        try:
+            app_id = int(app_id)
+        except (TypeError, ValueError):
+            return
+        if app_id > 0 and app_id not in sources and len(ordered) < HOME_CARD_LIMIT:
+            ordered.append(app_id)
+            sources[app_id] = source
+
+    for app_id in recent:
+        add(app_id, "90-day price-drop history")
+    for special in current_specials:
+        add(special.get("app_id"), "Steam special right now")
+    for app_id in POPULAR_APP_IDS:
+        add(app_id, "Popular fallback")
+    return ordered, sources
+
+
 def _build_home_payload() -> dict:
+    # The public Steam feed supplements local 90-day price history.
+    try:
+        public_specials = (steam_featured("GB").get("specials") or [])[:8]
+    except Exception:
+        public_specials = []
+    app_ids, sale_sources = _seasonal_app_ids(public_specials)
+
     catalogs = {
         g.steam_app_id: g
-        for g in Game.objects.filter(steam_app_id__in=POPULAR_APP_IDS).only(
+        for g in Game.objects.filter(steam_app_id__in=app_ids).only(
             "id",
             "steam_app_id",
             "title",
@@ -126,7 +185,6 @@ def _build_home_payload() -> dict:
             latest_by_game[r.game_id].append(r)
 
     details: dict[int, dict | None] = {}
-    public_specials: list = []
 
     def fetch(aid: int):
         try:
@@ -134,22 +192,18 @@ def _build_home_payload() -> dict:
         except Exception:
             return aid, None
 
-    # Cap workers — popular list is ~12, no need for 12 simultaneous sockets
+    # Cap workers — a seasonal grid is 12 titles, so no need for 12 sockets.
     with ThreadPoolExecutor(max_workers=6) as pool:
-        futs = [pool.submit(fetch, aid) for aid in POPULAR_APP_IDS]
-        f_feat = pool.submit(steam_featured, "GB")
+        futs = [pool.submit(fetch, aid) for aid in app_ids]
         for fut in as_completed(futs):
             aid, det = fut.result()
             details[aid] = det
-        try:
-            public_specials = (f_feat.result() or {}).get("specials") or []
-            public_specials = public_specials[:8]
-        except Exception:
-            public_specials = []
 
     cards = [
-        _card_from_detail(aid, details.get(aid), catalogs.get(aid), latest_by_game)
-        for aid in POPULAR_APP_IDS
+        _card_from_detail(
+            aid, details.get(aid), catalogs.get(aid), latest_by_game, sale_sources.get(aid, "")
+        )
+        for aid in app_ids
     ]
 
     hot = sorted(
@@ -161,6 +215,7 @@ def _build_home_payload() -> dict:
         "popular_cards": cards,
         "hot_deals": hot,
         "public_specials": public_specials,
+        "seasonal_window_days": SEASONAL_SALE_WINDOW_DAYS,
     }
 
 
@@ -182,5 +237,6 @@ def home(request):
             "popular_cards": payload.get("popular_cards") or [],
             "hot_deals": payload.get("hot_deals") or [],
             "public_specials": payload.get("public_specials") or [],
+            "seasonal_window_days": payload.get("seasonal_window_days", SEASONAL_SALE_WINDOW_DAYS),
         },
     )
