@@ -1,14 +1,17 @@
 """
 Amazon UK public *search* page — product title, price, star rating, ASIN link.
 No seller personal data. Often WAF-blocked from datacenters → search_url fallback.
+Supports platform / price / condition post-filters (no login).
 """
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 from urllib.parse import quote_plus
 
 from apps.games.cache import cached
+from apps.games.clients.scrape_filters import filter_source_dict, parse_price_bound
 from apps.games.clients.scrape_utils import (
     fetch_html,
     parse_money,
@@ -27,7 +30,7 @@ def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> d
     url = search_url(title, extra)
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
 
-    html, _ = fetch_html(url)
+    html, _ = fetch_html(url, timeout=12)
     if not html or "a-price" not in html:
         out["blocked"] = True
         return out
@@ -72,12 +75,32 @@ def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> d
     return out
 
 
-def search_amazon_uk(title: str, extra: str = "", limit: int = 8) -> dict[str, Any]:
+def search_amazon_uk(
+    title: str,
+    extra: str = "",
+    limit: int = 8,
+    *,
+    platform: str = "",
+    min_price: Decimal | None = None,
+    max_price: Decimal | None = None,
+    condition: str = "",
+) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return {"results": [], "blocked": True, "search_url": search_url(title, extra)}
-    return cached(
-        f"amazon:bs4:{title.lower()}:{extra.strip().lower()}",
+    lo = str(min_price) if min_price is not None else ""
+    hi = str(max_price) if max_price is not None else ""
+    cond = (condition or "").strip().lower()
+    raw = cached(
+        f"amazon:bs4:v2:{title.lower()}:{extra.strip().lower()}:{limit}",
         lambda: _search_amazon_uk_uncached(title, extra=extra, limit=limit),
         timeout=1800,
+    )
+    return filter_source_dict(
+        raw,
+        title=title,
+        platform=platform or extra.lower(),
+        min_price=min_price,
+        max_price=max_price,
+        condition=cond,
     )

@@ -1,4 +1,4 @@
-"""Detail page — official storefronts first, then local UK scrapes."""
+"""Detail page — official storefronts first, then local UK scrapes + filters."""
 from __future__ import annotations
 
 import json
@@ -12,6 +12,7 @@ from . import views as v
 from .clients.cheapshark import deals_for_title
 from .clients.digital_stores_bs4 import digital_search_links
 from .clients.news import social_news_links, steam_news
+from .clients.scrape_filters import parse_price_bound
 from .clients.steam import get_app_details
 from .constants import PLATFORMS, STORE_PLATFORMS
 from .detail_helpers import empty_platform_bundle, similar_steam_titles
@@ -19,7 +20,6 @@ from .fx import to_gbp_or_zero
 from .models import Game, Watch
 from .platform_bundle import platform_bundle
 
-# Preferred official store name(s) when a platform filter is active.
 _OFFICIAL_FOR_PLATFORM = {
     "pc": ("Steam",),
     "ps4": ("PSN UK", "PlayStation Store (UK)"),
@@ -28,9 +28,10 @@ _OFFICIAL_FOR_PLATFORM = {
     "switch": ("Nintendo UK", "Nintendo eShop (UK)"),
 }
 
+CONDITION_CHOICES = [("", "Any condition"), ("new", "New"), ("used", "Used")]
+
 
 def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
-    """Official storefront for the selected platform first, then by GBP price."""
     preferred = _OFFICIAL_FOR_PLATFORM.get((platform or "").lower(), ())
 
     def key(o: dict):
@@ -45,11 +46,20 @@ def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
 def platform_deals_api(request, app_id: int):
     platform = request.GET.get("platform", "").strip().lower()
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
+    min_price = parse_price_bound(request.GET.get("min_price"))
+    max_price = parse_price_bound(request.GET.get("max_price"))
+    condition = request.GET.get("condition", "").strip().lower()
     detail = get_app_details(app_id, country=country)
     if not detail:
         return JsonResponse({"error": "not found"}, status=404)
     try:
-        data = platform_bundle(detail["name"], platform)
+        data = platform_bundle(
+            detail["name"],
+            platform,
+            min_price=min_price,
+            max_price=max_price,
+            condition=condition,
+        )
     except Exception:
         data = empty_platform_bundle(detail["name"], platform)
     return JsonResponse(data)
@@ -58,6 +68,10 @@ def platform_deals_api(request, app_id: int):
 def steam_detail(request, app_id: int):
     country = request.GET.get("cc", "GB").strip().upper() or "GB"
     platform = request.GET.get("platform", "").strip().lower()
+    min_price = parse_price_bound(request.GET.get("min_price"))
+    max_price = parse_price_bound(request.GET.get("max_price"))
+    condition = request.GET.get("condition", "").strip().lower()
+
     detail = get_app_details(app_id, country=country)
     if not detail:
         return redirect("games:steam_search")
@@ -85,7 +99,14 @@ def steam_detail(request, app_id: int):
     workers = 3 + (1 if want_pc_deals else 0)
     pool = ThreadPoolExecutor(max_workers=workers)
     try:
-        f_plat = pool.submit(platform_bundle, detail["name"], platform)
+        f_plat = pool.submit(
+            platform_bundle,
+            detail["name"],
+            platform,
+            min_price=min_price,
+            max_price=max_price,
+            condition=condition,
+        )
         f_news = pool.submit(steam_news, app_id, 5)
         f_deals = pool.submit(deals_for_title, detail["name"], 10) if want_pc_deals else None
         f_sim = pool.submit(similar_steam_titles, detail["name"], app_id, country, 4)
@@ -116,6 +137,22 @@ def steam_detail(request, app_id: int):
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
+    # Apply max/min to third-party CheapShark rows when set
+    if store_deals and (min_price is not None or max_price is not None):
+        filtered = []
+        for d in store_deals:
+            try:
+                gbp = float(to_gbp_or_zero(d["price"], d.get("currency") or "USD"))
+            except Exception:
+                filtered.append(d)
+                continue
+            if min_price is not None and gbp < float(min_price):
+                continue
+            if max_price is not None and gbp > float(max_price):
+                continue
+            filtered.append(d)
+        store_deals = filtered
+
     digital_links = digital_search_links(detail["name"]) if want_pc_deals else []
     digital_rows: list = []
 
@@ -123,7 +160,6 @@ def steam_detail(request, app_id: int):
     xbox_rows = plat.get("xbox_rows") or []
     nintendo_rows = plat.get("nintendo_rows") or []
     amazon_rows = plat.get("amazon_rows") or []
-    # Platform-aware deal communities (still link-outs only)
     social_links = social_news_links(detail["name"], platform=platform)
 
     launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
@@ -261,8 +297,12 @@ def steam_detail(request, app_id: int):
             "country": country,
             "platforms": PLATFORMS,
             "store_platforms": STORE_PLATFORMS,
+            "condition_choices": CONDITION_CHOICES,
             "steam_os": detail.get("platforms") or [],
             "current_platform": platform,
+            "min_price": request.GET.get("min_price", ""),
+            "max_price": request.GET.get("max_price", ""),
+            "condition": condition,
             "already_tracked": already,
             "catalog_game": catalog,
             "store_deals": store_deals,

@@ -1,12 +1,10 @@
 """
-Fetch store rows for a title + platform filter.
+Fetch store rows for a title + platform / price / condition filters.
 
 Order philosophy:
-  1. Official digital storefront for the selected platform (PSN / Xbox / Nintendo / Steam)
-  2. UK physical + local retailers (full public-search scrapes)
+  1. Official digital storefront for the selected platform
+  2. UK physical + local retailers (public-search scrapes)
   3. Marketplaces
-
-Light by design: only runs the APIs needed for the selected platform.
 """
 
 from __future__ import annotations
@@ -18,6 +16,7 @@ from typing import Any
 from .clients.amazon_uk import search_amazon_uk
 from .clients.nintendo import search_nintendo
 from .clients.psn import search_psn
+from .clients.scrape_filters import parse_price_bound
 from .clients.uk_stores import fetch_uk_physical_bundle, platform_query, uk_search_links
 from .clients.xbox import search_xbox
 from .detail_helpers import empty_platform_bundle
@@ -30,21 +29,30 @@ def _ser(row: dict) -> dict:
     return out
 
 
-def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
+def platform_bundle(
+    title: str,
+    platform: str = "",
+    *,
+    min_price: Decimal | str | None = None,
+    max_price: Decimal | str | None = None,
+    condition: str = "",
+) -> dict[str, Any]:
     title = (title or "").strip()
     platform = (platform or "").strip().lower()
+    lo = parse_price_bound(str(min_price) if min_price is not None else None)
+    hi = parse_price_bound(str(max_price) if max_price is not None else None)
+    cond = (condition or "").strip().lower()
+
     base = empty_platform_bundle(title, platform)
     if not title:
         return base
 
-    # Official digital first for the chosen console family
     want_psn = platform in ("", "ps4", "ps5")
     want_xbox = platform in ("", "xbox")
     want_switch = platform in ("", "switch")
-    want_physical = True  # always scrape UK locals (user asked for full local scrapes)
+    want_physical = True
     want_amazon = platform in ("", "ps4", "ps5", "xbox", "switch", "pc")
 
-    # More rows when focused on one console
     limit = 10 if platform in ("ps4", "ps5", "xbox", "switch") else 8
 
     psn_query = platform_query(title, platform) if platform.startswith("ps") else title
@@ -76,18 +84,31 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
 
     def run_amz():
         try:
-            return search_amazon_uk(title, amz_extra, limit)
+            return search_amazon_uk(
+                title,
+                amz_extra,
+                limit,
+                platform=platform,
+                min_price=lo,
+                max_price=hi,
+                condition=cond,
+            )
         except Exception:
             return {"results": [], "blocked": True, "search_url": ""}
 
     def run_uk():
         try:
-            return fetch_uk_physical_bundle(title, platform, limit)
+            return fetch_uk_physical_bundle(
+                title,
+                platform,
+                limit,
+                min_price=lo,
+                max_price=hi,
+                condition=cond,
+            )
         except Exception:
             return {}
 
-    # Store sites can be slow or deliberately challenge bots. Keep the detail
-    # view useful by returning completed sources after one shared deadline.
     pool = ThreadPoolExecutor(max_workers=5)
     try:
         f_ps = pool.submit(run_psn) if want_psn else None
@@ -114,9 +135,25 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
         amazon = result_if_done(f_am, amazon)
         uk = result_if_done(f_uk, {})
     finally:
-        # `wait=False` is essential: a context manager would wait for an
-        # unresponsive retailer after this function's ten-second deadline.
         pool.shutdown(wait=False, cancel_futures=True)
+
+    # Soft price filter on official digital rows too
+    def price_ok(row: dict) -> bool:
+        try:
+            p = float(row.get("price") or 0)
+        except (TypeError, ValueError):
+            return True
+        if p <= 0:
+            return True
+        if lo is not None and p < float(lo):
+            return False
+        if hi is not None and p > float(hi):
+            return False
+        return True
+
+    psn_rows = [r for r in psn_rows if price_ok(r)]
+    xbox_rows = [r for r in xbox_rows if price_ok(r)]
+    nint_results = [r for r in (nint.get("results") or []) if price_ok(r)]
 
     cex = uk.get("cex") or {}
     ebay = uk.get("ebay") or {}
@@ -129,8 +166,8 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
         {
             "psn_rows": [_ser(r) for r in psn_rows],
             "xbox_rows": [_ser(r) for r in xbox_rows],
-            "nintendo_rows": [_ser(r) for r in (nint.get("results") or [])],
-            "nintendo_blocked": bool(nint.get("blocked", True)),
+            "nintendo_rows": [_ser(r) for r in nint_results],
+            "nintendo_blocked": bool(nint.get("blocked", True)) or not nint_results,
             "nintendo_search_url": nint.get("search_url") or "",
             "amazon_rows": [_ser(r) for r in (amazon.get("results") or [])],
             "amazon_blocked": amazon.get("blocked", True),
@@ -153,7 +190,16 @@ def platform_bundle(title: str, platform: str = "") -> dict[str, Any]:
             "smyths_rows": [_ser(r) for r in (smyths.get("results") or [])],
             "smyths_blocked": smyths.get("blocked", True),
             "smyths_search_url": smyths.get("search_url"),
-            "uk_links": uk.get("uk_links") or uk_search_links(title, platform=platform),
+            "uk_links": uk.get("uk_links")
+            or uk_search_links(
+                title, platform, min_price=lo, max_price=hi, condition=cond
+            ),
+            "active_filters": {
+                "platform": platform,
+                "min_price": str(lo) if lo is not None else "",
+                "max_price": str(hi) if hi is not None else "",
+                "condition": cond,
+            },
         }
     )
     return base
