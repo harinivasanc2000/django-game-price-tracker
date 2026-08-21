@@ -18,6 +18,7 @@ urlpatterns = [
     path("settings/", settings_view.appearance_settings, name="appearance"),
     path("health/", health_view.health, name="health"),
     path("export/tracked.json", views_export.export_tracked_json, name="export_tracked"),
+    path("export/training.csv", views_export.export_training_csv, name="export_training_csv"),
     path("api/suggest/", views.steam_suggest, name="steam_suggest"),
     path("api/platform/<int:app_id>/", views_steam_detail.platform_deals_api, name="platform_deals"),
     path("steam/<int:app_id>/", views_steam_detail.steam_detail, name="steam_detail"),
