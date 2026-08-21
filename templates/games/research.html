@@ -32,6 +32,13 @@
   .lab table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 0.5rem; }
   .lab th, .lab td { text-align: left; padding: 0.4rem 0.35rem; border-bottom: 1px solid var(--border); vertical-align: top; }
   .lab th { color: var(--muted); font-weight: 600; }
+  .lab .dl-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+  .lab .dl-btn {
+    display: inline-block; padding: 0.45rem 0.85rem; border-radius: 10px;
+    border: 1px solid var(--border); background: #1a0c0c; color: var(--text);
+    text-decoration: none !important; font-size: 0.85rem; font-weight: 600;
+  }
+  .lab .dl-btn:hover { border-color: var(--accent2); color: var(--accent2); }
 </style>
 {% endblock %}
 
@@ -45,25 +52,39 @@
   </p>
 
   <section>
+    <h2>Download your data (live)</h2>
+    <p>Use these for Jupyter / pandas offline. Product + price fields only.</p>
+    <div class="dl-row">
+      <a class="dl-btn" href="{% url 'games:export_training_csv' %}">Download training CSV</a>
+      <a class="dl-btn" href="{% url 'games:export_tracked' %}">Tracked games JSON</a>
+      <a class="dl-btn" href="{% url 'games:health' %}">Health JSON</a>
+    </div>
+    <p style="margin-top:0.55rem;font-size:0.8rem;">
+      CSV columns: <code>recorded_at</code>, title, steam_app_id, platform, launch_price,
+      store, price, price_gbp, discount, physical/used flags, url.
+      Optional: <code>?limit=2000</code> on the CSV URL (max 20000).
+    </p>
+  </section>
+
+  <section>
     <h2>Architecture (planned)</h2>
     <p>
-      <span class="pill ok">Website</span> shows live public prices + optional <strong>precomputed scores</strong> (CSV / JSON you export).
+      <span class="pill ok">Website</span> shows live public prices + optional <strong>precomputed scores</strong>.
       <span class="pill later">Your machine</span> runs training (scikit-learn, XGBoost, PyTorch, etc.).
     </p>
     <ul>
       <li><strong>Collect</strong> → public APIs + polite search scrapes (title, price, URL, rating only).</li>
-      <li><strong>Store offline</strong> → SQLite / Parquet / CSV under a local <code>data/</code> folder (not committed with secrets).</li>
+      <li><strong>Store offline</strong> → SQLite / Parquet / CSV under a local <code>data/</code> folder.</li>
       <li><strong>Train offline</strong> → notebooks or scripts on your Mac.</li>
-      <li><strong>Publish artefacts</strong> → e.g. <code>ml/predictions.json</code> or a small table Django can read.</li>
+      <li><strong>Publish artefacts</strong> → e.g. <code>ml/predictions.json</code> later for display only.</li>
     </ul>
   </section>
 
   <section>
     <h2>What we already collect (product-only)</h2>
-    <p>Fields allowed in scrapes and APIs:</p>
     <ul>
       <li>Product title, price, currency, product URL</li>
-      <li>Public aggregate rating (stars / feedback %) when on the card</li>
+      <li>Public aggregate rating when on the card</li>
       <li>Store name, kind (official / retail / used / third-party)</li>
     </ul>
     <p><strong>Not collected:</strong> seller personal identity, addresses, phones, emails, private messages.</p>
@@ -73,128 +94,61 @@
     <h2>Data sources</h2>
     <h3>Public APIs (preferred)</h3>
     <ul>
-      <li><strong>Steam</strong> storesearch + appdetails (live UK prices, discounts)</li>
+      <li><strong>Steam</strong> storesearch + appdetails</li>
       <li><strong>CheapShark</strong> multi-store PC deals</li>
-      <li><strong>PSN</strong> public Chihiro / tumbler search JSON</li>
-      <li><strong>FX</strong> open.er-api.com (GBP normalisation)</li>
+      <li><strong>PSN</strong> public search JSON</li>
+      <li><strong>FX</strong> open.er-api.com (GBP)</li>
     </ul>
-    <h3>Public search HTML (BeautifulSoup, best-effort)</h3>
+    <h3>Public search HTML (BeautifulSoup)</h3>
     <ul>
-      <li>UK physical: CeX, eBay, GAME, Argos, Currys, Amazon UK</li>
-      <li>Digital: Humble, Fanatical, Green Man Gaming, GOG, CDKeys (+ search links for Epic, Eneba, GG.deals, ITAD)</li>
+      <li>UK: CeX, eBay, GAME, Argos, Currys, Amazon UK</li>
+      <li>Digital: Humble, Fanatical, GMG, GOG, CDKeys + meta search links</li>
     </ul>
-    <h3>External datasets (for offline ML)</h3>
+    <h3>External datasets (offline ML)</h3>
     <table>
       <tr><th>Source</th><th>Use</th><th>Notes</th></tr>
-      <tr>
-        <td>Kaggle — Steam / game datasets</td>
-        <td>Features: genre, tags, review score, owners bands</td>
-        <td>Check each dataset licence before reuse</td>
-      </tr>
-      <tr>
-        <td>SteamSpy / Steam Charts (public pages)</td>
-        <td>Popularity / concurrent players proxies</td>
-        <td>Polite rate limits; not official sales figures</td>
-      </tr>
-      <tr>
-        <td>VGChartz / company reports</td>
-        <td>Shipment estimates (noisy)</td>
-        <td>Often incomplete; treat as labels with high uncertainty</td>
-      </tr>
-      <tr>
-        <td>Your <code>PriceRecord</code> export</td>
-        <td>Time series of prices you tracked</td>
-        <td><code>/export/tracked.json</code> is a starting point</td>
-      </tr>
-      <tr>
-        <td>ITAD / GG.deals historical (if licensed)</td>
-        <td>True price history</td>
-        <td>Prefer official API / licence over scrape</td>
-      </tr>
+      <tr><td>Kaggle Steam datasets</td><td>Genre, tags, reviews</td><td>Check licence</td></tr>
+      <tr><td>SteamSpy / Charts</td><td>Popularity proxies</td><td>Not official sales</td></tr>
+      <tr><td>This site CSV export</td><td>Your price time series</td><td>Best starting label source</td></tr>
+      <tr><td>ITAD / GG.deals (licensed)</td><td>History</td><td>Prefer API over scrape</td></tr>
     </table>
-    <p style="margin-top:0.65rem;">
-      When <strong>no public CSV of total sales</strong> exists, only use published aggregates or estimates from
-      research pages — never invent sales numbers from private data.
-    </p>
   </section>
 
   <section>
-    <h2>Algorithms worth trying (offline)</h2>
+    <h2>Algorithms (offline)</h2>
     <table>
-      <tr><th>Goal</th><th>Models / methods</th><th>Inputs</th></tr>
-      <tr>
-        <td>Will price drop in N days?</td>
-        <td>Logistic regression, Random Forest, Gradient Boosting, simple LSTM on price series</td>
-        <td>Discount %, days since launch, season (Steam sale calendar), historical lows</td>
-      </tr>
-      <tr>
-        <td>Fair price / expected low</td>
-        <td>Quantile regression, historical percentile (5th/10th)</td>
-        <td>Price history, genre, review score</td>
-      </tr>
-      <tr>
-        <td>Buy-now vs wait score</td>
-        <td>Rules + calibrated classifier (what we sketch heuristically today)</td>
-        <td>% under launch, official vs keyshop gap, trend slope</td>
-      </tr>
-      <tr>
-        <td>Cluster similar deals</td>
-        <td>k-means / HDBSCAN on feature vectors</td>
-        <td>Genre tags, price band, discount depth</td>
-      </tr>
-      <tr>
-        <td>Anomaly / bad keyshop outlier</td>
-        <td>Isolation Forest, z-score vs official price</td>
-        <td>Store kind, gap to Steam, rating</td>
-      </tr>
+      <tr><th>Goal</th><th>Methods</th></tr>
+      <tr><td>Will price drop in N days?</td><td>Logistic / RF / Gradient Boosting / simple LSTM</td></tr>
+      <tr><td>Fair low / expected price</td><td>Quantile regression, historical percentiles</td></tr>
+      <tr><td>Buy now vs wait</td><td>Rules + calibrated classifier</td></tr>
+      <tr><td>Odd keyshop outliers</td><td>Isolation Forest, z-score vs official</td></tr>
     </table>
-    <p style="margin-top:0.55rem;">
-      Start simple: <strong>historical percentile + sale calendar rules</strong> often beat a half-trained neural net.
-    </p>
-  </section>
-
-  <section>
-    <h2>Feature ideas (deals + understanding)</h2>
-    <ul>
-      <li><strong>Personal lowest-ever</strong> badge from your own tracked history</li>
-      <li><strong>Sale calendar overlay</strong> (Steam Summer / Winter / Autumn / Spring)</li>
-      <li><strong>Price confidence</strong>: how many stores agree within £1</li>
-      <li><strong>Edition matcher</strong>: avoid comparing Standard vs Gold vs DLC</li>
-      <li><strong>Region risk flag</strong> for keyshops (EU vs WW keys)</li>
-      <li><strong>Wait curve</strong>: chart of predicted drop probability over next 30/60/90 days</li>
-      <li><strong>Bundle detector</strong>: when a bundle is cheaper than the single title</li>
-      <li><strong>Physical vs digital spread</strong> for UK (CeX vs Steam)</li>
-      <li><strong>Export training pack</strong>: one-click CSV of snapshots for Jupyter</li>
-      <li><strong>Model card</strong> page: metrics, train date, feature list (transparency)</li>
-    </ul>
   </section>
 
   <section>
     <h2>Suggested local workflow</h2>
     <ol style="margin-left:1.15rem;color:var(--muted);font-size:0.88rem;line-height:1.55;">
-      <li>Track 20–50 games you care about; run <code>python manage.py refresh_prices</code> daily.</li>
-      <li>Export <code>/export/tracked.json</code> → convert to pandas DataFrame.</li>
+      <li>Track games; run <code>python manage.py refresh_prices</code> daily.</li>
+      <li>Download <strong>training CSV</strong> from this page.</li>
       <li>Join Kaggle metadata on <code>steam_app_id</code>.</li>
-      <li>Label rows: “dropped 15%+ within 30 days?” using future prices.</li>
-      <li>Train/validate offline; save metrics + predictions JSON.</li>
-      <li>Optional later: Django management command to load predictions for display only.</li>
+      <li>Label: “dropped 15%+ within 30 days?” from future rows.</li>
+      <li>Train offline; keep metrics + predictions JSON local until you choose to display them.</li>
     </ol>
   </section>
 
   <section>
-    <h2>Ethics & safety</h2>
+    <h2>Ethics</h2>
     <ul>
-      <li>Respect robots / rate limits; cache aggressively.</li>
-      <li>Keyshops are riskier — models should not hide that.</li>
-      <li>Predictions are <strong>not financial advice</strong>.</li>
-      <li>Do not scrape private profiles or non-public sales data.</li>
+      <li>Rate limits + cache; keyshops stay labelled risky.</li>
+      <li>Predictions are not financial advice.</li>
+      <li>No private seller PII or non-public sales data.</li>
     </ul>
   </section>
 
   <p style="font-size:0.82rem;color:var(--muted);margin-top:0.5rem;">
-    Status: <span class="pill later">ML training offline only</span>
-    <span class="pill ok">Heuristics live on detail pages</span>
-    <span class="pill ok">Public price collection live</span>
+    <span class="pill later">ML training offline only</span>
+    <span class="pill ok">CSV export live</span>
+    <span class="pill ok">Heuristics on detail pages</span>
   </p>
 </div>
 {% endblock %}
