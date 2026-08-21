@@ -69,6 +69,23 @@
     <div class="rule"><strong>4. Physical UK</strong>CeX / GAME / Amazon for discs; condition matters on used.</div>
   </div>
 
+  {% if free_picks %}
+  <div class="sec"><span>Free / giveaways (public aggregator)</span></div>
+  <div class="grid">
+    {% for d in free_picks %}
+      <a class="card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path %}target="_blank" rel="noopener"{% endif %}>
+        <div class="t">{{ d.title }}</div>
+        <div class="p">Free</div>
+        <div class="m">
+          <span class="pill {% if d.kind == 'official' %}off{% else %}tp{% endif %}">{{ d.kind }}</span>
+          {{ d.store_name }}
+        </div>
+        <div class="tip">{{ d.advice }}</div>
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if smart_picks %}
   <div class="sec"><span>Smart multi-store picks (≥40% off)</span></div>
   <div class="grid">
@@ -82,7 +99,6 @@
         <div class="m">
           <span class="pill {% if d.kind == 'official' %}off{% else %}tp{% endif %}">{{ d.kind }}</span>
           {{ d.store_name }}
-          {% if d.currency == 'USD' %} · ~USD listed{% endif %}
         </div>
         <div class="tip">{{ d.advice }}</div>
       </a>
@@ -100,7 +116,7 @@
           {% if d.price is not None %}{{ d.price }} {{ d.currency }}{% else %}See store{% endif %}
           {% if d.discount %}<span class="pill sale">-{{ d.discount }}%</span>{% endif %}
         </div>
-        <div class="m"><span class="pill off">official</span> Steam · compare inside tracker</div>
+        <div class="m"><span class="pill off">official</span> Steam</div>
         <div class="tip">{{ d.advice }}</div>
       </a>
     {% endfor %}
@@ -108,14 +124,13 @@
   {% endif %}
 
   {% if multi_store %}
-  <div class="sec"><span>More PC digital deals (public API)</span></div>
+  <div class="sec"><span>More PC digital deals</span></div>
   <div class="grid">
     {% for d in multi_store %}
       <a class="card" href="{% if d.detail_path %}{{ d.detail_path }}{% else %}{{ d.url }}{% endif %}" {% if not d.detail_path and d.url %}target="_blank" rel="noopener"{% endif %}>
         <div class="t">{{ d.title }}</div>
         <div class="p">
-          {% if d.price_gbp %}£{{ d.price_gbp|floatformat:2 }} <span class="m">(from {{ d.price }} USD)</span>
-          {% else %}{{ d.price }} USD{% endif %}
+          {% if d.price_gbp %}£{{ d.price_gbp|floatformat:2 }}{% else %}{{ d.price }} USD{% endif %}
           {% if d.discount %}<span class="pill sale">-{{ d.discount }}%</span>{% endif %}
         </div>
         <div class="m">
@@ -129,13 +144,13 @@
   {% endif %}
 
   {% if steam_top %}
-  <div class="sec"><span>Steam top sellers (popularity, not always on sale)</span></div>
+  <div class="sec"><span>Steam top sellers</span></div>
   <div class="grid">
     {% for d in steam_top %}
       <a class="card" href="{{ d.detail_path }}">
         <div class="t">{{ d.title }}</div>
         <div class="p">{% if d.price is not None %}{{ d.price }} {{ d.currency }}{% else %}See price{% endif %}</div>
-        <div class="m">Steam · open to compare PSN / UK shops</div>
+        <div class="m">Steam · open to compare other stores</div>
       </a>
     {% endfor %}
   </div>
@@ -149,14 +164,10 @@
         <div class="t">{{ t.title }}</div>
         <div class="p">£{{ t.price_gbp|floatformat:2 }}</div>
         <div class="m">{{ t.store }}{% if t.vs_launch is not None %} · {{ t.vs_launch }}% under launch{% endif %}</div>
-        <div class="tip">Your latest snapshot — hit Track / refresh for fresher data.</div>
+        <div class="tip">Your latest snapshot.</div>
       </a>
     {% endfor %}
   </div>
-  {% endif %}
-
-  {% if not smart_picks and not steam_specials and not multi_store %}
-    <p style="color:var(--muted);">Could not load public feeds right now. Try again in a minute or open Search.</p>
   {% endif %}
 </div>
 {% endblock %}
