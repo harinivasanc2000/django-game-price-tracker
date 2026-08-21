@@ -1,99 +1,63 @@
-# 🎮 Django Game Price Tracker
+# Django Game Price Tracker
 
-**Track the best video game deals across Steam, Epic, and more — safely, every day.**
+Personal **Django** app to compare **public** game prices (Steam, CheapShark multi-store, PSN, UK shops) and track drops.
 
-A clean Django web app that watches the games you care about and alerts you the moment a better price appears.  
-Built with **public APIs only** so you stay clear of bans, rate-limit walls, and Terms-of-Service headaches.
-
----
-
-## Why this project?
-
-- 🔍 **Never miss a deal** — Steam sales, Epic free games, regional pricing, and key-shop offers in one place
-- ⚡ **Daily automated checks** — runs in the background and notifies you only when something actually drops
-- 🛡️ **Ban-proof by design** — uses official / public endpoints (Steam Store API, price aggregators, etc.) instead of aggressive scraping
-- 📊 **Beautiful sorted list** — cheapest current price first, with discount % and history
-- 📱 **Personal watchlists** — add any game, set a target price, get email / Discord / Telegram alerts
-
-No grey-market scraping. No risk of getting your IP blocked. Just reliable, legal data.
+Not a store. Not financial advice. Confirm every price on the seller’s site.
 
 ---
 
-## Core Idea
-
-1. You pick the games you want to watch (by Steam App ID or title).
-2. The app fetches current prices from trusted public sources.
-3. Results are sorted ascending by price.
-4. A scheduled task runs every day and notifies you on price drops or free giveaways.
-
----
-
-## Tech Stack
-
-| Layer              | Choice                          |
-|--------------------|---------------------------------|
-| Backend            | Django 5 + Django REST Framework |
-| Task Queue         | Celery + Redis (or simple cron) |
-| Price Sources      | Steam Store API (public), GG.deals, IsThereAnyDeal, etc. |
-| Frontend           | Django Templates + HTMX / Alpine (or React later) |
-| Notifications      | Email, Discord webhooks, Telegram bot |
-
----
-
-## Safe Data Sources (public APIs first)
-
-| Source              | Type              | Status        | Notes |
-|---------------------|-------------------|---------------|-------|
-| **Steam Store API** | Official public   | ✅ Ready     | `store.steampowered.com/api/appdetails` — free, rate-limited, perfect |
-| **GG.deals API**    | Aggregator        | ✅ Recommended | Multi-store prices by Steam App ID |
-| **IsThereAnyDeal**  | Aggregator        | Planned       | Excellent historical data |
-| **Epic Games**      | Community wrapper | Planned       | Use carefully |
-| Key shops (G2A…)    | Partner / paid    | Later         | Only via official partner APIs |
-
-**Full details** (official platforms, aggregators, authorized stores, **large third-party / grey-market keyshop list with strong caution warnings**, newsletters, and env placeholders) are in:
-
-📄 **[SOURCES.md](SOURCES.md)**
-
-We start with Steam + aggregators. No direct scraping of reseller sites. Grey-market prices (when shown) will always carry clear risk labels.
-
----
-
-## Project Goals
-
-- [x] Private GitHub repo + clean README
-- [x] Comprehensive SOURCES.md (stores, APIs, newsletters + third-party keyshops with warnings)
-- [ ] Django project skeleton + models (Game, Store, PriceRecord, Watchlist)
-- [ ] Steam price client (already prototyped)
-- [ ] Admin + simple list view sorted by price
-- [ ] Daily Celery task + price-drop notifications
-- [ ] User accounts & personal watchlists
-- [ ] More public aggregators
-- [ ] Optional key-shop support via official APIs only
-
----
-
-## Quick Start (coming soon)
+## Quick start
 
 ```bash
 git clone https://github.com/harinivasanc2000/django-game-price-tracker.git
 cd django-game-price-tracker
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python manage.py migrate
+python manage.py seed_launch_prices   # optional
 python manage.py runserver
 ```
 
----
+Or: `chmod +x run.sh && ./run.sh`
 
-## Philosophy
-
-> Use public APIs. Respect rate limits. Never get banned.  
-> Focus on the deals that matter, not on fighting anti-bot systems.
-
-Built with Django because we want something solid, maintainable, and fun to extend.
+Open http://127.0.0.1:8000/
 
 ---
 
-**Ready to hunt deals the smart way?**  
-Star the repo, open an issue, or just start coding. Let's build it together.
+## Main pages
+
+| URL | Purpose |
+|-----|--------|
+| `/` | Popular titles + Steam specials |
+| `/search/` | Steam search |
+| `/steam/<app_id>/` | Multi-store compare + chart + track |
+| `/guide/` | What to buy & where (public feeds) |
+| `/deals/` | Public deals + your tracked list |
+| `/research/` | Offline ML notes + CSV export |
+| `/about/` | Feature list + keyboard tips |
+| `/settings/` | Theme / wallpaper (localStorage) |
+| `/export/training.csv` | Price history for offline analysis |
+
+---
+
+## For developers
+
+**Read [`DEVELOPER.md`](DEVELOPER.md)** — file map, “I want to change…” table, request flow.
+
+- Popular home games → `apps/games/constants.py`
+- Data sources & keyshop warnings → [`SOURCES.md`](SOURCES.md)
+- History of changes → [`CHANGELOG.md`](CHANGELOG.md) (newest first)
+
+---
+
+## Stack (actual)
+
+| Layer | Choice |
+|-------|--------|
+| Backend | Django 5 |
+| Prices | Steam public APIs, CheapShark, PSN JSON, polite BS4 search pages |
+| Tasks | Optional Celery + Redis (`refresh_prices` works without) |
+| UI | Django templates + Chart.js |
+
+Philosophy: **public APIs first**, soft-fail scrapes, product data only (no seller PII).
