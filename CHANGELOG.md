@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-21 18:35 BST — Performance polish + bug fixes
+
+### Performance
+- **Shared `requests.Session`** + connection pool in `scrape_utils` and Steam client (fewer TCP handshakes)
+- **Home page cache** (3 min) + **single PriceRecord query** (no N+1 per popular card)
+- **Multi-platform search top-level cache** (3 min) with hard 8s parallel timeout → partial results instead of hangs
+- Empty / blocked scrape results cached only **90s** (retry sooner without hammering)
+- Steam search aliases expanded (bg3, elden, tlou, spiderman…); max 3 query expansions
+
+### Bug fixes
+- Cache keys now include **limit** (PSN / Xbox / Nintendo / Steam) — no stale short lists
+- Xbox rows use `price=None` when unknown (not `0`) so ranking stays honest
+- History prune uses proper `datetime.fromisoformat` + aware TZ (was fragile)
+- Track / untrack **busts** tracked drawer + home caches immediately
+- `views.py` slimmed: dead duplicate home/search/detail paths removed; keep track/profile/history/suggest
+
+### Ops
+- `/health/` reports DB + cache + tracked count (503 if degraded)
+
+```bash
+git pull
+python manage.py runserver
+# curl http://127.0.0.1:8000/health/
+```
+
+---
+
 ## 2026-08-21 17:55 BST — Official stores first + full UK local scrapes
 
 ### Behaviour
@@ -23,13 +50,6 @@
 - Detail panels order: Official digital (PSN / Xbox / Nintendo) → UK physical → Amazon → PC third-party
 - Platform chips show the matching official panel + physical for that platform
 - Search page labels sections with **Official** badges
-
-```bash
-git pull
-python manage.py runserver
-# Open a game → filter PS5 / Xbox / Switch
-# Compare official price chips vs CeX / GAME / Smyths rows
-```
 
 ---
 
