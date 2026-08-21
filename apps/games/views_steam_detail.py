@@ -1,4 +1,4 @@
-"""Detail page entrypoints with soft-fail on external scrapes."""
+"""Detail page — soft-fail external calls, platform-aware light loading."""
 from __future__ import annotations
 
 import json
@@ -8,28 +8,16 @@ from decimal import Decimal
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 
+from . import views as v
 from .clients.cheapshark import deals_for_title
-from .clients.digital_stores_bs4 import digital_search_links, fetch_digital_bundle
-from .clients.external_stores import ensure_uk_stores
-from .clients.news import steam_news, social_news_links
+from .clients.digital_stores_bs4 import digital_search_links
+from .clients.news import social_news_links, steam_news
 from .clients.steam import get_app_details
+from .constants import PLATFORMS, STORE_PLATFORMS
 from .detail_helpers import empty_platform_bundle, similar_steam_titles
 from .fx import to_gbp_or_zero
 from .models import Game, Watch
-from . import views as v
-
-
-def _flatten_digital(bundle: dict) -> list[dict]:
-    rows = []
-    for key in ("humble", "fanatical", "gmg", "gog", "cdkeys"):
-        block = bundle.get(key) or {}
-        for r in block.get("results") or []:
-            out = {}
-            for k, val in r.items():
-                out[k] = float(val) if isinstance(val, Decimal) else val
-            rows.append(out)
-    rows.sort(key=lambda x: float(x.get("price") or 9999))
-    return rows[:12]
+from .platform_bundle import platform_bundle
 
 
 def platform_deals_api(request, app_id: int):
@@ -39,7 +27,7 @@ def platform_deals_api(request, app_id: int):
     if not detail:
         return JsonResponse({"error": "not found"}, status=404)
     try:
-        data = v._platform_bundle(detail["name"], platform)
+        data = platform_bundle(detail["name"], platform)
     except Exception:
         data = empty_platform_bundle(detail["name"], platform)
     return JsonResponse(data)
@@ -60,48 +48,50 @@ def steam_detail(request, app_id: int):
         detail_url=f"/steam/{app_id}/",
     )
 
-    try:
-        ensure_uk_stores()
-    except Exception:
-        pass
+    already = Game.objects.filter(steam_app_id=app_id, is_active=True).only(
+        "id", "slug", "title", "steam_app_id", "platform", "launch_price", "launch_currency"
+    ).first()
+    catalog = Game.objects.filter(steam_app_id=app_id).only(
+        "id", "launch_price", "launch_currency", "launch_price_source"
+    ).first()
 
-    already = Game.objects.filter(steam_app_id=app_id, is_active=True).first()
-    catalog = Game.objects.filter(steam_app_id=app_id).first()
-
-    store_deals, news_items, plat = [], [], empty_platform_bundle(detail["name"], platform)
+    # Light path: no digital BS4 scrapes on detail (links only).
+    # CheapShark only for PC / All. News/similar capped.
+    want_pc_deals = platform in ("", "pc")
+    store_deals, news_items = [], []
+    plat = empty_platform_bundle(detail["name"], platform)
     similar = []
-    digital_bundle: dict = {"digital_links": digital_search_links(detail["name"])}
-    with ThreadPoolExecutor(max_workers=7) as pool:
-        f_deals = pool.submit(deals_for_title, detail["name"], 15)
-        f_news = pool.submit(steam_news, app_id, 8)
-        f_plat = pool.submit(v._platform_bundle, detail["name"], platform)
-        f_sim = pool.submit(similar_steam_titles, detail["name"], app_id, country, 6)
-        f_dig = pool.submit(fetch_digital_bundle, detail["name"], 4)
-        try:
-            store_deals = f_deals.result() or []
-        except Exception:
-            store_deals = []
-        try:
-            news_items = f_news.result() or []
-        except Exception:
-            news_items = []
+
+    workers = 2 + (1 if want_pc_deals else 0)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        f_plat = pool.submit(platform_bundle, detail["name"], platform)
+        f_news = pool.submit(steam_news, app_id, 5)
+        f_deals = pool.submit(deals_for_title, detail["name"], 10) if want_pc_deals else None
+        f_sim = pool.submit(similar_steam_titles, detail["name"], app_id, country, 4)
         try:
             plat = f_plat.result()
         except Exception:
             plat = empty_platform_bundle(detail["name"], platform)
         try:
+            news_items = f_news.result() or []
+        except Exception:
+            news_items = []
+        if f_deals:
+            try:
+                store_deals = f_deals.result() or []
+            except Exception:
+                store_deals = []
+        try:
             similar = f_sim.result() or []
         except Exception:
             similar = []
-        try:
-            digital_bundle = f_dig.result() or digital_bundle
-        except Exception:
-            pass
 
-    digital_rows = _flatten_digital(digital_bundle)
-    digital_links = digital_bundle.get("digital_links") or digital_search_links(detail["name"])
+    digital_links = digital_search_links(detail["name"]) if want_pc_deals else []
+    digital_rows: list = []
 
     psn_rows = plat.get("psn_rows") or []
+    xbox_rows = plat.get("xbox_rows") or []
+    nintendo_rows = plat.get("nintendo_rows") or []
     amazon_rows = plat.get("amazon_rows") or []
     social_links = social_news_links(detail["name"])
 
@@ -145,6 +135,32 @@ def steam_detail(request, app_id: int):
                 }
             )
             break
+    for row in xbox_rows:
+        if row.get("has_price") and float(row.get("price") or 0) > 0:
+            live_offers.append(
+                {
+                    "store": "Xbox",
+                    "price": row["price"],
+                    "price_gbp": to_gbp_or_zero(row["price"], row.get("currency") or "GBP"),
+                    "currency": row.get("currency") or "GBP",
+                    "kind": "official",
+                    "url": row.get("url"),
+                }
+            )
+            break
+    for row in nintendo_rows:
+        if row.get("has_price") and float(row.get("price") or 0) > 0:
+            live_offers.append(
+                {
+                    "store": "Nintendo UK",
+                    "price": row["price"],
+                    "price_gbp": to_gbp_or_zero(row["price"], "GBP"),
+                    "currency": "GBP",
+                    "kind": "official",
+                    "url": row.get("url"),
+                }
+            )
+            break
     if amazon_rows:
         live_offers.append(
             {
@@ -175,17 +191,6 @@ def steam_detail(request, app_id: int):
                     "url": rows[0].get("url") or plat.get(key.replace("_rows", "_search_url")),
                 }
             )
-    for row in digital_rows[:3]:
-        live_offers.append(
-            {
-                "store": row.get("store_name") or "Digital",
-                "price": row["price"],
-                "price_gbp": to_gbp_or_zero(row["price"], row.get("currency") or "GBP"),
-                "currency": row.get("currency") or "GBP",
-                "kind": "third-party" if row.get("store_name") == "CDKeys" else "retail",
-                "url": row.get("url"),
-            }
-        )
     if store_deals:
         live_offers.append(
             {
@@ -211,12 +216,7 @@ def steam_detail(request, app_id: int):
         if launch > 0:
             savings_vs_launch = int(round((1 - best_gbp / launch) * 100))
 
-    wallpaper = (
-        detail.get("library_hero")
-        or detail.get("page_background")
-        or detail.get("header_image")
-        or ""
-    )
+    wallpaper = detail.get("header_image") or ""
 
     return render(
         request,
@@ -224,20 +224,18 @@ def steam_detail(request, app_id: int):
         {
             "d": detail,
             "country": country,
-            "platforms": v.PLATFORMS,
-            "store_platforms": [
-                ("pc", "PC"),
-                ("ps4", "PS4"),
-                ("ps5", "PS5"),
-                ("xbox", "Xbox"),
-                ("switch", "Switch"),
-            ],
+            "platforms": PLATFORMS,
+            "store_platforms": STORE_PLATFORMS,
             "steam_os": detail.get("platforms") or [],
             "current_platform": platform,
             "already_tracked": already,
             "catalog_game": catalog,
             "store_deals": store_deals,
             "psn_rows": psn_rows,
+            "xbox_rows": xbox_rows,
+            "nintendo_rows": nintendo_rows,
+            "nintendo_blocked": plat.get("nintendo_blocked", True),
+            "nintendo_search_url": plat.get("nintendo_search_url") or "",
             "amazon_rows": amazon_rows,
             "amazon_blocked": plat.get("amazon_blocked", True),
             "amazon_search_url": plat.get("amazon_search_url"),
@@ -272,7 +270,7 @@ def steam_detail(request, app_id: int):
             "watched": watched,
             "is_watched": watched is not None,
             "game_wallpaper": wallpaper,
-            "screenshots": detail.get("screenshots") or [],
+            "screenshots": (detail.get("screenshots") or [])[:4],
             "similar_games": similar,
             "wide_layout": True,
             "app_id": app_id,
