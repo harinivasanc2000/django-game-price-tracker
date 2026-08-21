@@ -14,7 +14,7 @@ Facebook Marketplace / Gumtree / social: search URL only.
 from __future__ import annotations
 
 import re
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import quote_plus, quote, urljoin
@@ -119,6 +119,31 @@ def uk_search_links(title: str, platform: str = "") -> list[dict[str, str]]:
 
 def _empty(url: str) -> dict[str, Any]:
     return {"results": [], "blocked": True, "search_url": url}
+
+
+def _title_matches(name: str, title: str) -> bool:
+    """Reject accessory/unrelated cards from broad retailer search pages."""
+    ignored = {"the", "and", "for", "with", "edition", "game", "ps4", "ps5", "xbox", "pc", "switch"}
+    tokens = [
+        token for token in re.findall(r"[a-z0-9]+", (title or "").lower())
+        if len(token) > 2 and token not in ignored
+    ]
+    if not tokens:
+        return True
+    haystack = (name or "").lower()
+    required = 1 if len(tokens) == 1 else 2
+    return sum(token in haystack for token in tokens) >= required
+
+
+def _keep_matching_rows(source: dict[str, Any], title: str) -> dict[str, Any]:
+    """Keep the source contract while discarding weak title matches."""
+    source = dict(source or {})
+    source["results"] = [
+        row for row in (source.get("results") or []) if _title_matches(row.get("name", ""), title)
+    ]
+    if not source["results"]:
+        source["blocked"] = True
+    return source
 
 
 def _try_cex_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
@@ -489,35 +514,51 @@ def fetch_uk_physical_bundle(title: str, platform: str = "", limit: int = 8) -> 
     links = uk_search_links(title, platform)
     limit = max(4, min(int(limit or 8), 12))
 
-    def _wrap(fn):
+    fallback_urls = {link["name"]: link["url"] for link in links}
+
+    def _wrap(fn, fallback_url: str):
         def run():
             try:
                 return fn(title, platform, limit)
             except Exception:
-                return {"results": [], "blocked": True, "search_url": ""}
+                return _empty(fallback_url)
 
         return run
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        f_cex = pool.submit(_wrap(try_cex_search))
-        f_ebay = pool.submit(_wrap(try_ebay_uk))
-        f_game = pool.submit(_wrap(try_game_uk))
-        f_argos = pool.submit(_wrap(try_argos))
-        f_currys = pool.submit(_wrap(try_currys))
-        f_smyths = pool.submit(_wrap(try_smyths))
-        cex = f_cex.result()
-        ebay = f_ebay.result()
-        game = f_game.result()
-        argos = f_argos.result()
-        currys = f_currys.result()
-        smyths = f_smyths.result()
+    pool = ThreadPoolExecutor(max_workers=6)
+    try:
+        f_cex = pool.submit(_wrap(try_cex_search, fallback_urls["CeX"]))
+        f_ebay = pool.submit(_wrap(try_ebay_uk, fallback_urls["eBay UK"]))
+        f_game = pool.submit(_wrap(try_game_uk, fallback_urls["GAME UK"]))
+        f_argos = pool.submit(_wrap(try_argos, fallback_urls["Argos"]))
+        f_currys = pool.submit(_wrap(try_currys, fallback_urls["Currys"]))
+        f_smyths = pool.submit(_wrap(try_smyths, fallback_urls["Smyths Toys"]))
+        completed, _ = wait((f_cex, f_ebay, f_game, f_argos, f_currys, f_smyths), timeout=8)
+
+        def result_if_done(future, fallback_url):
+            if future not in completed:
+                return _empty(fallback_url)
+            try:
+                return future.result()
+            except Exception:
+                return _empty(fallback_url)
+
+        cex = result_if_done(f_cex, fallback_urls["CeX"])
+        ebay = result_if_done(f_ebay, fallback_urls["eBay UK"])
+        game = result_if_done(f_game, fallback_urls["GAME UK"])
+        argos = result_if_done(f_argos, fallback_urls["Argos"])
+        currys = result_if_done(f_currys, fallback_urls["Currys"])
+        smyths = result_if_done(f_smyths, fallback_urls["Smyths Toys"])
+    finally:
+        # A blocked retailer should not make the caller wait beyond eight seconds.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     return {
-        "cex": cex,
-        "ebay": ebay,
-        "game": game,
-        "argos": argos,
-        "currys": currys,
-        "smyths": smyths,
+        "cex": _keep_matching_rows(cex, title),
+        "ebay": _keep_matching_rows(ebay, title),
+        "game": _keep_matching_rows(game, title),
+        "argos": _keep_matching_rows(argos, title),
+        "currys": _keep_matching_rows(currys, title),
+        "smyths": _keep_matching_rows(smyths, title),
         "uk_links": links,
     }

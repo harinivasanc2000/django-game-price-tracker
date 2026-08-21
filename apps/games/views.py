@@ -199,6 +199,7 @@ def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_
         "sellers": sellers,
         "unit": "GBP",
         "change_only": True,
+        "has_data": bool(points),
     }
 
 

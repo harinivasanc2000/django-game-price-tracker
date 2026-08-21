@@ -308,7 +308,8 @@ def steam_detail(request, app_id: int):
             "savings_vs_launch": savings_vs_launch,
             "best_third_party": store_deals[0] if store_deals else None,
             "chart_json": json.dumps(chart),
-            "has_chart": bool(chart.get("labels")),
+            # A placeholder "Now" label alone is not enough to draw a chart.
+            "has_chart": bool(chart.get("has_data")),
             "watched": watched,
             "is_watched": watched is not None,
             "game_wallpaper": wallpaper,

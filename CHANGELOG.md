@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08-21 19:05 BST — Graph quality + UK BS4 price matching
+
+### Graphs
+- Charts now render only when at least one real GBP data point exists (no blank “Now” graph)
+- Added GBP axis labels, exact GBP hover tooltips, chronological interaction and clearer graph guidance
+
+### UK local-store scrapers
+- Kept the public-search **BeautifulSoup** approach for CeX, eBay UK, GAME, Argos, Currys and Smyths
+- Added title-token matching before displaying rows, preventing unrelated controllers/accessories from being shown as game deals
+- Local scraper bundle has its own 8-second deadline and preserves each store's clickable browser-search fallback on a timeout/error
+
+### Latest deals
+- Added a date-sorted HotUKDeals search link alongside Reddit, X, Steam news, ITAD and GG.deals
+- Social/community sources remain link-outs only: no collection of personal seller information or brittle social scraping
+
+### Tests
+- Added graph-empty-state and UK result-relevance/fallback coverage
+
+---
+
 ## 2026-08-21 18:45 BST — Deal links, graphs + CDKeys/Loaded resilience
 
 ### Store links

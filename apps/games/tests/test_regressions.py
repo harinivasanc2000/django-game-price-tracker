@@ -103,6 +103,10 @@ class TrackingRegressionTests(TestCase):
         self.assertEqual(chart["labels"][-1], "Now")
         self.assertEqual(chart["series"]["Steam"], [20.0, 10.0])
 
+    def test_chart_without_prices_is_not_marked_as_drawable(self):
+        chart = _build_chart_payload(None, {}, [], None, [], [], [], [])
+        self.assertFalse(chart["has_data"])
+
 
 class ExportRegressionTests(TestCase):
     """Exports are public endpoints and should be resilient to bad query strings."""

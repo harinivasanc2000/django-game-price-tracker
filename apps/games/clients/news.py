@@ -102,6 +102,10 @@ def social_news_links(title: str) -> list[dict[str, str]]:
             "url": f"https://www.reddit.com/r/GameDeals/search/?q={q}&restrict_sr=1&sort=new",
         },
         {
+            "name": "HotUKDeals · newest",
+            "url": f"https://www.hotukdeals.com/search?q={q}&sort=latest",
+        },
+        {
             "name": "Reddit · r/PS5",
             "url": f"https://www.reddit.com/r/PS5/search/?q={q}&restrict_sr=1&sort=new",
         },
