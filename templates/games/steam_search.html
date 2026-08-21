@@ -14,31 +14,62 @@
     display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center;
     margin: 1rem 0 0.75rem; justify-content: space-between;
   }
-  .toolbar select, .toolbar label {
-    font-size: 0.85rem; color: var(--muted);
-  }
+  .toolbar select, .toolbar label { font-size: 0.85rem; color: var(--muted); }
   .toolbar select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 0.35rem 0.55rem;
   }
   .chk { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); }
+  .plat-sec { margin: 1.35rem 0 0.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .console-row {
+    display: flex; justify-content: space-between; gap: 0.75rem; align-items: center;
+    padding: 0.65rem 0.85rem; border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(18,8,8,0.88); margin-bottom: 0.4rem; text-decoration: none !important; color: var(--text);
+  }
+  .console-row:hover { border-color: var(--accent2); }
+  .best-bar {
+    margin: 0.85rem 0; padding: 0.65rem 0.85rem; border-radius: 10px;
+    border: 1px solid #1a3a2a; background: rgba(15,26,18,0.9); font-size: 0.88rem;
+  }
+  .link-chip {
+    display: inline-block; margin: 0.2rem 0.3rem 0.2rem 0; padding: 0.3rem 0.55rem;
+    border-radius: 8px; border: 1px solid var(--border); font-size: 0.78rem;
+    color: var(--text); text-decoration: none !important;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.85rem;">← Home</a>
-<h1 style="font-size: 1.35rem; margin: 0.5rem 0 0.35rem;">Search</h1>
+<h1 style="font-size: 1.35rem; margin: 0.5rem 0 0.35rem;">Search all platforms</h1>
 <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">
-  Click a title for full deals. Track is separate. Unknown ≠ free.
+  Steam (PC), PlayStation, Xbox, Nintendo Switch. Use the platform filter to load only one store family (faster).
 </p>
 
-{% include "games/_search_box.html" with q=q placeholder="Search again…" %}
+{% include "games/_search_box.html" with q=q placeholder="Search any game…" %}
 
 {% if error %}
   <p style="color: #f87171; margin-top: 1rem;">{{ error }}</p>
 {% endif %}
 
+{% if best_cross %}
+  <div class="best-bar">
+    <strong style="color:#86efac;">Lowest listed right now:</strong>
+    {{ best_cross.platform }} · {{ best_cross.title }} · £{{ best_cross.price_gbp|floatformat:2 }}
+    {% if best_cross.url %}<a href="{{ best_cross.url }}" style="margin-left:0.5rem;">Open →</a>{% endif %}
+  </div>
+{% endif %}
+
+{% if platform_links and q %}
+  <div style="margin: 0.5rem 0 0.75rem;">
+    {% for l in platform_links %}
+      <a class="link-chip" href="{{ l.url }}" target="_blank" rel="noopener">{{ l.name }}</a>
+    {% endfor %}
+  </div>
+{% endif %}
+
 {% if results %}
+  <div class="plat-sec">Steam / PC</div>
   <div class="toolbar">
     <p style="color: var(--muted); margin: 0;">{{ results|length }} match{{ results|length|pluralize }}</p>
     <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
@@ -64,7 +95,7 @@
     <div class="result-card" data-dlc="{% if r.is_likely_dlc %}1{% else %}0{% endif %}">
       <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}">
         {% if r.tiny_image %}
-          <img src="{{ r.tiny_image }}" alt="" style="width:120px;height:45px;object-fit:cover;border-radius:6px;" loading="lazy">
+          <img src="{{ r.tiny_image }}" alt="" style="width:120px;height:45px;object-fit:cover;border-radius:6px;" loading="lazy" width="120" height="45">
         {% else %}
           <div style="width:120px;height:45px;background:var(--border);border-radius:6px;"></div>
         {% endif %}
@@ -86,14 +117,61 @@
           <div class="price-now">Free</div>
         {% else %}
           <div style="color: var(--muted); font-weight: 600;">Unknown</div>
-          <div style="font-size: 0.7rem; color: var(--muted);">not free</div>
         {% endif %}
       </div>
     </div>
   {% endfor %}
   </div>
-{% elif q and not error %}
-  <p style="color: var(--muted); margin-top: 1rem;">No results.</p>
+{% endif %}
+
+{% if psn_results %}
+  <div class="plat-sec">PlayStation Store (UK)</div>
+  {% for r in psn_results %}
+    <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
+      <div>
+        <strong>{{ r.name }}</strong>
+        {% if r.is_full_game %}<span class="badge digital" style="margin-left:0.3rem;">Full</span>{% endif %}
+        {% if r.platforms %}<span style="font-size:0.72rem;color:var(--muted);margin-left:0.35rem;">{{ r.platforms|join:", " }}</span>{% endif %}
+      </div>
+      <div class="price-now">{% if r.display_price %}{{ r.display_price }}{% else %}{{ r.price }} GBP{% endif %}</div>
+    </a>
+  {% endfor %}
+{% endif %}
+
+{% if xbox_results %}
+  <div class="plat-sec">Xbox / Microsoft Store</div>
+  {% for r in xbox_results %}
+    <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
+      <div><strong>{{ r.name }}</strong></div>
+      <div class="price-now">
+        {% if r.has_price %}{{ r.price }} {{ r.currency }}{% else %}See store{% endif %}
+      </div>
+    </a>
+  {% endfor %}
+{% endif %}
+
+{% if nintendo_results %}
+  <div class="plat-sec">Nintendo Switch (UK)</div>
+  {% for r in nintendo_results %}
+    <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
+      <div><strong>{{ r.name }}</strong></div>
+      <div class="price-now">
+        {% if r.has_price %}{{ r.price }} {{ r.currency }}{% else %}See store{% endif %}
+      </div>
+    </a>
+  {% endfor %}
+{% elif q and nintendo_search_url and current_platform == 'switch' or q and nintendo_blocked and not nintendo_results %}
+  {% if nintendo_search_url %}
+  <div class="plat-sec">Nintendo Switch</div>
+  <p style="font-size:0.88rem;color:var(--muted);">
+    Live scrape blocked or empty —
+    <a href="{{ nintendo_search_url }}" target="_blank" rel="noopener">Search Nintendo eShop UK →</a>
+  </p>
+  {% endif %}
+{% endif %}
+
+{% if q and not results and not psn_results and not xbox_results and not nintendo_results and not error %}
+  <p style="color: var(--muted); margin-top: 1rem;">No results. Try a shorter title or another platform filter.</p>
 {% endif %}
 {% endblock %}
 
