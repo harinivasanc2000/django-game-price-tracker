@@ -4,51 +4,38 @@
 
 ---
 
-## 2026-08-21 04:35 BST — Buy guide + public Steam / CheapShark feeds
+## 2026-08-21 07:35 BST — Code cleanup + About + free deals
 
-### Public data (what to buy & where)
-- New client `public_deals.py`
-  - **Steam** `featuredcategories` (GB): specials, top sellers, new releases
-  - **CheapShark** `/deals` sorted by savings (multi-store PC)
-- New page **`/guide/`** (nav: **Guide**)
-  - Smart picks (≥40% off) with official vs third-party advice
-  - Steam specials, multi-store list, top sellers
-  - Your tracked list ranked by % under launch
-  - Simple buying rules (official first, edition match, physical tips)
+### For you (readability)
+- **`DEVELOPER.md`** — full map of folders, “I want to change…”, request flow
+- **`apps/games/constants.py`** — `POPULAR_APP_IDS` + platform lists in one place
+- **`urls.py`** — grouped + commented routes
+- **README** rewritten to match the real stack
+- **`run.sh`** updated (seed_launch_prices, useful URLs)
 
-### Deals page
-- Shows public Steam specials + CheapShark feed **above** tracked rows
-
-### Home
-- Live **Steam specials** strip when the public API responds
-- Link into the buy guide
-
-### Next backlog
-- Sale calendar overlay on charts
-- Edition matcher (Standard vs Gold)
-- Offline predictions.json display
+### Features
+- **`/about/`** — pages, keyboard shortcuts, safety, dev pointers
+- **Free / giveaway** section on `/guide/` (CheapShark `upperPrice=0`)
+- Home imports popular IDs from `constants.py` (easier to edit)
 
 ```bash
-git pull && python manage.py runserver
-# http://127.0.0.1:8000/guide/
-# http://127.0.0.1:8000/deals/
+git pull
+# read DEVELOPER.md
+python manage.py runserver
+# http://127.0.0.1:8000/about/
 ```
 
 ---
 
-## 2026-08-21 04:25 BST — Training CSV + detail digital panel wiring
+## 2026-08-21 04:35 BST — Buy guide + public Steam / CheapShark feeds
 
-### Added
-- `/export/training.csv` for offline ML
-- Research download buttons
-- Digital store panel + similar games on detail
-- Fixed JS HTML escape
+- `/guide/`, Steam specials on home, multi-store deals on `/deals/`
 
 ---
 
-## 2026-08-20 22:05 BST — Digital BS4 stores + Research lab
+## 2026-08-21 04:25 BST — Training CSV + detail digital panel
 
-- Humble, Fanatical, GMG, GOG, CDKeys scrapers + `/research/`
+- `/export/training.csv`, digital store panel, similar games
 
 ---
 
