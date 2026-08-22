@@ -1,126 +1,109 @@
 """
-Polite CeX UK client (unofficial internal API).
+CeX UK — public boxes JSON API (preferred over HTML scrape).
 
-Base: https://wss2.cex.uk.webuy.io/v3/
-Use low volume + caching. This endpoint is not officially public and may change.
+Base: https://wss2.cex.uk.webuy.io/v3/boxes
+Low volume + Django cache. Soft-fail on errors.
 """
 
 from __future__ import annotations
 
-import time
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
-import requests
-
 from apps.games.cache import cached
+from apps.games.clients.scrape_utils import fetch_json, product_row
+from apps.games.clients.title_match import filter_by_title
 
-BASE = "https://wss2.cex.uk.webuy.io/v3"
-USER_AGENT = "GamePriceTracker/0.1 (personal research; contact: local)"
-_last_request = 0.0
-MIN_INTERVAL = 1.5  # seconds between requests
-
-SEARCH_CACHE_TTL = 1800  # 30 min — unofficial API; never hammer
+API = "https://wss2.cex.uk.webuy.io/v3/boxes"
+SEARCH_TTL = 1800
 
 
-def _throttle() -> None:
-    global _last_request
-    elapsed = time.monotonic() - _last_request
-    if elapsed < MIN_INTERVAL:
-        time.sleep(MIN_INTERVAL - elapsed)
-    _last_request = time.monotonic()
-
-
-def _search_boxes_uncached(query: str, count: int = 20) -> list[dict[str, Any]]:
-    """Raw CeX request — results are cached by `search_boxes`."""
-    _throttle()
-    url = f"{BASE}/boxes"
-    params = {
-        "q": query,
-        "firstRecord": 1,
-        "count": min(count, 50),
-        "sortBy": "relevance",
-        "sortOrder": "desc",
-    }
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "application/json",
-    }
-    try:
-        r = requests.get(url, params=params, headers=headers, timeout=12)
-        r.raise_for_status()
-        data = r.json()
-    except (requests.RequestException, ValueError) as e:
-        return [{"_error": str(e)}]
-
-    # Response shape varies slightly; try common paths
+def _boxes_uncached(query: str, count: int = 24) -> list[dict[str, Any]]:
+    data, status = fetch_json(
+        API,
+        params={
+            "q": query,
+            "firstRecord": 1,
+            "count": min(count, 50),
+            "sortBy": "relevance",
+            "sortOrder": "desc",
+        },
+        timeout=8,
+    )
+    if not data or status != 200:
+        return []
     boxes = (
-        data.get("response", {}).get("data", {}).get("boxes")
-        or data.get("data", {}).get("boxes")
+        (data.get("response") or {}).get("data", {}).get("boxes")
+        or (data.get("data") or {}).get("boxes")
         or data.get("boxes")
         or []
     )
     return boxes if isinstance(boxes, list) else []
 
 
-def search_boxes(query: str, count: int = 20) -> list[dict[str, Any]]:
-    """
-    Search CeX boxes by keyword (cached to protect the unofficial API).
-    Returns list of dicts with boxId, boxName, sellPrice, cashPrice, etc.
-    """
+def search_boxes(query: str, count: int = 24) -> list[dict[str, Any]]:
     query = (query or "").strip()
     if not query:
         return []
     return cached(
-        f"cex:boxes:{query.lower()}:{count}",
-        lambda: _search_boxes_uncached(query, count=count),
-        timeout=SEARCH_CACHE_TTL,
+        f"cex:api:v2:{query.lower()}:{count}",
+        lambda: _boxes_uncached(query, count=count),
+        timeout=SEARCH_TTL,
     )
 
 
-def find_god_of_war_ps4() -> list[dict[str, Any]]:
+def search_cex_products(
+    title: str,
+    platform: str = "",
+    limit: int = 8,
+) -> dict[str, Any]:
     """
-    Search for God of War on PS4 and return normalized price rows.
+    Normalized product rows for UK physical panel.
+    Uses JSON API + strict title_match (no LEGO bleed).
     """
-    raw = search_boxes("God of War PlayStation 4", count=30)
-    if raw and "_error" in raw[0]:
-        return raw
+    from apps.games.clients.uk_stores import platform_query
 
-    results = []
-    for b in raw:
-        name = (b.get("boxName") or "").lower()
-        cat = (b.get("categoryName") or b.get("categoryFriendlyName") or "").lower()
-        # Prefer PS4 / Playstation4 software
-        if "god of war" not in name:
-            continue
-        if "ragnar" in name:  # skip Ragnarok unless wanted later
-            continue
-        if "playstation" not in cat and "ps4" not in cat and "ps4" not in name:
-            # still include if name clearly PS4
-            if "ps4" not in name and "playstation 4" not in name:
-                continue
+    title = (title or "").strip()
+    q = platform_query(title, platform) if platform else title
+    search_url = f"https://uk.webuy.com/search?stext={q.replace(' ', '+')}"
+    out: dict[str, Any] = {"results": [], "blocked": False, "search_url": search_url}
+    if not title:
+        out["blocked"] = True
+        return out
 
-        sell = b.get("sellPrice")
-        if sell is None:
-            continue
+    boxes = search_boxes(q, count=max(limit * 3, 20))
+    rows: list[dict] = []
+    for b in boxes:
+        name = b.get("boxName") or ""
         try:
-            price = Decimal(str(sell))
-        except Exception:
+            price = Decimal(str(b.get("sellPrice")))
+        except (InvalidOperation, TypeError, ValueError):
             continue
-
-        results.append(
-            {
-                "box_id": b.get("boxId"),
-                "name": b.get("boxName"),
-                "price": price,
-                "currency": "GBP",
-                "cash_price": b.get("cashPrice"),
-                "exchange_price": b.get("exchangePrice"),
-                "category": b.get("categoryFriendlyName") or b.get("categoryName"),
-                "in_stock": not bool(b.get("outOfStock") or b.get("outOfEcomStock")),
-                "url": f"https://uk.webuy.com/product-detail/?id={b.get('boxId')}"
-                if b.get("boxId")
-                else "https://uk.webuy.com",
-            }
+        box_id = b.get("boxId")
+        href = (
+            f"https://uk.webuy.com/product-detail?id={box_id}"
+            if box_id
+            else search_url
         )
-    return results
+        rating = None
+        try:
+            if b.get("boxRating") is not None:
+                rating = float(b["boxRating"])
+        except (TypeError, ValueError):
+            pass
+        row = product_row(
+            name=name,
+            price=price,
+            store_name="CeX",
+            url=href,
+            rating=rating,
+            is_used=True,
+        )
+        if row:
+            row["condition"] = "used"
+            rows.append(row)
+
+    rows = filter_by_title(rows, title, min_score=0.67)[:limit]
+    out["results"] = rows
+    out["blocked"] = len(rows) == 0
+    return out
