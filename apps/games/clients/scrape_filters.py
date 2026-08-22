@@ -7,9 +7,10 @@ Applied after BeautifulSoup extraction so blocked sites still keep search_url.
 
 from __future__ import annotations
 
-import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
+
+from apps.games.clients.title_match import filter_by_title, titles_match
 
 # Words that usually mean "not a full game disc/cart"
 _ACCESSORY = (
@@ -65,7 +66,6 @@ def platform_hint_in_name(name: str, platform: str) -> bool:
         return True
     n = (name or "").lower()
     tokens = _PLATFORM_TOKENS[plat]
-    # Soft: if no platform words at all in the name, still keep (many titles omit it)
     any_plat = any(
         t in n
         for group in _PLATFORM_TOKENS.values()
@@ -93,27 +93,30 @@ def filter_product_rows(
     """
     Filter scraped product rows in-memory.
 
-    condition: '' | 'any' | 'new' | 'used'
+    1) Strict title match (Arkham Knight ≠ LEGO Batman / Asylum)
+    2) Accessories
+    3) Price band
+    4) Platform soft hint
+    5) Condition
     """
+    # Title first — this is the main relevance gate
+    if title:
+        rows = filter_by_title(rows or [], title, min_score=0.67)
+    else:
+        rows = list(rows or [])
+
     out: list[dict[str, Any]] = []
     cond = (condition or "").strip().lower()
     if cond in ("any", "all"):
         cond = ""
 
-    for row in rows or []:
+    for row in rows:
         name = row.get("name") or ""
+
         if exclude_accessories and is_accessory(name):
-            # Keep only if title tokens strongly present (bundle cases)
-            if title:
-                tokens = [
-                    t
-                    for t in re.findall(r"[a-z0-9]+", title.lower())
-                    if len(t) > 2
-                ][:4]
-                hits = sum(1 for t in tokens if t in name.lower())
-                if hits < min(2, len(tokens) or 1):
-                    continue
-            else:
+            # Only keep accessory bundles that still pass strict title match
+            # (already filtered) AND mention the full game strongly
+            if not title or not titles_match(name, title, min_score=0.85):
                 continue
 
         price = row.get("price")
@@ -134,14 +137,18 @@ def filter_product_rows(
         row = dict(row)
         row["condition"] = row_cond
         if cond in ("new", "used") and row_cond not in (cond, "unknown"):
-            # Drop definite mismatches; keep unknown
             if row_cond != cond:
                 continue
 
         out.append(row)
 
+    # Already roughly sorted by match then price in filter_by_title;
+    # re-sort by price for deal lists while keeping high match first if tied
     out.sort(
-        key=lambda r: float(r["price"]) if r.get("price") is not None else 999999.0
+        key=lambda r: (
+            -float(r.get("match_score") or 0),
+            float(r["price"]) if r.get("price") is not None else 999999.0,
+        )
     )
     return out
 
