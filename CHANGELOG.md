@@ -4,45 +4,45 @@
 
 ---
 
-## 2026-08-22 19:35 BST — Strict title matching (no LEGO on Arkham Knight)
+## 2026-08-22 19:50 BST — UK physical scrapers fixed + optimised
 
-### Bug
-Retail search for **Batman: Arkham Knight** could show LEGO Batman, Arkham Asylum/City/Origins, and other franchise noise because the old matcher only needed ~2 shared tokens ("batman" was enough noise).
+### CeX
+- Switched from fragile HTML scrape → **public boxes JSON API**
+  (`https://wss2.cex.uk.webuy.io/v3/boxes`)
+- Faster, structured `sellPrice` / `boxName` / stock; still title-filtered
 
-### Fix — `apps/games/clients/title_match.py`
-Techniques:
-1. **Normalize** titles (punctuation, editions, platforms stripped from token set)
-2. **Significant tokens** only (stopword list)
-3. **Whole-word** hits (batman ≠ bat)
-4. **Coverage score** — need ~all tokens for 2-word titles, ≥67% for longer ones
-5. **Discriminator rule** — longest tokens (e.g. `knight`, `arkham`) must appear when the query has 2+ words → blocks Asylum/City/Origins
-6. **Contaminant rejection** — listing has `lego` / `mobile` / … but query does not → hard reject
-7. **Over-fetch then filter** on UK scrapers + multi-platform search so the limit is applied *after* relevance
+### Shared scrape layer
+- Stronger browser-like headers (Accept-Language, Sec-Fetch-*, gzip)
+- Connection pool 12 (matches 6 parallel UK workers)
+- `fetch_json()` helper for API stores
+- `extract_ld_json_products()` — real JSON-LD Product/ItemList parse (GAME / Currys / Smyths / Argos)
+- HTML timeout **7s** per store; bundle hard deadline **8s** (`wait=False` shutdown)
 
-Wired into: UK BS4 stores, Amazon filter pipeline, `multi_platform_search` (PSN/Xbox/Nintendo/Steam buckets).
+### Per-store clean-up
+- Shared card + ld+json helpers → less duplicated selector code
+- Over-fetch ×3 → strict `title_match` → limit (relevance not truncated)
+- Cache keys bumped (`cex:v6`, `ebay:v6`, `gameuk:v6`, …)
 
-### Tests
-- `test_title_match.py` — Arkham Knight vs LEGO / Asylum / City / Origins
-- Updated `test_uk_stores.py`
+### Still soft-fail
+Any blocked retailer keeps a clickable **search_url** in the UK panel.
 
 ```bash
 git pull
-python manage.py test apps.games.tests.test_title_match apps.games.tests.test_uk_stores
 python manage.py runserver
-# reopen Arkham Knight detail — UK / Amazon rows should not list LEGO Batman
+# open a game detail → UK physical panel
 ```
 
 ---
 
-## 2026-08-21 19:55 BST — Public scrape filters (eBay + UK + Amazon)
+## 2026-08-22 19:35 BST — Strict title matching (no LEGO on Arkham Knight)
 
-- Platform / min-max £ / condition filters; eBay public URL params
+- Coverage score + contaminant reject + discriminator tokens
 
 ---
 
-## 2026-08-21 19:50 BST — Build on matching + deal links
+## 2026-08-21 19:55 BST — Public scrape filters
 
-- Accessory reject list; platform-aware social links
+- Platform / min-max £ / condition; eBay URL params
 
 ---
 
