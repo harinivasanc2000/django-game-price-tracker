@@ -3,6 +3,9 @@ UK local / marketplace sources — public product search (no login).
 
 BeautifulSoup scrapes + URL-level filters where the site supports them
 (e.g. eBay BIN, condition, price band). Soft-fail → search_url always kept.
+
+Title relevance uses apps.games.clients.title_match (strict coverage +
+contaminant rejection) so "Arkham Knight" does not return LEGO Batman.
 """
 
 from __future__ import annotations
@@ -22,13 +25,7 @@ from apps.games.clients.scrape_utils import (
     product_row,
     soup_from,
 )
-
-_ACCESSORY_HINTS = (
-    "controller", "dualsense", "dualshock", "gamepad", "headset", "earbud",
-    "carry case", "travel case", "charging dock", "charge station", "thumb grip",
-    "silicone", "skin cover", "screen protector", "stand only", "mount only",
-    "microfibre", "cleaning kit", "battery pack", "power bank",
-)
+from apps.games.clients.title_match import filter_by_title, titles_match
 
 
 def platform_query(title: str, platform: str = "") -> str:
@@ -60,7 +57,6 @@ def uk_search_links(
     hi = parse_price_bound(str(max_price) if max_price is not None else None)
     cond = (condition or "").strip().lower()
 
-    # eBay public filter params (no login)
     ebay = f"https://www.ebay.co.uk/sch/i.html?_nkw={qe}&_sacat=139973&LH_BIN=1&_sop=15"
     if lo is not None:
         ebay += f"&_udlo={lo}"
@@ -134,32 +130,13 @@ def _empty(url: str) -> dict[str, Any]:
 
 
 def _title_matches(name: str, title: str) -> bool:
-    haystack = (name or "").lower()
-    ignored = {
-        "the", "and", "for", "with", "edition", "game", "ps4", "ps5",
-        "xbox", "pc", "switch", "nintendo", "playstation", "sony", "microsoft",
-    }
-    tokens = [
-        token
-        for token in re.findall(r"[a-z0-9]+", (title or "").lower())
-        if len(token) > 2 and token not in ignored
-    ]
-    if not tokens:
-        return True
-    required = 1 if len(tokens) == 1 else 2
-    hits = sum(token in haystack for token in tokens)
-    if hits < required:
-        return False
-    if any(h in haystack for h in _ACCESSORY_HINTS) and hits < max(required + 1, 2):
-        return False
-    return True
+    """Back-compat wrapper — strict matcher."""
+    return titles_match(name, title, min_score=0.67)
 
 
 def _keep_matching_rows(source: dict[str, Any], title: str) -> dict[str, Any]:
     source = dict(source or {})
-    source["results"] = [
-        row for row in (source.get("results") or []) if _title_matches(row.get("name", ""), title)
-    ]
+    source["results"] = filter_by_title(source.get("results") or [], title, min_score=0.67)
     if not source["results"]:
         source["blocked"] = True
     return source
@@ -174,7 +151,6 @@ def _ebay_search_url(
     condition: str = "",
 ) -> str:
     q = platform_query(title, platform)
-    # Public filters: category Video Games, Buy It Now, price low→high
     url = (
         f"https://www.ebay.co.uk/sch/i.html?_nkw={quote_plus(q)}"
         f"&_sacat=139973&LH_BIN=1&_sop=15"
@@ -223,11 +199,13 @@ def _try_cex_uncached(title: str, platform: str = "", limit: int = 8) -> dict[st
             if row:
                 row["condition"] = "used"
                 out["results"].append(row)
-            if len(out["results"]) >= limit:
-                return out
+            if len(out["results"]) >= limit * 3:
+                break
+        if len(out["results"]) >= limit * 3:
+            break
 
     if not out["results"]:
-        for card in soup.select("[class*='product'], [class*='search-product'], .superbox")[: limit + 12]:
+        for card in soup.select("[class*='product'], [class*='search-product'], .superbox")[: limit + 20]:
             name_el = card.find(["h2", "h3", "a"], class_=re.compile(r"name|title", re.I))
             if not name_el:
                 name_el = card.find("a", href=True)
@@ -245,9 +223,11 @@ def _try_cex_uncached(title: str, platform: str = "", limit: int = 8) -> dict[st
             if row:
                 row["condition"] = "used"
                 out["results"].append(row)
-            if len(out["results"]) >= limit:
+            if len(out["results"]) >= limit * 3:
                 break
 
+    # Over-fetch then strict-filter so LEGO / Asylum drop out before limit
+    out["results"] = filter_by_title(out["results"], title, min_score=0.67)[:limit]
     if not out["results"]:
         out["blocked"] = True
     return out
@@ -258,7 +238,7 @@ def try_cex_search(title: str, platform: str = "", limit: int = 8) -> dict[str, 
     if not title:
         return _empty("")
     return cached(
-        f"cex:v4:{title.lower()}:{platform}:{limit}",
+        f"cex:v5:{title.lower()}:{platform}:{limit}",
         lambda: _try_cex_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -298,7 +278,6 @@ def _try_ebay_uncached(
         if rating_el:
             rating = parse_rating(rating_el.get_text(" ", strip=True))
 
-        # Condition from subtitle / secondary text when present
         subtitle = ""
         sub_el = item.select_one(".SECONDARY_INFO, .s-item__subtitle, .s-item__caption")
         if sub_el:
@@ -325,9 +304,10 @@ def _try_ebay_uncached(
             else:
                 row["condition"] = "unknown"
             out["results"].append(row)
-        if len(out["results"]) >= limit:
+        if len(out["results"]) >= limit * 3:
             break
 
+    out["results"] = filter_by_title(out["results"], title, min_score=0.67)[:limit]
     if not out["results"]:
         out["blocked"] = True
     return out
@@ -349,7 +329,7 @@ def try_ebay_uk(
     hi = str(max_price) if max_price is not None else ""
     cond = (condition or "").strip().lower()
     return cached(
-        f"ebay:v4:{title.lower()}:{platform}:{limit}:{lo}:{hi}:{cond}",
+        f"ebay:v5:{title.lower()}:{platform}:{limit}:{lo}:{hi}:{cond}",
         lambda: _try_ebay_uncached(
             title,
             platform=platform,
@@ -385,8 +365,8 @@ def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 8) -> dic
             row = product_row(name=m.group(1), price=price, store_name="GAME UK", url=url)
             if row:
                 out["results"].append(row)
-            if len(out["results"]) >= limit:
-                return out
+            if len(out["results"]) >= limit * 3:
+                break
 
     for card in soup.select(
         "article, .product, [data-product], .product-card, li.product, [class*='ProductCard']"
@@ -406,8 +386,10 @@ def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 8) -> dic
         row = product_row(name=name, price=price, store_name="GAME UK", url=href)
         if row:
             out["results"].append(row)
-        if len(out["results"]) >= limit:
+        if len(out["results"]) >= limit * 3:
             break
+
+    out["results"] = filter_by_title(out["results"], title, min_score=0.67)[:limit]
     if not out["results"]:
         out["blocked"] = True
     return out
@@ -418,7 +400,7 @@ def try_game_uk(title: str, platform: str = "", limit: int = 8) -> dict[str, Any
     if not title:
         return _empty("")
     return cached(
-        f"gameuk:v4:{title.lower()}:{platform}:{limit}",
+        f"gameuk:v5:{title.lower()}:{platform}:{limit}",
         lambda: _try_game_uk_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -451,8 +433,8 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 8) -> dict[
             row = product_row(name=name, price=price, store_name="Argos", url=url)
             if row:
                 out["results"].append(row)
-            if len(out["results"]) >= limit:
-                return out
+            if len(out["results"]) >= limit * 3:
+                break
 
     for card in soup.select(
         "[data-test='component-product-card'], article, .ProductCard, [class*='ProductCard']"
@@ -466,9 +448,10 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 8) -> dict[
         row = product_row(name=name, price=price, store_name="Argos", url=href)
         if row:
             out["results"].append(row)
-        if len(out["results"]) >= limit:
+        if len(out["results"]) >= limit * 3:
             break
 
+    out["results"] = filter_by_title(out["results"], title, min_score=0.67)[:limit]
     if not out["results"]:
         out["blocked"] = True
     return out
@@ -479,7 +462,7 @@ def try_argos(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     if not title:
         return _empty("")
     return cached(
-        f"argos:v3:{title.lower()}:{platform}:{limit}",
+        f"argos:v4:{title.lower()}:{platform}:{limit}",
         lambda: _try_argos_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -505,7 +488,7 @@ def _try_currys_uncached(title: str, platform: str = "", limit: int = 8) -> dict
         row = product_row(name=name, price=price, store_name="Currys", url=href)
         if row:
             out["results"].append(row)
-        if len(out["results"]) >= limit:
+        if len(out["results"]) >= limit * 3:
             break
     if not out["results"]:
         for script in soup.find_all("script", type="application/ld+json"):
@@ -522,8 +505,10 @@ def _try_currys_uncached(title: str, platform: str = "", limit: int = 8) -> dict
                 row = product_row(name=m.group(1), price=price, store_name="Currys", url=url)
                 if row:
                     out["results"].append(row)
-                if len(out["results"]) >= limit:
+                if len(out["results"]) >= limit * 3:
                     break
+
+    out["results"] = filter_by_title(out["results"], title, min_score=0.67)[:limit]
     if not out["results"]:
         out["blocked"] = True
     return out
@@ -534,7 +519,7 @@ def try_currys(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]
     if not title:
         return _empty("")
     return cached(
-        f"currys:v3:{title.lower()}:{platform}:{limit}",
+        f"currys:v4:{title.lower()}:{platform}:{limit}",
         lambda: _try_currys_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -563,8 +548,8 @@ def _try_smyths_uncached(title: str, platform: str = "", limit: int = 8) -> dict
             row = product_row(name=m.group(1), price=price, store_name="Smyths Toys", url=url)
             if row:
                 out["results"].append(row)
-            if len(out["results"]) >= limit:
-                return out
+            if len(out["results"]) >= limit * 3:
+                break
 
     for card in soup.select(
         ".product-item, .product, article, [class*='product'], [data-product]"
@@ -580,9 +565,10 @@ def _try_smyths_uncached(title: str, platform: str = "", limit: int = 8) -> dict
         row = product_row(name=name, price=price, store_name="Smyths Toys", url=href)
         if row:
             out["results"].append(row)
-        if len(out["results"]) >= limit:
+        if len(out["results"]) >= limit * 3:
             break
 
+    out["results"] = filter_by_title(out["results"], title, min_score=0.67)[:limit]
     if not out["results"]:
         out["blocked"] = True
     return out
@@ -593,7 +579,7 @@ def try_smyths(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]
     if not title:
         return _empty("")
     return cached(
-        f"smyths:v2:{title.lower()}:{platform}:{limit}",
+        f"smyths:v3:{title.lower()}:{platform}:{limit}",
         lambda: _try_smyths_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
@@ -608,7 +594,7 @@ def fetch_uk_physical_bundle(
     max_price: Decimal | None = None,
     condition: str = "",
 ) -> dict[str, Any]:
-    """Parallel public scrapes + shared filters (price / condition / platform)."""
+    """Parallel public scrapes + strict title match + price/condition filters."""
     title = (title or "").strip()
     links = uk_search_links(
         title, platform, min_price=min_price, max_price=max_price, condition=condition
@@ -667,7 +653,6 @@ def fetch_uk_physical_bundle(
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    # Title match first, then price / condition / platform soft filters
     def finalize(src):
         matched = _keep_matching_rows(src, title)
         return filter_source_dict(
@@ -679,7 +664,6 @@ def fetch_uk_physical_bundle(
             condition=cond,
         )
 
-    # CeX is always used — if user asked for new only, empty + keep search link
     if cond == "new":
         cex_final = _empty(fallback_urls["CeX"])
         cex_final["search_url"] = cex.get("search_url") or fallback_urls["CeX"]

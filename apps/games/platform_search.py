@@ -6,6 +6,7 @@ Designed to be light:
   - Django cache on every client + top-level result cache
   - limited result counts
   - soft-fail per platform
+  - strict title_match so franchise bleed (LEGO / other Arkham) is filtered
 """
 
 from __future__ import annotations
@@ -19,11 +20,12 @@ from django.core.cache import cache
 from .clients.nintendo import nintendo_search_url, search_nintendo
 from .clients.psn import search_psn
 from .clients.steam import search_store
+from .clients.title_match import filter_by_title
 from .clients.uk_stores import platform_query
 from .clients.xbox import microsoft_store_search_url, search_xbox, xbox_search_url
 from .fx import to_gbp_or_zero
 
-MPS_TTL = 180  # whole multi-platform search cache
+MPS_TTL = 180
 
 
 def _ser(row: dict) -> dict:
@@ -40,11 +42,6 @@ def multi_platform_search(
     country: str = "GB",
     limit: int = 8,
 ) -> dict[str, Any]:
-    """
-    Returns buckets:
-      steam, psn, xbox, nintendo, links
-    Only runs the platforms needed for `platform` filter (saves RAM/CPU).
-    """
     q = (query or "").strip()
     plat = (platform or "").strip().lower()
     empty = {
@@ -61,7 +58,8 @@ def multi_platform_search(
     if not q:
         return empty
 
-    cache_key = f"mps:v2:{q.lower()}:{plat}:{country}:{limit}"
+    # Bump cache key when title matcher changes
+    cache_key = f"mps:v3:{q.lower()}:{plat}:{country}:{limit}"
     hit = cache.get(cache_key)
     if hit is not None:
         return hit
@@ -81,25 +79,26 @@ def multi_platform_search(
 
     def run_steam():
         try:
-            return search_store(steam_q, country=country, limit=limit)
+            # Over-fetch then strict-filter
+            return search_store(steam_q, country=country, limit=max(limit * 2, 12))
         except Exception:
             return []
 
     def run_psn():
         try:
-            return search_psn(psn_q, limit=limit)
+            return search_psn(psn_q, limit=max(limit * 2, 12))
         except Exception:
             return []
 
     def run_xbox():
         try:
-            return search_xbox(q, limit=limit)
+            return search_xbox(q, limit=max(limit * 2, 12))
         except Exception:
             return []
 
     def run_nint():
         try:
-            return search_nintendo(q, limit=min(limit, 6))
+            return search_nintendo(q, limit=min(max(limit * 2, 10), 12))
         except Exception:
             return {"results": [], "blocked": True, "search_url": nintendo_search_url(q)}
 
@@ -132,15 +131,17 @@ def multi_platform_search(
                 elif kind == "nint":
                     nint_block = result or nint_block
         except TimeoutError:
-            # Do not use a context manager here: its implicit wait would undo
-            # this timeout by waiting for slow network workers on exit.
             pass
     finally:
-        # Running requests may finish and warm their own caches, but they must
-        # never hold this web request open after the eight-second budget.
         pool.shutdown(wait=False, cancel_futures=True)
 
-    nint_rows = [_ser(r) for r in (nint_block.get("results") or [])]
+    # Strict title filter on every bucket (same rules as UK scrapes)
+    steam_rows = filter_by_title(steam_rows, q, min_score=0.67)[:limit]
+    psn_rows = filter_by_title(psn_rows, q, min_score=0.67)[:limit]
+    xbox_rows = filter_by_title(xbox_rows, q, min_score=0.67)[:limit]
+    nint_rows = filter_by_title(
+        [_ser(r) for r in (nint_block.get("results") or [])], q, min_score=0.67
+    )[:limit]
 
     links = [
         {"name": "Steam", "platform": "pc", "url": f"https://store.steampowered.com/search/?term={q}"},
@@ -163,7 +164,7 @@ def multi_platform_search(
         "psn": psn_rows,
         "xbox": xbox_rows,
         "nintendo": nint_rows,
-        "nintendo_blocked": bool(nint_block.get("blocked")),
+        "nintendo_blocked": bool(nint_block.get("blocked")) and not nint_rows,
         "nintendo_search_url": nint_block.get("search_url") or nintendo_search_url(q),
         "links": links,
         "query": q,
@@ -174,7 +175,6 @@ def multi_platform_search(
 
 
 def cheapest_hint(buckets: dict[str, Any]) -> dict[str, Any] | None:
-    """Best GBP-ish hint across platform buckets for UI strip."""
     candidates = []
     for r in buckets.get("steam") or []:
         if r.get("price_status") == "paid" and r.get("price") is not None:
