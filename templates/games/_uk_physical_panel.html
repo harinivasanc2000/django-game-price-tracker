@@ -1,14 +1,32 @@
 <div class="panel" data-plat-group="physical">
   <h2>UK physical &amp; local (scraped)</h2>
 
-  {% if min_price or max_price or condition or current_platform %}
-  <p style="padding:0.35rem 1rem 0;font-size:0.78rem;color:var(--muted);">
-    Filters active:
-    {% if current_platform %}<span class="badge">{{ current_platform|upper }}</span>{% endif %}
-    {% if condition %}<span class="badge">{{ condition }}</span>{% endif %}
-    {% if min_price %}<span class="badge">≥ £{{ min_price }}</span>{% endif %}
-    {% if max_price %}<span class="badge">≤ £{{ max_price }}</span>{% endif %}
+  <p style="padding:0.25rem 1rem 0;font-size:0.75rem;color:var(--muted);">
+    {{ stores_ok|default:0 }}/{{ stores_total|default:7 }} local sources returned prices
+    {% if min_price or max_price or condition or current_platform %}
+      · Filters:
+      {% if current_platform %}<span class="badge">{{ current_platform|upper }}</span>{% endif %}
+      {% if condition %}<span class="badge">{{ condition }}</span>{% endif %}
+      {% if min_price %}<span class="badge">≥ £{{ min_price }}</span>{% endif %}
+      {% if max_price %}<span class="badge">≤ £{{ max_price }}</span>{% endif %}
+    {% endif %}
   </p>
+
+  {% if best_local %}
+  <div style="padding:0.35rem 0 0.15rem;">
+    <h2 style="padding-bottom:0;">Cheapest local (all shops)</h2>
+    {% for row in best_local|slice:":6" %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+          <span class="kind {% if row.is_used or row.condition == 'used' %}used{% else %}retail{% endif %}">{{ row.store_name|default:"Local" }}</span>
+          {% if row.in_stock %}<span class="badge" style="margin-left:0.2rem;">in stock</span>{% endif %}
+          {% if row.condition %}<span class="badge" style="margin-left:0.2rem;">{{ row.condition }}</span>{% endif %}
+        </div>
+        <div class="price-now">£{{ row.price }}</div>
+      </div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <div id="ukList">
@@ -17,7 +35,6 @@
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
           <span class="kind retail">GAME</span>
-          {% if row.condition %}<span class="badge" style="margin-left:0.2rem;">{{ row.condition }}</span>{% endif %}
         </div>
         <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
       </div>
@@ -74,12 +91,28 @@
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
           <span class="kind used">CeX used</span>
+          {% if row.in_stock %}<span class="badge" style="margin-left:0.2rem;">in stock</span>{% endif %}
+          {% if row.trade_in_cash %}<span class="badge" style="margin-left:0.2rem;">sell £{{ row.trade_in_cash }}</span>{% endif %}
         </div>
         <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
       </div>
     {% empty %}
       {% if cex_search_url %}
         <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
+      {% endif %}
+    {% endfor %}
+
+    {% for row in musicmagpie_rows %}
+      <div class="deal-row">
+        <div>
+          <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+          <span class="kind used">MusicMagpie</span>
+        </div>
+        <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
+      </div>
+    {% empty %}
+      {% if musicmagpie_search_url %}
+        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ musicmagpie_search_url }}" target="_blank" rel="noopener">Search MusicMagpie →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -107,7 +140,7 @@
         {% endfor %}
       </div>
       <p style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;padding-bottom:0.75rem;">
-        Facebook Marketplace &amp; Gumtree are <strong>link-only</strong>. Prices from public search pages only — no login, no seller personal data.
+        Facebook Marketplace &amp; Gumtree are <strong>link-only</strong>. Public search prices only — no login, no seller personal data.
       </p>
     </div>
   </div>

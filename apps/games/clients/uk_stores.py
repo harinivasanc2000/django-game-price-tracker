@@ -1,12 +1,13 @@
 """
 UK local / marketplace sources — public product search (no login).
 
-  CeX     → official boxes JSON API (wss2.cex.uk.webuy.io) — fastest / most reliable
-  eBay    → public HTML + URL filters (BIN, price, condition)
-  GAME / Argos / Currys / Smyths → public HTML + ld+json when present
+  CeX          → boxes JSON API (+ stock / trade-in)
+  MusicMagpie  → public HTML (used media/games)
+  eBay         → public HTML + URL filters
+  GAME/Argos/Currys/Smyths → HTML + ld+json
 
-Soft-fail everywhere: blocked → empty results + clickable search_url.
-Strict title_match so franchise bleed (LEGO etc.) is filtered out.
+Soft-fail: blocked → empty results + clickable search_url.
+Strict title_match filters franchise bleed.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from urllib.parse import quote_plus, quote, urljoin
 
 from apps.games.cache import cached
 from apps.games.clients.cex import search_cex_products
+from apps.games.clients.musicmagpie import try_musicmagpie
 from apps.games.clients.scrape_filters import filter_source_dict, parse_price_bound
 from apps.games.clients.scrape_utils import (
     extract_ld_json_products,
@@ -30,9 +32,8 @@ from apps.games.clients.scrape_utils import (
 )
 from apps.games.clients.title_match import filter_by_title, titles_match
 
-# Per-store HTML budget (CeX uses JSON and is separate)
 _HTML_TIMEOUT = 7
-_BUNDLE_TIMEOUT = 8
+_BUNDLE_TIMEOUT = 9
 
 
 def platform_query(title: str, platform: str = "") -> str:
@@ -77,6 +78,8 @@ def uk_search_links(
     return [
         {"name": "CeX", "kind": "used-physical", "note": "Buy / sell used discs",
          "url": f"https://uk.webuy.com/search?stext={qe}"},
+        {"name": "MusicMagpie", "kind": "used-physical", "note": "Used games & media",
+         "url": f"https://www.musicmagpie.co.uk/store/search?q={qe}"},
         {"name": "GAME UK", "kind": "retail", "note": "High-street & online",
          "url": f"https://www.game.co.uk/en/search?q={qe}"},
         {"name": "Argos", "kind": "retail", "note": "UK retail",
@@ -167,20 +170,37 @@ def _finalize_store(rows: list, title: str, limit: int, search_url: str) -> dict
     }
 
 
-# ── CeX (JSON API) ──────────────────────────────────────────────
+def merge_best_local(sources: dict[str, dict], *, limit: int = 12) -> list[dict]:
+    """Cheapest relevant row across all UK local sources (dedupe by store+name)."""
+    seen: set[str] = set()
+    merged: list[dict] = []
+    for key, src in sources.items():
+        for row in src.get("results") or []:
+            name = (row.get("name") or "").strip().lower()
+            store = (row.get("store_name") or key).strip().lower()
+            dedupe = f"{store}|{name}"
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            item = dict(row)
+            item.setdefault("store_name", key)
+            merged.append(item)
+    merged.sort(
+        key=lambda r: float(r["price"]) if r.get("price") is not None else 999999.0
+    )
+    return merged[:limit]
+
 
 def try_cex_search(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     title = (title or "").strip()
     if not title:
         return _empty("")
     return cached(
-        f"cex:v6:{title.lower()}:{platform}:{limit}",
+        f"cex:v7:{title.lower()}:{platform}:{limit}",
         lambda: search_cex_products(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
-
-# ── eBay ────────────────────────────────────────────────────────
 
 def _ebay_search_url(
     title: str,
@@ -278,7 +298,7 @@ def try_ebay_uk(
     hi = str(max_price) if max_price is not None else ""
     cond = (condition or "").strip().lower()
     return cached(
-        f"ebay:v6:{title.lower()}:{platform}:{limit}:{lo}:{hi}:{cond}",
+        f"ebay:v7:{title.lower()}:{platform}:{limit}:{lo}:{hi}:{cond}",
         lambda: _try_ebay_uncached(
             title, platform=platform, limit=limit,
             min_price=min_price, max_price=max_price, condition=condition,
@@ -286,8 +306,6 @@ def try_ebay_uk(
         timeout=1800,
     )
 
-
-# ── GAME UK ─────────────────────────────────────────────────────
 
 def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
@@ -300,9 +318,7 @@ def _try_game_uk_uncached(title: str, platform: str = "", limit: int = 8) -> dic
     if len(rows) < limit:
         rows.extend(
             _rows_from_cards(
-                soup,
-                store_name="GAME UK",
-                base_url=url,
+                soup, store_name="GAME UK", base_url=url,
                 selectors="article, .product-card, [data-product], li.product, [class*='ProductCard']",
                 limit=limit,
             )
@@ -315,13 +331,11 @@ def try_game_uk(title: str, platform: str = "", limit: int = 8) -> dict[str, Any
     if not title:
         return _empty("")
     return cached(
-        f"gameuk:v6:{title.lower()}:{platform}:{limit}",
+        f"gameuk:v7:{title.lower()}:{platform}:{limit}",
         lambda: _try_game_uk_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
-
-# ── Argos ───────────────────────────────────────────────────────
 
 def _try_argos_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
@@ -332,15 +346,13 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 8) -> dict[
     soup = soup_from(html)
     rows = _rows_from_ld(soup, "Argos", url, limit)
     if len(rows) < limit:
-        # Argos often embeds product JSON in scripts
         for script in soup.find_all("script"):
             text = script.string or ""
             if '"name"' not in text or '"price"' not in text:
                 continue
             for m in re.finditer(
                 r'"name"\s*:\s*"([^"]{5,120})".{0,280}?"price"\s*:\s*([0-9]+(?:\.[0-9]+)?)',
-                text,
-                re.DOTALL,
+                text, re.DOTALL,
             ):
                 name = m.group(1)
                 if "argos" in name.lower():
@@ -359,9 +371,7 @@ def _try_argos_uncached(title: str, platform: str = "", limit: int = 8) -> dict[
     if len(rows) < limit:
         rows.extend(
             _rows_from_cards(
-                soup,
-                store_name="Argos",
-                base_url=url,
+                soup, store_name="Argos", base_url=url,
                 selectors="[data-test='component-product-card'], article, [class*='ProductCard']",
                 limit=limit,
             )
@@ -374,13 +384,11 @@ def try_argos(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     if not title:
         return _empty("")
     return cached(
-        f"argos:v5:{title.lower()}:{platform}:{limit}",
+        f"argos:v6:{title.lower()}:{platform}:{limit}",
         lambda: _try_argos_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
-
-# ── Currys ──────────────────────────────────────────────────────
 
 def _try_currys_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
@@ -393,9 +401,7 @@ def _try_currys_uncached(title: str, platform: str = "", limit: int = 8) -> dict
     if len(rows) < limit:
         rows.extend(
             _rows_from_cards(
-                soup,
-                store_name="Currys",
-                base_url=url,
+                soup, store_name="Currys", base_url=url,
                 selectors="[data-component='product-card'], .product, article, [class*='ProductCard']",
                 limit=limit,
             )
@@ -408,13 +414,11 @@ def try_currys(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]
     if not title:
         return _empty("")
     return cached(
-        f"currys:v5:{title.lower()}:{platform}:{limit}",
+        f"currys:v6:{title.lower()}:{platform}:{limit}",
         lambda: _try_currys_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
-
-# ── Smyths ──────────────────────────────────────────────────────
 
 def _try_smyths_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
     q = platform_query(title, platform)
@@ -429,9 +433,7 @@ def _try_smyths_uncached(title: str, platform: str = "", limit: int = 8) -> dict
     if len(rows) < limit:
         rows.extend(
             _rows_from_cards(
-                soup,
-                store_name="Smyths Toys",
-                base_url=url,
+                soup, store_name="Smyths Toys", base_url=url,
                 selectors=".product-item, .product, article, [class*='product'], [data-product]",
                 limit=limit,
             )
@@ -444,13 +446,11 @@ def try_smyths(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]
     if not title:
         return _empty("")
     return cached(
-        f"smyths:v4:{title.lower()}:{platform}:{limit}",
+        f"smyths:v5:{title.lower()}:{platform}:{limit}",
         lambda: _try_smyths_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )
 
-
-# ── Parallel bundle ─────────────────────────────────────────────
 
 def fetch_uk_physical_bundle(
     title: str,
@@ -461,10 +461,6 @@ def fetch_uk_physical_bundle(
     max_price: Decimal | None = None,
     condition: str = "",
 ) -> dict[str, Any]:
-    """
-    Parallel public scrapes.
-    CeX uses JSON API (usually <1s); HTML stores share an 8s hard deadline.
-    """
     title = (title or "").strip()
     links = uk_search_links(
         title, platform, min_price=min_price, max_price=max_price, condition=condition
@@ -482,9 +478,12 @@ def fetch_uk_physical_bundle(
 
         return run
 
-    pool = ThreadPoolExecutor(max_workers=6)
+    pool = ThreadPoolExecutor(max_workers=7)
     try:
         f_cex = pool.submit(safe("CeX", lambda: try_cex_search(title, platform, limit)))
+        f_mm = pool.submit(
+            safe("MusicMagpie", lambda: try_musicmagpie(title, platform, limit))
+        )
         f_ebay = pool.submit(
             safe(
                 "eBay UK",
@@ -500,19 +499,20 @@ def fetch_uk_physical_bundle(
         f_smyths = pool.submit(safe("Smyths Toys", lambda: try_smyths(title, platform, limit)))
 
         done, _ = wait(
-            (f_cex, f_ebay, f_game, f_argos, f_currys, f_smyths),
+            (f_cex, f_mm, f_ebay, f_game, f_argos, f_currys, f_smyths),
             timeout=_BUNDLE_TIMEOUT,
         )
 
         def take(fut, name):
             if fut not in done:
-                return _empty(fallback[name])
+                return _empty(fallback.get(name, ""))
             try:
-                return fut.result() or _empty(fallback[name])
+                return fut.result() or _empty(fallback.get(name, ""))
             except Exception:
-                return _empty(fallback[name])
+                return _empty(fallback.get(name, ""))
 
         cex = take(f_cex, "CeX")
+        mm = take(f_mm, "MusicMagpie")
         ebay = take(f_ebay, "eBay UK")
         game = take(f_game, "GAME UK")
         argos = take(f_argos, "Argos")
@@ -535,17 +535,30 @@ def fetch_uk_physical_bundle(
     if cond == "new":
         cex_final = _empty(fallback["CeX"])
         cex_final["search_url"] = cex.get("search_url") or fallback["CeX"]
+        mm_final = _empty(fallback["MusicMagpie"])
+        mm_final["search_url"] = mm.get("search_url") or fallback["MusicMagpie"]
     else:
         cex_final = finalize(cex)
+        mm_final = finalize(mm)
 
-    return {
+    sources = {
         "cex": cex_final,
+        "musicmagpie": mm_final,
         "ebay": finalize(ebay),
         "game": finalize(game),
         "argos": finalize(argos),
         "currys": finalize(currys),
         "smyths": finalize(smyths),
+    }
+    best_local = merge_best_local(sources, limit=12)
+    stores_ok = sum(1 for s in sources.values() if s.get("results"))
+
+    return {
+        **sources,
         "uk_links": links,
+        "best_local": best_local,
+        "stores_ok": stores_ok,
+        "stores_total": len(sources),
         "filters": {
             "platform": platform,
             "min_price": str(min_price) if min_price is not None else "",

@@ -36,6 +36,12 @@ def empty_platform_bundle(title: str = "", platform: str = "") -> dict[str, Any]
         "smyths_rows": [],
         "smyths_blocked": True,
         "smyths_search_url": "",
+        "musicmagpie_rows": [],
+        "musicmagpie_blocked": True,
+        "musicmagpie_search_url": "",
+        "best_local": [],
+        "stores_ok": 0,
+        "stores_total": 7,
         "uk_links": uk_search_links(title, platform=platform) if title else [],
     }
 
@@ -43,7 +49,6 @@ def empty_platform_bundle(title: str = "", platform: str = "") -> dict[str, Any]
 def similar_steam_titles(
     name: str, app_id: int, country: str = "GB", limit: int = 6
 ) -> list[dict[str, Any]]:
-    """Related / edition search via public Steam storesearch."""
     name = (name or "").strip()
     if len(name) < 3:
         return []

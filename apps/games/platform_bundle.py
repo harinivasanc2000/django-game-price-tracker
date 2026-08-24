@@ -85,13 +85,8 @@ def platform_bundle(
     def run_amz():
         try:
             return search_amazon_uk(
-                title,
-                amz_extra,
-                limit,
-                platform=platform,
-                min_price=lo,
-                max_price=hi,
-                condition=cond,
+                title, amz_extra, limit,
+                platform=platform, min_price=lo, max_price=hi, condition=cond,
             )
         except Exception:
             return {"results": [], "blocked": True, "search_url": ""}
@@ -99,12 +94,8 @@ def platform_bundle(
     def run_uk():
         try:
             return fetch_uk_physical_bundle(
-                title,
-                platform,
-                limit,
-                min_price=lo,
-                max_price=hi,
-                condition=cond,
+                title, platform, limit,
+                min_price=lo, max_price=hi, condition=cond,
             )
         except Exception:
             return {}
@@ -118,7 +109,7 @@ def platform_bundle(
         f_uk = pool.submit(run_uk) if want_physical else None
         completed, _ = wait(
             [future for future in (f_ps, f_xb, f_ni, f_am, f_uk) if future],
-            timeout=10,
+            timeout=11,
         )
 
         def result_if_done(future, fallback):
@@ -137,7 +128,6 @@ def platform_bundle(
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    # Soft price filter on official digital rows too
     def price_ok(row: dict) -> bool:
         try:
             p = float(row.get("price") or 0)
@@ -161,6 +151,7 @@ def platform_bundle(
     argos = uk.get("argos") or {}
     currys = uk.get("currys") or {}
     smyths = uk.get("smyths") or {}
+    mm = uk.get("musicmagpie") or {}
 
     base.update(
         {
@@ -190,10 +181,14 @@ def platform_bundle(
             "smyths_rows": [_ser(r) for r in (smyths.get("results") or [])],
             "smyths_blocked": smyths.get("blocked", True),
             "smyths_search_url": smyths.get("search_url"),
+            "musicmagpie_rows": [_ser(r) for r in (mm.get("results") or [])],
+            "musicmagpie_blocked": mm.get("blocked", True),
+            "musicmagpie_search_url": mm.get("search_url"),
+            "best_local": [_ser(r) for r in (uk.get("best_local") or [])],
+            "stores_ok": uk.get("stores_ok") or 0,
+            "stores_total": uk.get("stores_total") or 7,
             "uk_links": uk.get("uk_links")
-            or uk_search_links(
-                title, platform, min_price=lo, max_price=hi, condition=cond
-            ),
+            or uk_search_links(title, platform, min_price=lo, max_price=hi, condition=cond),
             "active_filters": {
                 "platform": platform,
                 "min_price": str(lo) if lo is not None else "",
