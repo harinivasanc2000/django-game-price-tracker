@@ -36,91 +36,144 @@
       --drawer-bg: #08150f;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh; }
-    #bg-layer, #bg-canvas { position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; pointer-events: none; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text); line-height: 1.5; min-height: 100vh;
+    }
+    #bg-layer, #bg-canvas {
+      position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; pointer-events: none;
+    }
     #bg-layer { z-index: -3; }
     .bg-gradient {
-      background: radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.3), transparent 55%), radial-gradient(ellipse 50% 35% at 85% 70%, rgba(50,8,8,0.35), transparent 50%), #080404;
+      background: radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.28), transparent 55%), #080404;
     }
     .bg-scenery {
-      background:
-        linear-gradient(180deg, #12101a 0%, #1a1528 35%, #0e1a18 70%, #0a100e 100%);
-    }
-    .bg-scenery::after {
-      content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 38%;
-      background:
-        radial-gradient(ellipse 80% 60% at 20% 100%, #0a1812 0%, transparent 70%),
-        radial-gradient(ellipse 60% 50% at 70% 100%, #0c1418 0%, transparent 65%);
-      opacity: 0.9;
+      background: linear-gradient(180deg, #12101a 0%, #1a1528 40%, #0a100e 100%);
     }
     .bg-void { background: #050505; }
-    .bg-ocean {
-      background: linear-gradient(180deg, #061018 0%, #0a2030 45%, #061820 100%);
-    }
+    .bg-ocean { background: linear-gradient(180deg, #061018 0%, #0a2030 50%, #061820 100%); }
     .bg-sunset {
-      background: radial-gradient(ellipse at 50% 105%, #b94a24 0%, #52213a 28%, #171326 65%, #090812 100%);
+      background: radial-gradient(ellipse at 50% 105%, #b94a24 0%, #52213a 30%, #090812 100%);
     }
     .bg-grid {
-      background: linear-gradient(rgba(26,80,140,0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(26,80,140,0.16) 1px, transparent 1px), radial-gradient(ellipse at 50% 0%, #15274b, #060812 70%);
-      background-size: 34px 34px, 34px 34px, auto;
+      background:
+        linear-gradient(rgba(26,80,140,0.14) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(26,80,140,0.14) 1px, transparent 1px),
+        #060812;
+      background-size: 36px 36px, 36px 36px, auto;
     }
     .game-wallpaper {
       position: fixed; inset: 0; z-index: -3; pointer-events: none;
       background-size: cover; background-position: center top;
-      filter: saturate(1.05) brightness(0.55);
-      transform: scale(1.02);
+      filter: brightness(0.5);
     }
     .game-wallpaper::after {
       content: ""; position: absolute; inset: 0;
-      background: linear-gradient(180deg, rgba(8,4,4,0.55) 0%, rgba(8,4,4,0.82) 45%, rgba(8,4,4,0.95) 100%);
+      background: linear-gradient(180deg, rgba(8,4,4,0.5) 0%, rgba(8,4,4,0.92) 100%);
     }
     a { color: var(--accent2); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .container { max-width: 900px; margin: 0 auto; padding: 1.25rem 1.5rem; position: relative; }
+    .container { max-width: 900px; margin: 0 auto; padding: 1.1rem 1.25rem; position: relative; }
     .container.wide { max-width: 1120px; }
-    header { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0 1rem; margin-bottom: 1.25rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.5rem; }
-    header .logo { font-weight: 700; font-size: 1.15rem; color: var(--text); }
-    header .logo span { color: var(--accent2); }
-    header nav { display: flex; align-items: center; gap: 0.15rem; flex-wrap: wrap; }
-    header nav a, header nav button.nav-btn {
-      color: var(--muted); font-size: 0.88rem; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0.35rem 0.55rem; border-radius: 8px;
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.55rem 0 0.85rem; margin-bottom: 1rem;
+      border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: 0.45rem;
     }
-    header nav a:hover, header nav button.nav-btn:hover { color: var(--accent2); text-decoration: none; background: rgba(80,20,20,0.35); }
-    .badge { display: inline-block; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.15rem 0.45rem; border-radius: 4px; background: var(--border); color: var(--muted); }
+    header .logo { font-weight: 700; font-size: 1.1rem; color: var(--text); }
+    header .logo span { color: var(--accent2); }
+    header nav { display: flex; align-items: center; gap: 0.1rem; flex-wrap: wrap; }
+    header nav a, header nav button.nav-btn {
+      color: var(--muted); font-size: 0.84rem; background: none; border: none; cursor: pointer;
+      font-family: inherit; padding: 0.32rem 0.5rem; border-radius: 8px;
+    }
+    header nav a:hover, header nav button.nav-btn:hover {
+      color: var(--accent2); text-decoration: none; background: rgba(80,20,20,0.3);
+    }
+    /* Zero-network icons (emoji / unicode) */
+    .ico::before { margin-right: 0.28em; font-style: normal; }
+    .ico-track::before { content: "📌"; }
+    .ico-search::before { content: "🔍"; }
+    .ico-deals::before { content: "🔥"; }
+    .ico-guide::before { content: "📖"; }
+    .ico-lab::before { content: "🧪"; }
+    .ico-info::before { content: "ℹ️"; }
+    .ico-hist::before { content: "🕒"; }
+    .ico-gear::before { content: "⚙️"; }
+    .ico-user::before { content: "👤"; }
+    .ico-admin::before { content: "🛠️"; }
+    .ico-login::before { content: "🔑"; }
+    .ico-store::before { content: "🏪"; }
+    .ico-used::before { content: "♻️"; }
+    .ico-cart::before { content: "🛒"; }
+    .ico-tag::before { content: "🏷️"; }
+    .ico-star::before { content: "★"; }
+    .ico-ok::before { content: "✓"; }
+    .ico-warn::before { content: "⚠️"; }
+    .ico-chart::before { content: "📈"; }
+    .ico-news::before { content: "📰"; }
+    .ico-safe::before { content: "🛡️"; }
+    .ico-link::before { content: "🔗"; }
+    .ico-ps::before { content: "🎮"; }
+    .ico-xbox::before { content: "🟩"; }
+    .ico-switch::before { content: "🔴"; }
+    .ico-pc::before { content: "💻"; }
+    .ico-filter::before { content: "🎛️"; }
+    .ico-local::before { content: "📍"; }
+    .ico-cheap::before { content: "💰"; }
+    .badge {
+      display: inline-block; font-size: 0.68rem; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      padding: 0.12rem 0.4rem; border-radius: 4px;
+      background: var(--border); color: var(--muted);
+    }
     .badge.digital { background: #1a3a2a; color: #86efac; }
     .badge.dlc { background: #3a1520; color: #f0a0a0; }
     .badge.lowest { background: #14532d; color: #86efac; }
     .price-now { font-weight: 700; color: var(--accent2); }
     .price-was { text-decoration: line-through; color: var(--muted); font-size: 0.85em; margin-right: 0.35rem; }
-    footer { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.82rem; }
-    .drawer-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 90; opacity: 0; pointer-events: none; transition: opacity 0.25s ease; }
+    footer {
+      margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);
+      color: var(--muted); font-size: 0.8rem;
+    }
+    .drawer-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 90;
+      opacity: 0; pointer-events: none; transition: opacity 0.2s ease;
+    }
     .drawer-backdrop.open { opacity: 1; pointer-events: auto; }
     .drawer {
-      position: fixed; top: 0; right: 0; width: min(340px, 92vw); height: 100%;
+      position: fixed; top: 0; right: 0; width: min(320px, 92vw); height: 100%;
       background: var(--drawer-bg); border-left: 1px solid var(--border); z-index: 100;
-      transform: translateX(100%); transition: transform 0.28s ease;
-      display: flex; flex-direction: column; box-shadow: -12px 0 40px rgba(0,0,0,0.4);
+      transform: translateX(100%); transition: transform 0.22s ease;
+      display: flex; flex-direction: column;
     }
     .drawer.open { transform: translateX(0); }
-    .drawer-head { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); }
-    .drawer-body { flex: 1; overflow-y: auto; padding: 0.5rem; }
+    .drawer-head {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0.9rem 1rem; border-bottom: 1px solid var(--border);
+    }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 0.4rem; }
     .drawer-item {
-      display: flex; align-items: center; gap: 0.65rem;
-      padding: 0.55rem 0.7rem; border-radius: 10px; color: var(--text); text-decoration: none !important;
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.5rem 0.6rem; border-radius: 10px; color: var(--text); text-decoration: none !important;
     }
-    .drawer-item:hover { background: rgba(80,20,20,0.4); }
+    .drawer-item:hover { background: rgba(80,20,20,0.35); }
     .drawer-item img {
-      width: 72px; height: 34px; object-fit: cover; border-radius: 5px; background: var(--border); flex-shrink: 0;
+      width: 64px; height: 30px; object-fit: cover; border-radius: 4px;
+      background: var(--border); flex-shrink: 0;
     }
-    .drawer-item .t { font-weight: 600; font-size: 0.9rem; }
-    .drawer-item .s { font-size: 0.72rem; color: var(--muted); margin-top: 0.12rem; }
+    .drawer-item .t { font-weight: 600; font-size: 0.88rem; }
+    .drawer-item .s { font-size: 0.7rem; color: var(--muted); margin-top: 0.1rem; }
     #toast {
-      position: fixed; bottom: 1.25rem; left: 50%; transform: translateX(-50%) translateY(120%);
+      position: fixed; bottom: 1.1rem; left: 50%; transform: translateX(-50%) translateY(120%);
       background: #1a3a2a; color: #86efac; border: 1px solid #2a6a3a;
-      padding: 0.55rem 1.1rem; border-radius: 999px; font-size: 0.88rem; z-index: 300;
-      transition: transform 0.25s ease; pointer-events: none;
+      padding: 0.5rem 1rem; border-radius: 999px; font-size: 0.85rem; z-index: 300;
+      transition: transform 0.2s ease; pointer-events: none;
     }
     #toast.show { transform: translateX(-50%) translateY(0); }
+    kbd {
+      background: var(--border); padding: 0.05rem 0.3rem; border-radius: 4px; font-size: 0.75rem;
+    }
   </style>
   {% block extra_css %}{% endblock %}
 </head>
@@ -135,19 +188,19 @@
     <header>
       <a href="/" class="logo">{% if site_settings %}{{ site_settings.site_title }}{% else %}Game <span>Price</span> Tracker{% endif %}</a>
       <nav>
-        <button type="button" class="nav-btn" id="openTracked">Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}</button>
-        <a href="{% url 'games:steam_search' %}">Search</a>
-        <a href="{% url 'games:best_deals' %}">Deals</a>
-        <a href="{% url 'games:buy_guide' %}">Guide</a>
-        <a href="{% url 'games:research' %}">Research</a>
-        <a href="{% url 'games:about' %}">About</a>
-        <a href="{% url 'games:history' %}">History</a>
-        <a href="{% url 'games:appearance' %}">Settings</a>
+        <button type="button" class="nav-btn ico ico-track" id="openTracked">Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}</button>
+        <a class="ico ico-search" href="{% url 'games:steam_search' %}">Search</a>
+        <a class="ico ico-deals" href="{% url 'games:best_deals' %}">Deals</a>
+        <a class="ico ico-guide" href="{% url 'games:buy_guide' %}">Guide</a>
+        <a class="ico ico-lab" href="{% url 'games:research' %}">Research</a>
+        <a class="ico ico-info" href="{% url 'games:about' %}">About</a>
+        <a class="ico ico-hist" href="{% url 'games:history' %}">History</a>
+        <a class="ico ico-gear" href="{% url 'games:appearance' %}">Settings</a>
         {% if user.is_authenticated %}
-          <a href="{% url 'games:profile' %}">Profile</a>
-          {% if user.is_staff %}<a href="/admin/">Admin</a>{% endif %}
+          <a class="ico ico-user" href="{% url 'games:profile' %}">Profile</a>
+          {% if user.is_staff %}<a class="ico ico-admin" href="/admin/">Admin</a>{% endif %}
         {% else %}
-          <a href="{% url 'login' %}">Log in</a>
+          <a class="ico ico-login" href="{% url 'login' %}">Log in</a>
         {% endif %}
       </nav>
     </header>
@@ -155,14 +208,14 @@
     <footer>
       {% if site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}
       · <a href="{% url 'games:about' %}">About</a>
-      · Press <kbd style="background:var(--border);padding:0.05rem 0.35rem;border-radius:4px;font-size:0.75rem;">/</kbd> to search
+      · Press <kbd>/</kbd> to search
     </footer>
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
   <aside class="drawer" id="trackedDrawer" aria-hidden="true">
     <div class="drawer-head">
-      <strong>Tracked</strong>
+      <strong class="ico ico-track">Tracked</strong>
       <button type="button" class="nav-btn" id="closeTracked">Close</button>
     </div>
     <div class="drawer-body">
@@ -170,11 +223,11 @@
         {% for g in tracked_drawer %}
           <a class="drawer-item" href="{% if g.steam_app_id %}{% url 'games:steam_detail' g.steam_app_id %}{% else %}{% url 'games:compare' g.slug %}{% endif %}">
             {% if g.cover_url %}
-              <img src="{{ g.cover_url }}" alt="" loading="lazy" width="72" height="34">
+              <img src="{{ g.cover_url }}" alt="" loading="lazy" decoding="async" width="64" height="30">
             {% elif g.steam_app_id %}
-              <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/{{ g.steam_app_id }}/capsule_184x69.jpg" alt="" loading="lazy" width="72" height="34" onerror="this.style.display='none'">
+              <img src="https://cdn.cloudflare.steamstatic.com/steam/apps/{{ g.steam_app_id }}/capsule_184x69.jpg" alt="" loading="lazy" decoding="async" width="64" height="30" onerror="this.style.display='none'">
             {% else %}
-              <img src="" alt="" style="background:var(--border);" width="72" height="34">
+              <span style="width:64px;height:30px;background:var(--border);border-radius:4px;flex-shrink:0;"></span>
             {% endif %}
             <div>
               <div class="t">{{ g.title }}</div>
@@ -183,7 +236,7 @@
           </a>
         {% endfor %}
       {% else %}
-        <p style="color: var(--muted); padding: 1rem; font-size: 0.9rem;">Nothing tracked yet.</p>
+        <p style="color: var(--muted); padding: 1rem; font-size: 0.88rem;">Nothing tracked yet.</p>
       {% endif %}
     </div>
   </aside>
@@ -197,28 +250,31 @@
     t.textContent = msg;
     t.classList.add('show');
     clearTimeout(window._toastTimer);
-    window._toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2200);
+    window._toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2000);
   };
 
   (function () {
     var drawer = document.getElementById('trackedDrawer');
     var backdrop = document.getElementById('drawerBackdrop');
-    var open = function () { drawer.classList.add('open'); backdrop.classList.add('open'); };
-    var close = function () { drawer.classList.remove('open'); backdrop.classList.remove('open'); };
-    document.getElementById('openTracked') && document.getElementById('openTracked').addEventListener('click', open);
-    document.getElementById('closeTracked') && document.getElementById('closeTracked').addEventListener('click', close);
-    backdrop && backdrop.addEventListener('click', close);
+    var open = function () { drawer.classList.add('open'); backdrop.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); };
+    var close = function () { drawer.classList.remove('open'); backdrop.classList.remove('open'); drawer.setAttribute('aria-hidden', 'true'); };
+    var ot = document.getElementById('openTracked');
+    var ct = document.getElementById('closeTracked');
+    if (ot) ot.addEventListener('click', open);
+    if (ct) ct.addEventListener('click', close);
+    if (backdrop) backdrop.addEventListener('click', close);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') close();
       if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
         var tag = (e.target && e.target.tagName) || '';
         if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
         var input = document.querySelector('input[name="q"], input[type="search"]');
-        if (input) { e.preventDefault(); input.focus(); input.select && input.select(); }
+        if (input) { e.preventDefault(); input.focus(); if (input.select) input.select(); }
       }
     });
   })();
 
+  /* Wallpaper: low particle counts, ~15–20fps, pause when tab hidden */
   (function () {
     var THEME_KEY = 'gpt_theme';
     var WALL_KEY = 'gpt_wallpaper';
@@ -227,6 +283,13 @@
     var gameArt = document.getElementById('gameArtLayer');
     var animId = null;
     var mode = 'comet';
+    var visible = true;
+
+    document.addEventListener('visibilitychange', function () {
+      visible = document.visibilityState === 'visible';
+      if (!visible) stopAnim();
+      else if (mode === 'comet' || mode === 'stars' || mode === 'aurora') window.applyAppearance();
+    });
 
     function stopAnim() {
       if (animId) { cancelAnimationFrame(animId); animId = null; }
@@ -238,29 +301,38 @@
     }
 
     function startComet() {
-      if (!canvas) return;
+      if (!canvas || !visible) return;
       canvas.style.display = 'block';
       var ctx = canvas.getContext('2d');
       var w, h, comets = [], last = 0;
-      function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+      function resize() {
+        w = canvas.width = Math.min(window.innerWidth, 1600);
+        h = canvas.height = Math.min(window.innerHeight, 900);
+        canvas.style.width = '100%'; canvas.style.height = '100%';
+      }
       resize();
       function spawn() {
-        return { x: Math.random() * w * 1.2, y: -20 - Math.random() * h * 0.3, len: 40 + Math.random() * 70,
-          speed: 1.2 + Math.random() * 2.2, angle: Math.PI / 3.2 + Math.random() * 0.25, alpha: 0.15 + Math.random() * 0.35 };
+        return {
+          x: Math.random() * w * 1.1, y: -10 - Math.random() * 40,
+          len: 30 + Math.random() * 50, speed: 1.4 + Math.random() * 1.6,
+          angle: Math.PI / 3.2, alpha: 0.18 + Math.random() * 0.25
+        };
       }
-      for (var i = 0; i < 8; i++) comets.push(spawn());
+      for (var i = 0; i < 5; i++) comets.push(spawn());
       function frame(t) {
-        if (mode !== 'comet') return;
-        if (t - last < 33) { animId = requestAnimationFrame(frame); return; }
+        if (mode !== 'comet' || !visible) return;
+        if (t - last < 50) { animId = requestAnimationFrame(frame); return; }
         last = t; ctx.clearRect(0, 0, w, h);
         for (var j = 0; j < comets.length; j++) {
           var m = comets[j];
-          m.x += Math.cos(m.angle) * m.speed; m.y += Math.sin(m.angle) * m.speed;
-          var g = ctx.createLinearGradient(m.x, m.y, m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
-          g.addColorStop(0, 'rgba(255,120,100,' + m.alpha + ')'); g.addColorStop(1, 'rgba(120,20,20,0)');
-          ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath();
-          ctx.moveTo(m.x, m.y); ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len); ctx.stroke();
-          if (m.y > h + 40 || m.x > w + 40) Object.assign(m, spawn());
+          m.x += Math.cos(m.angle) * m.speed;
+          m.y += Math.sin(m.angle) * m.speed;
+          ctx.strokeStyle = 'rgba(255,100,90,' + m.alpha + ')';
+          ctx.lineWidth = 1.2; ctx.beginPath();
+          ctx.moveTo(m.x, m.y);
+          ctx.lineTo(m.x - Math.cos(m.angle) * m.len, m.y - Math.sin(m.angle) * m.len);
+          ctx.stroke();
+          if (m.y > h + 30 || m.x > w + 30) Object.assign(m, spawn());
         }
         animId = requestAnimationFrame(frame);
       }
@@ -268,32 +340,32 @@
     }
 
     function startStars() {
-      if (!canvas) return;
+      if (!canvas || !visible) return;
       canvas.style.display = 'block';
       var ctx = canvas.getContext('2d');
       var w, h, stars = [], last = 0;
       function resize() {
-        w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight;
+        w = canvas.width = Math.min(window.innerWidth, 1400);
+        h = canvas.height = Math.min(window.innerHeight, 800);
+        canvas.style.width = '100%'; canvas.style.height = '100%';
         stars = [];
-        for (var i = 0; i < 80; i++) {
-          stars.push({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.4 + 0.3, a: Math.random(), s: 0.002 + Math.random() * 0.008 });
+        for (var i = 0; i < 40; i++) {
+          stars.push({ x: Math.random() * w, y: Math.random() * h, r: Math.random() * 1.2 + 0.3, a: Math.random() });
         }
       }
       resize();
-      window.addEventListener('resize', resize, { passive: true });
       function frame(t) {
-        if (mode !== 'stars') return;
-        if (t - last < 40) { animId = requestAnimationFrame(frame); return; }
+        if (mode !== 'stars' || !visible) return;
+        if (t - last < 60) { animId = requestAnimationFrame(frame); return; }
         last = t;
         ctx.fillStyle = '#020208';
         ctx.fillRect(0, 0, w, h);
         for (var i = 0; i < stars.length; i++) {
           var s = stars[i];
-          s.a += s.s;
-          var alpha = 0.25 + 0.55 * Math.abs(Math.sin(s.a * 40));
+          s.a += 0.04;
           ctx.beginPath();
           ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(220,230,255,' + alpha + ')';
+          ctx.fillStyle = 'rgba(220,230,255,' + (0.3 + 0.5 * Math.abs(Math.sin(s.a))) + ')';
           ctx.fill();
         }
         animId = requestAnimationFrame(frame);
@@ -302,29 +374,31 @@
     }
 
     function startAurora() {
-      if (!canvas) return;
+      if (!canvas || !visible) return;
       canvas.style.display = 'block';
       var ctx = canvas.getContext('2d');
       var w, h, t0 = 0;
-      function resize() { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; }
+      function resize() {
+        w = canvas.width = Math.min(window.innerWidth, 1400);
+        h = canvas.height = Math.min(window.innerHeight, 800);
+        canvas.style.width = '100%'; canvas.style.height = '100%';
+      }
       resize();
       function frame(t) {
-        if (mode !== 'aurora') return;
-        if (t - t0 < 50) { animId = requestAnimationFrame(frame); return; }
+        if (mode !== 'aurora' || !visible) return;
+        if (t - t0 < 70) { animId = requestAnimationFrame(frame); return; }
         t0 = t;
-        var phase = t * 0.0003;
+        var phase = t * 0.00025;
         ctx.fillStyle = '#061018';
         ctx.fillRect(0, 0, w, h);
-        for (var band = 0; band < 3; band++) {
-          ctx.beginPath();
-          for (var x = 0; x <= w; x += 8) {
-            var y = h * 0.35 + band * 40 + Math.sin(x * 0.008 + phase + band) * 28 + Math.sin(x * 0.02 - phase) * 12;
-            if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-          }
-          ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-          ctx.fillStyle = band === 0 ? 'rgba(40,120,100,0.12)' : band === 1 ? 'rgba(60,80,140,0.1)' : 'rgba(100,60,120,0.08)';
-          ctx.fill();
+        ctx.beginPath();
+        for (var x = 0; x <= w; x += 12) {
+          var y = h * 0.4 + Math.sin(x * 0.01 + phase) * 24;
+          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
+        ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+        ctx.fillStyle = 'rgba(40,120,100,0.14)';
+        ctx.fill();
         animId = requestAnimationFrame(frame);
       }
       animId = requestAnimationFrame(frame);
@@ -339,21 +413,15 @@
       document.body.setAttribute('data-theme', theme);
       document.body.setAttribute('data-wallpaper', wall);
       mode = wall;
-
       stopAnim();
-      if (layer) {
-        layer.className = '';
-        layer.style.display = 'block';
-      }
+      if (layer) { layer.className = ''; layer.style.display = 'block'; }
       if (gameArt) gameArt.style.display = 'none';
-
       if (wall === 'game' && gameArt) {
         gameArt.style.display = 'block';
         if (layer) layer.style.display = 'none';
         return;
       }
       if (wall === 'game') wall = 'comet';
-
       if (wall === 'comet') { if (layer) layer.style.display = 'none'; startComet(); }
       else if (wall === 'stars') { if (layer) layer.style.display = 'none'; startStars(); }
       else if (wall === 'aurora') { if (layer) layer.style.display = 'none'; startAurora(); }
