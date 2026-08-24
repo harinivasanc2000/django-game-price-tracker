@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 from concurrent.futures import ThreadPoolExecutor, wait
-from decimal import Decimal
 
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -137,7 +136,6 @@ def steam_detail(request, app_id: int):
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    # Apply max/min to third-party CheapShark rows when set
     if store_deals and (min_price is not None or max_price is not None):
         filtered = []
         for d in store_deals:
@@ -247,6 +245,7 @@ def steam_detail(request, app_id: int):
         ("argos_rows", "Argos", "retail"),
         ("currys_rows", "Currys", "retail"),
         ("cex_rows", "CeX", "used"),
+        ("musicmagpie_rows", "MusicMagpie", "used"),
         ("ebay_rows", "eBay UK", "marketplace"),
     ):
         rows = plat.get(key) or []
@@ -332,6 +331,12 @@ def steam_detail(request, app_id: int):
             "smyths_rows": plat.get("smyths_rows") or [],
             "smyths_blocked": plat.get("smyths_blocked", True),
             "smyths_search_url": plat.get("smyths_search_url"),
+            "musicmagpie_rows": plat.get("musicmagpie_rows") or [],
+            "musicmagpie_blocked": plat.get("musicmagpie_blocked", True),
+            "musicmagpie_search_url": plat.get("musicmagpie_search_url"),
+            "best_local": plat.get("best_local") or [],
+            "stores_ok": plat.get("stores_ok") or 0,
+            "stores_total": plat.get("stores_total") or 7,
             "uk_links": plat.get("uk_links") or [],
             "digital_rows": digital_rows,
             "digital_links": digital_links,

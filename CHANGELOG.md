@@ -4,45 +4,40 @@
 
 ---
 
-## 2026-08-22 19:50 BST — UK physical scrapers fixed + optimised
+## 2026-08-24 07:15 BST — Local stores fix + features
 
-### CeX
-- Switched from fragile HTML scrape → **public boxes JSON API**
-  (`https://wss2.cex.uk.webuy.io/v3/boxes`)
-- Faster, structured `sellPrice` / `boxName` / stock; still title-filtered
+### Fixes
+- **CeX**: game-category preference, **in-stock first**, trade-in cash badge, proper `quote_plus` search URL
+- Bundle deadline **9s** / 7 parallel workers (added MusicMagpie)
+- Cache keys bumped so old empty CeX/HTML results are not sticky
 
-### Shared scrape layer
-- Stronger browser-like headers (Accept-Language, Sec-Fetch-*, gzip)
-- Connection pool 12 (matches 6 parallel UK workers)
-- `fetch_json()` helper for API stores
-- `extract_ld_json_products()` — real JSON-LD Product/ItemList parse (GAME / Currys / Smyths / Argos)
-- HTML timeout **7s** per store; bundle hard deadline **8s** (`wait=False` shutdown)
+### New features
+- **MusicMagpie** used-games public search (soft-fail + link)
+- **Cheapest local** strip — merges all UK sources, sorted by price, deduped
+- **Store health** line: `3/7 local sources returned prices`
+- CeX rows show **in stock** + **sell £X** (trade-in) when API provides them
+- MusicMagpie included in live-offer chips
 
-### Per-store clean-up
-- Shared card + ld+json helpers → less duplicated selector code
-- Over-fetch ×3 → strict `title_match` → limit (relevance not truncated)
-- Cache keys bumped (`cex:v6`, `ebay:v6`, `gameuk:v6`, …)
-
-### Still soft-fail
-Any blocked retailer keeps a clickable **search_url** in the UK panel.
+### Panel
+- `_uk_physical_panel.html` redesigned: best-local block on top, then per-store rows
 
 ```bash
 git pull
 python manage.py runserver
-# open a game detail → UK physical panel
+# open any detail → UK physical panel
 ```
 
 ---
 
-## 2026-08-22 19:35 BST — Strict title matching (no LEGO on Arkham Knight)
+## 2026-08-22 19:50 BST — UK physical scrapers fixed + optimised
 
-- Coverage score + contaminant reject + discriminator tokens
+- CeX JSON API; ld+json; tighter timeouts
 
 ---
 
-## 2026-08-21 19:55 BST — Public scrape filters
+## 2026-08-22 19:35 BST — Strict title matching
 
-- Platform / min-max £ / condition; eBay URL params
+- No LEGO on Arkham Knight; coverage + contaminants
 
 ---
 
