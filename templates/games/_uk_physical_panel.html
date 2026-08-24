@@ -1,8 +1,8 @@
 <div class="panel" data-plat-group="physical">
-  <h2>UK physical &amp; local (scraped)</h2>
+  <h2 class="ico ico-local">UK physical &amp; local</h2>
 
-  <p style="padding:0.25rem 1rem 0;font-size:0.75rem;color:var(--muted);">
-    {{ stores_ok|default:0 }}/{{ stores_total|default:7 }} local sources returned prices
+  <p style="padding:0.2rem 1rem 0;font-size:0.74rem;color:var(--muted);">
+    <span class="ico ico-ok">{{ stores_ok|default:0 }}/{{ stores_total|default:7 }} sources live</span>
     {% if min_price or max_price or condition or current_platform %}
       · Filters:
       {% if current_platform %}<span class="badge">{{ current_platform|upper }}</span>{% endif %}
@@ -13,15 +13,15 @@
   </p>
 
   {% if best_local %}
-  <div style="padding:0.35rem 0 0.15rem;">
-    <h2 style="padding-bottom:0;">Cheapest local (all shops)</h2>
+  <div style="padding:0.25rem 0 0.1rem;">
+    <h2 class="ico ico-cheap" style="padding-bottom:0;">Cheapest local</h2>
     {% for row in best_local|slice:":6" %}
       <div class="deal-row">
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
           <span class="kind {% if row.is_used or row.condition == 'used' %}used{% else %}retail{% endif %}">{{ row.store_name|default:"Local" }}</span>
-          {% if row.in_stock %}<span class="badge" style="margin-left:0.2rem;">in stock</span>{% endif %}
-          {% if row.condition %}<span class="badge" style="margin-left:0.2rem;">{{ row.condition }}</span>{% endif %}
+          {% if row.in_stock %}<span class="badge" style="margin-left:0.15rem;">in stock</span>{% endif %}
+          {% if row.condition %}<span class="badge" style="margin-left:0.15rem;">{{ row.condition }}</span>{% endif %}
         </div>
         <div class="price-now">£{{ row.price }}</div>
       </div>
@@ -34,13 +34,13 @@
       <div class="deal-row">
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-          <span class="kind retail">GAME</span>
+          <span class="kind retail ico ico-store">GAME</span>
         </div>
         <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
       </div>
     {% empty %}
       {% if game_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ game_search_url }}" target="_blank" rel="noopener">Search GAME UK →</a></p>
+        <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ game_search_url }}" target="_blank" rel="noopener">Search GAME UK →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -54,7 +54,7 @@
       </div>
     {% empty %}
       {% if smyths_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ smyths_search_url }}" target="_blank" rel="noopener">Search Smyths Toys →</a></p>
+        <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ smyths_search_url }}" target="_blank" rel="noopener">Search Smyths →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -68,7 +68,7 @@
       </div>
     {% empty %}
       {% if argos_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ argos_search_url }}" target="_blank" rel="noopener">Search Argos →</a></p>
+        <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ argos_search_url }}" target="_blank" rel="noopener">Search Argos →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -82,7 +82,7 @@
       </div>
     {% empty %}
       {% if currys_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ currys_search_url }}" target="_blank" rel="noopener">Search Currys →</a></p>
+        <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ currys_search_url }}" target="_blank" rel="noopener">Search Currys →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -90,15 +90,15 @@
       <div class="deal-row">
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-          <span class="kind used">CeX used</span>
-          {% if row.in_stock %}<span class="badge" style="margin-left:0.2rem;">in stock</span>{% endif %}
-          {% if row.trade_in_cash %}<span class="badge" style="margin-left:0.2rem;">sell £{{ row.trade_in_cash }}</span>{% endif %}
+          <span class="kind used ico ico-used">CeX</span>
+          {% if row.in_stock %}<span class="badge" style="margin-left:0.15rem;">in stock</span>{% endif %}
+          {% if row.trade_in_cash %}<span class="badge" style="margin-left:0.15rem;">sell £{{ row.trade_in_cash }}</span>{% endif %}
         </div>
         <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
       </div>
     {% empty %}
       {% if cex_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
+        <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ cex_search_url }}" target="_blank" rel="noopener">Search CeX →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -112,7 +112,7 @@
       </div>
     {% empty %}
       {% if musicmagpie_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ musicmagpie_search_url }}" target="_blank" rel="noopener">Search MusicMagpie →</a></p>
+        <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ musicmagpie_search_url }}" target="_blank" rel="noopener">Search MusicMagpie →</a></p>
       {% endif %}
     {% endfor %}
 
@@ -120,27 +120,27 @@
       <div class="deal-row">
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-          <span class="kind marketplace">eBay</span>
-          {% if row.condition %}<span class="badge" style="margin-left:0.2rem;">{{ row.condition }}</span>{% endif %}
-          {% if row.rating %}<span class="badge" style="margin-left:0.25rem;">{{ row.rating }}★</span>{% endif %}
+          <span class="kind marketplace ico ico-cart">eBay</span>
+          {% if row.condition %}<span class="badge" style="margin-left:0.15rem;">{{ row.condition }}</span>{% endif %}
+          {% if row.rating %}<span class="badge" style="margin-left:0.15rem;">{{ row.rating }}★</span>{% endif %}
         </div>
         <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
       </div>
     {% empty %}
       {% if ebay_search_url %}
-        <p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK (filtered) →</a></p>
+        <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ ebay_search_url }}" target="_blank" rel="noopener">Search eBay UK →</a></p>
       {% endif %}
     {% endfor %}
 
-    <div style="padding:0.65rem 1rem 0.35rem;">
-      <p style="font-size:0.75rem;color:var(--muted);margin-bottom:0.4rem;">Open store search (always works if scrape is blocked):</p>
+    <div style="padding:0.55rem 1rem 0.3rem;">
+      <p style="font-size:0.74rem;color:var(--muted);margin-bottom:0.35rem;" class="ico ico-link">Open store search</p>
       <div id="ukLinks">
         {% for link in uk_links %}
           <a class="link-chip" href="{{ link.url }}" target="_blank" rel="noopener" title="{{ link.note }}">{{ link.name }}</a>
         {% endfor %}
       </div>
-      <p style="font-size:0.72rem;color:var(--muted);margin-top:0.5rem;padding-bottom:0.75rem;">
-        Facebook Marketplace &amp; Gumtree are <strong>link-only</strong>. Public search prices only — no login, no seller personal data.
+      <p style="font-size:0.7rem;color:var(--muted);margin-top:0.45rem;padding-bottom:0.65rem;">
+        Facebook Marketplace &amp; Gumtree are link-only. Public prices only — no login.
       </p>
     </div>
   </div>

@@ -4,29 +4,29 @@
 
 {% block extra_css %}
 <style>
-  .layout { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+  .layout { display: grid; grid-template-columns: 1fr; gap: 1rem; }
   @media (min-width: 900px) {
-    .layout { grid-template-columns: minmax(0, 1fr) 280px; align-items: start; }
+    .layout { grid-template-columns: minmax(0, 1fr) 270px; align-items: start; }
   }
   .main-col { min-width: 0; }
-  .side-col {
-    position: sticky; top: 0.75rem;
-    max-height: calc(100vh - 1.5rem);
-    overflow-y: auto;
-    padding-right: 0.25rem;
+  .side-col { position: sticky; top: 0.6rem; max-height: calc(100vh - 1.2rem); overflow-y: auto; }
+  /* No backdrop-filter — cheaper paint */
+  .hero {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; margin-bottom: 0.85rem;
   }
-  .hero { background: rgba(18,8,8,0.82); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 1rem; backdrop-filter: blur(6px); }
-  .hero img.banner { width: 100%; max-height: 180px; object-fit: cover; display: block; }
-  .hero-body { padding: 1.15rem 1.3rem; }
+  .hero img.banner { width: 100%; max-height: 160px; object-fit: cover; display: block; }
+  .hero-body { padding: 1rem 1.15rem; }
   .btn {
-    display: inline-block; padding: 0.5rem 0.95rem; border-radius: 10px;
-    font-weight: 600; font-size: 0.88rem; text-decoration: none !important; border: none; cursor: pointer; font-family: inherit;
+    display: inline-block; padding: 0.45rem 0.85rem; border-radius: 9px;
+    font-weight: 600; font-size: 0.86rem; text-decoration: none !important;
+    border: none; cursor: pointer; font-family: inherit;
   }
   .btn-track { background: var(--accent); color: #fff; }
   .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
-  .os-row, .plat-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.65rem; }
+  .os-row, .plat-row { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.55rem; }
   .os-row span, .plat-row button {
-    font-size: 0.75rem; padding: 0.28rem 0.65rem; border-radius: 999px;
+    font-size: 0.74rem; padding: 0.26rem 0.6rem; border-radius: 999px;
     border: 1px solid var(--border); color: var(--muted); background: transparent;
     cursor: pointer; font-family: inherit;
   }
@@ -34,97 +34,102 @@
   .plat-row button:hover { border-color: var(--accent2); color: var(--text); }
   .os-row span { cursor: default; background: #1a1212; }
   .offer-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 0.5rem;
-    margin: 0.9rem 0 0.2rem;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.45rem;
+    margin: 0.75rem 0 0.15rem;
   }
   .offer-chip {
-    background: #1a0c0c; border: 1px solid var(--border); border-radius: 12px;
-    padding: 0.6rem 0.7rem; text-decoration: none !important; color: inherit;
+    background: var(--card); border: 1px solid var(--border); border-radius: 11px;
+    padding: 0.55rem 0.6rem; text-decoration: none !important; color: inherit;
   }
   .offer-chip:hover { border-color: var(--accent2); }
-  .offer-chip .s { font-size: 0.7rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-  .offer-chip .p { font-weight: 700; color: var(--accent2); margin-top: 0.15rem; font-size: 1rem; }
-  .offer-chip .g { font-size: 0.68rem; color: var(--muted); }
-  .offer-chip.best { border-color: #2a6a3a; }
+  .offer-chip .s { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; }
+  .offer-chip .p { font-weight: 700; color: var(--accent2); margin-top: 0.12rem; font-size: 0.95rem; }
+  .offer-chip .g { font-size: 0.66rem; color: var(--muted); }
+  .offer-chip.best { border-color: #2a6a3a; box-shadow: 0 0 0 1px rgba(62,207,106,0.15); }
   .best-tip {
-    margin-top: 0.65rem; font-size: 0.8rem; color: var(--muted); line-height: 1.4;
-    padding: 0.55rem 0.7rem; border-radius: 8px; background: #0f1a12; border: 1px solid #1a3a2a;
+    margin-top: 0.55rem; font-size: 0.78rem; color: var(--muted); line-height: 1.4;
+    padding: 0.5rem 0.65rem; border-radius: 8px; background: #0f1a12; border: 1px solid #1a3a2a;
   }
   .deal-row {
-    display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
-    padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--border); font-size: 0.9rem;
+    display: flex; justify-content: space-between; align-items: center; gap: 0.65rem;
+    padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); font-size: 0.88rem;
   }
   .deal-row:last-child { border-bottom: none; }
   .panel {
-    background: rgba(18,8,8,0.88); border: 1px solid var(--border); border-radius: 12px;
-    margin-bottom: 1rem; overflow: hidden; backdrop-filter: blur(6px);
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 0.85rem; overflow: hidden;
   }
-  .panel h2 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding: 0.8rem 1rem 0.3rem; }
-  .panel.plat-dim { opacity: 0.45; }
+  .panel h2 {
+    font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--muted); padding: 0.7rem 0.9rem 0.25rem;
+  }
+  .panel.plat-dim { opacity: 0.4; }
   .disclaimer {
-    margin: 0.45rem 1rem 0.9rem; padding: 0.65rem 0.8rem; border-radius: 10px;
-    background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.78rem; line-height: 1.4;
+    margin: 0.4rem 0.9rem 0.8rem; padding: 0.55rem 0.7rem; border-radius: 9px;
+    background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.76rem; line-height: 1.4;
   }
-  .chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.65rem; margin: 0.4rem 0 0.7rem; padding: 0 0.25rem; }
+  .chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; margin: 0.35rem 0 0.6rem; }
   .chart-toolbar select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 0.35rem 0.55rem; font-size: 0.85rem;
+    border-radius: 8px; padding: 0.3rem 0.5rem; font-size: 0.84rem;
   }
-  .kind { font-size: 0.62rem; padding: 0.1rem 0.3rem; border-radius: 4px; }
+  .kind { font-size: 0.6rem; padding: 0.08rem 0.28rem; border-radius: 4px; }
   .kind.official { background: #1a3a2a; color: #86efac; }
   .kind.marketplace { background: #1e3a5f; color: #7dd3fc; }
   .kind.third-party { background: #3a2a1a; color: #fcd34d; }
   .kind.used { background: #2a2a3a; color: #c4b5fd; }
   .kind.retail { background: #1a2a3a; color: #93c5fd; }
   .link-chip {
-    display: inline-block; margin: 0.2rem 0.3rem 0.2rem 0;
-    padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px solid var(--border);
-    font-size: 0.78rem; color: var(--text); text-decoration: none !important;
+    display: inline-block; margin: 0.15rem 0.25rem 0.15rem 0;
+    padding: 0.3rem 0.55rem; border-radius: 8px; border: 1px solid var(--border);
+    font-size: 0.76rem; color: var(--text); text-decoration: none !important;
   }
-  .news-item { padding: 0.65rem 0.85rem; border-bottom: 1px solid var(--border); }
+  .news-item { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); }
   .news-item:last-child { border-bottom: none; }
-  .news-item a { color: var(--text); font-size: 0.88rem; font-weight: 500; text-decoration: none !important; }
+  .news-item a { color: var(--text); font-size: 0.86rem; font-weight: 500; text-decoration: none !important; }
   .news-item a:hover { color: var(--accent2); }
-  .news-item .meta { font-size: 0.72rem; color: var(--muted); margin-top: 0.2rem; }
+  .news-item .meta { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
   .plat-loading { opacity: 0.5; pointer-events: none; }
-  .watch-box { margin-top: 0.9rem; padding: 0.75rem; border-radius: 12px; border: 1px solid var(--border); background: #120808; }
+  .watch-box { margin-top: 0.8rem; padding: 0.65rem; border-radius: 11px; border: 1px solid var(--border); background: var(--bg); }
   .watch-box input {
-    width: 5.5rem; padding: 0.35rem 0.45rem; border-radius: 8px;
+    width: 5.2rem; padding: 0.3rem 0.4rem; border-radius: 8px;
     border: 1px solid var(--border); background: var(--bg); color: var(--text);
   }
-  .safe-list { padding: 0.5rem 1rem 0.9rem; font-size: 0.8rem; color: var(--muted); line-height: 1.45; }
-  .safe-list li { margin: 0.25rem 0 0.25rem 1rem; }
-  .kbd-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.5rem; }
+  .safe-list { padding: 0.4rem 0.9rem 0.8rem; font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+  .safe-list li { margin: 0.2rem 0 0.2rem 0.9rem; }
+  .kbd-hint { font-size: 0.7rem; color: var(--muted); margin-top: 0.45rem; }
   .deal-filters select, .deal-filters input {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 0.35rem 0.5rem; font-size: 0.85rem; font-family: inherit;
+    border-radius: 8px; padding: 0.3rem 0.45rem; font-size: 0.84rem; font-family: inherit;
   }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% if has_chart %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+{% endif %}
 {% endblock %}
 
 {% block content %}
-<a href="{% url 'games:steam_search' %}" style="color: var(--muted); font-size: 0.85rem;">← Search</a>
+<a href="{% url 'games:steam_search' %}" class="ico ico-search" style="color: var(--muted); font-size: 0.84rem;">Search</a>
 
-<div class="layout" style="margin-top: 0.75rem;">
+<div class="layout" style="margin-top: 0.65rem;">
   <div class="main-col">
     <div class="hero">
-      {% if d.header_image %}<img class="banner" src="{{ d.header_image }}" alt="" loading="lazy">{% endif %}
+      {% if d.header_image %}<img class="banner" src="{{ d.header_image }}" alt="" loading="lazy" decoding="async">{% endif %}
       <div class="hero-body">
-        <h1 style="font-size: 1.4rem;">{{ d.name }}</h1>
-        <div style="margin-top: 0.35rem;">
+        <h1 style="font-size: 1.35rem;">{{ d.name }}</h1>
+        <div style="margin-top: 0.3rem;">
           <span class="badge digital">{{ d.type }}</span>
-          {% if d.is_dlc %}<span class="badge dlc" style="margin-left:0.25rem;">DLC</span>{% endif %}
-          {% for g in d.genres|slice:":3" %}<span class="badge" style="margin-left:0.25rem;">{{ g }}</span>{% endfor %}
+          {% if d.is_dlc %}<span class="badge dlc" style="margin-left:0.2rem;">DLC</span>{% endif %}
+          {% for g in d.genres|slice:":3" %}<span class="badge" style="margin-left:0.2rem;">{{ g }}</span>{% endfor %}
         </div>
 
         {% if steam_os %}
         <div class="os-row" title="Steam OS support">
-          {% for p in steam_os %}<span>{{ p|title }}</span>{% endfor %}
+          {% for p in steam_os %}<span class="ico ico-pc">{{ p|title }}</span>{% endfor %}
         </div>
         {% endif %}
 
-        <p style="font-size: 0.75rem; color: var(--muted); margin-top: 0.55rem;">Platform + price filters (public stores only, no login)</p>
+        <p style="font-size: 0.74rem; color: var(--muted); margin-top: 0.5rem;" class="ico ico-filter">Platform + price filters</p>
         <div class="plat-row" id="platformChips" data-app="{{ app_id }}" data-cc="{{ country }}"
              data-min="{{ min_price }}" data-max="{{ max_price }}" data-condition="{{ condition }}">
           {% for val, label in store_platforms %}
@@ -139,7 +144,7 @@
           <div class="offer-grid" id="offerGrid">
             {% for o in live_offers %}
               {% if o.url %}<a class="offer-chip {% if forloop.first %}best{% endif %}" href="{{ o.url }}" target="_blank" rel="noopener">{% else %}<div class="offer-chip {% if forloop.first %}best{% endif %}" aria-disabled="true">{% endif %}
-                <div class="s">{{ o.store }}{% if forloop.first %} · top pick{% endif %}</div>
+                <div class="s">{% if forloop.first %}★ {% endif %}{{ o.store }}</div>
                 <div class="p">{{ o.price }} {{ o.currency }}</div>
                 {% if o.currency != 'GBP' %}<div class="g">≈ £{{ o.price_gbp }}</div>{% endif %}
                 <span class="kind {{ o.kind }}">{{ o.kind }}</span>
@@ -147,8 +152,8 @@
             {% endfor %}
           </div>
           {% with best=live_offers.0 %}
-          <div class="best-tip">
-            <strong style="color:#86efac;">Top pick (official preferred for this platform):</strong>
+          <div class="best-tip ico ico-cheap">
+            <strong style="color:#86efac;">Top pick:</strong>
             {{ best.store }} at
             {% if best.currency == 'GBP' %}£{{ best.price }}{% else %}{{ best.price }} {{ best.currency }} (≈ £{{ best.price_gbp }}){% endif %}
           </div>
@@ -156,26 +161,26 @@
         {% endif %}
 
         {% if launch %}
-          <p style="font-size: 0.85rem; color: var(--muted); margin-top: 0.55rem;">
+          <p style="font-size: 0.84rem; color: var(--muted); margin-top: 0.5rem;">
             Launch: <strong style="color: var(--text);">{{ launch }} {{ launch_currency }}</strong>
             {% if savings_vs_launch %} · <span style="color:#86efac;">{{ savings_vs_launch }}% under launch</span>{% endif %}
           </p>
         {% endif %}
 
         {% include "games/_detail_actions.html" %}
-        <p class="kbd-hint">Tip: press <kbd>/</kbd> to search · Esc closes tracked drawer</p>
+        <p class="kbd-hint">Tip: <kbd>/</kbd> search · Esc closes drawer</p>
 
         {% if user.is_authenticated and already_tracked %}
           <div class="watch-box">
             {% if is_watched %}
-              <p style="font-size:0.88rem;margin-bottom:0.4rem;">Watching{% if watched.target_price %} · under <strong>£{{ watched.target_price }}</strong>{% endif %}</p>
+              <p style="font-size:0.86rem;margin-bottom:0.35rem;" class="ico ico-track">Watching{% if watched.target_price %} · under <strong>£{{ watched.target_price }}</strong>{% endif %}</p>
               <form method="post" action="{% url 'games:unwatch' already_tracked.slug %}">{% csrf_token %}<button type="submit" class="btn btn-ghost">Unwatch</button></form>
             {% else %}
-              <form method="post" action="{% url 'games:watch' already_tracked.slug %}" style="display:flex;flex-wrap:wrap;gap:0.45rem;align-items:center;">
+              <form method="post" action="{% url 'games:watch' already_tracked.slug %}" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
                 {% csrf_token %}
-                <label style="font-size:0.82rem;color:var(--muted);">Alert under £</label>
+                <label style="font-size:0.8rem;color:var(--muted);">Alert under £</label>
                 <input type="number" name="target_price" step="0.01" min="0" placeholder="9.99">
-                <button type="submit" class="btn btn-track">Watch</button>
+                <button type="submit" class="btn btn-track ico ico-track">Watch</button>
               </form>
             {% endif %}
           </div>
@@ -186,17 +191,17 @@
     {% deal_prediction_panel %}
 
     {% if has_chart %}
-    <div class="panel" style="padding: 0.9rem 1rem;">
-      <h2 style="padding: 0;">Price changes only (GBP)</h2>
-      <p style="font-size: 0.75rem; color: var(--muted); margin: 0.25rem 0 0.5rem;">GBP only · chronological · flat periods collapsed.</p>
+    <div class="panel" style="padding: 0.8rem 0.9rem;">
+      <h2 class="ico ico-chart" style="padding: 0;">Price history (GBP)</h2>
+      <p style="font-size: 0.72rem; color: var(--muted); margin: 0.2rem 0 0.45rem;">GBP · chronological · flat periods collapsed.</p>
       <div class="chart-toolbar">
-        <label for="sellerSelect" style="font-size:0.8rem;color:var(--muted);">Show</label>
+        <label for="sellerSelect" style="font-size:0.78rem;color:var(--muted);">Show</label>
         <select id="sellerSelect">
           <option value="__avg__">Average</option>
           <option value="__all__">All sellers</option>
         </select>
       </div>
-      <canvas id="priceChart" height="120"></canvas>
+      <canvas id="priceChart" height="110"></canvas>
     </div>
     {% endif %}
 
@@ -205,10 +210,10 @@
       {% include "games/_uk_physical_panel.html" %}
 
       <div class="panel" data-plat-group="physical">
-        <h2>Amazon UK</h2>
+        <h2 class="ico ico-cart">Amazon UK</h2>
         <div id="amazonList">
           {% if amazon_blocked %}
-            <div class="disclaimer">Amazon may block bots.
+            <div class="disclaimer ico ico-warn">Amazon may block bots.
               {% if amazon_search_url %}<a href="{{ amazon_search_url }}" target="_blank" rel="noopener">Search Amazon →</a>{% endif %}
             </div>
           {% endif %}
@@ -216,29 +221,29 @@
             <div class="deal-row">
               <div>
                 <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-                {% if row.rating %}<span class="badge" style="margin-left:0.25rem;">{{ row.rating }}★</span>{% endif %}
+                {% if row.rating %}<span class="badge" style="margin-left:0.2rem;">{{ row.rating }}★</span>{% endif %}
               </div>
               <div class="price-now">{{ row.price }} {{ row.currency }}</div>
             </div>
           {% empty %}
-            {% if not amazon_blocked %}<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No rows.</p>{% endif %}
+            {% if not amazon_blocked %}<p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No rows.</p>{% endif %}
           {% endfor %}
         </div>
       </div>
 
       <div class="panel" data-plat-group="pc">
-        <h2>Other PC digital (CheapShark)</h2>
-        <div class="disclaimer">May include keyshops — verify seller &amp; region.</div>
+        <h2 class="ico ico-tag">Other PC digital</h2>
+        <div class="disclaimer ico ico-warn">May include keyshops — verify seller &amp; region.</div>
         {% for deal in store_deals %}
           <div class="deal-row">
             <div>
               <strong>{% if deal.url %}<a href="{{ deal.url }}" target="_blank" rel="noopener">{{ deal.store_name }}</a>{% else %}{{ deal.store_name }}{% endif %}</strong>
-              {% if deal.savings %}<span class="badge lowest" style="margin-left:0.3rem;">-{{ deal.savings }}%</span>{% endif %}
+              {% if deal.savings %}<span class="badge lowest" style="margin-left:0.25rem;">-{{ deal.savings }}%</span>{% endif %}
             </div>
             <div class="price-now">{{ deal.price }} {{ deal.currency }}</div>
           </div>
         {% empty %}
-          <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No deals (or not loading on this platform filter).</p>
+          <p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No deals (or filtered out).</p>
         {% endfor %}
       </div>
 
@@ -247,22 +252,22 @@
   </div>
 
   <aside class="side-col">
-    <div class="panel" style="margin-bottom: 0.85rem;">
-      <h2>Deal &amp; price news</h2>
+    <div class="panel" style="margin-bottom: 0.75rem;">
+      <h2 class="ico ico-news">Deal &amp; price news</h2>
       {% if news_items %}
         {% for n in news_items %}
           <div class="news-item">
             {% if n.url %}<a href="{{ n.url }}" target="_blank" rel="noopener">{{ n.title }}</a>{% else %}<span>{{ n.title }}</span>{% endif %}
-            <div class="meta">{{ n.feed }}{% if n.deal_related %} · sale/price{% endif %}</div>
+            <div class="meta">{{ n.feed }}{% if n.deal_related %} · sale{% endif %}</div>
           </div>
         {% endfor %}
       {% else %}
-        <p style="padding:0.75rem 0.85rem;color:var(--muted);font-size:0.85rem;">No sale/price headlines right now.</p>
+        <p style="padding:0.65rem 0.8rem;color:var(--muted);font-size:0.84rem;">No sale headlines right now.</p>
       {% endif %}
     </div>
     {% include "games/_similar_games.html" %}
-    <div class="panel" style="margin-bottom: 0.85rem;">
-      <h2>Stay safe</h2>
+    <div class="panel" style="margin-bottom: 0.75rem;">
+      <h2 class="ico ico-safe">Stay safe</h2>
       <ul class="safe-list">
         <li>Official stores first when prices are close.</li>
         <li>Keyshops: region, refunds, seller score.</li>
@@ -271,8 +276,8 @@
       </ul>
     </div>
     <div class="panel">
-      <h2>More deal sources</h2>
-      <div style="padding: 0.5rem 0.85rem 0.85rem;">
+      <h2 class="ico ico-link">More deal sources</h2>
+      <div style="padding: 0.4rem 0.8rem 0.75rem;">
         {% for s in social_links %}
           <a class="link-chip" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a>
         {% endfor %}
@@ -286,53 +291,59 @@
 {% if has_chart %}
 <script>
 (function () {
-  const data = {{ chart_json|safe }};
-  const colors = ['#e03030','#e8a838','#3ecf6a','#5b8def','#c084fc','#f472b6','#2dd4bf','#a3a3a3'];
-  const select = document.getElementById('sellerSelect');
-  if (!select) return;
-  (data.sellers || []).forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s; opt.textContent = s; select.appendChild(opt);
-  });
-  const ctx = document.getElementById('priceChart');
-  let chart;
-  function datasetsFor(mode) {
-    const ds = [];
-    if (mode === '__avg__') {
-      ds.push({ label: 'Average', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.1)', fill: true, spanGaps: true, tension: 0.2, pointRadius: 4 });
-    } else if (mode === '__all__') {
-      (data.sellers || []).forEach((s, i) => {
-        ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.2, pointRadius: 3, borderWidth: 1.5 });
-      });
-    } else {
-      ds.push({ label: mode, data: data.series[mode] || [], borderColor: '#e03030', fill: true, spanGaps: true, tension: 0.2, pointRadius: 4 });
-    }
-    if (data.launch && data.launch.some(v => v != null)) {
-      ds.push({ label: 'Launch', data: data.launch, borderColor: '#a89090', borderDash: [6, 4], pointRadius: 0, spanGaps: true });
-    }
-    return ds;
-  }
-  function render(mode) {
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-      type: 'line',
-      data: { labels: data.labels, datasets: datasetsFor(mode) },
-      options: {
-        responsive: true,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: { labels: { color: '#a89090', boxWidth: 12, font: { size: 11 } } },
-          tooltip: { callbacks: { label: (item) => `${item.dataset.label}: £${Number(item.parsed.y).toFixed(2)}` } }
-        },
-        scales: {
-          x: { ticks: { color: '#a89090', maxRotation: 40 }, grid: { color: '#3a1515' } },
-          y: { beginAtZero: true, ticks: { color: '#a89090', callback: (value) => `£${value}` }, grid: { color: '#3a1515' } }
-        }
-      }
+  function boot() {
+    if (typeof Chart === 'undefined') { setTimeout(boot, 40); return; }
+    const data = {{ chart_json|safe }};
+    const colors = ['#e03030','#e8a838','#3ecf6a','#5b8def','#c084fc','#f472b6','#2dd4bf','#a3a3a3'];
+    const select = document.getElementById('sellerSelect');
+    if (!select) return;
+    (data.sellers || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s; opt.textContent = s; select.appendChild(opt);
     });
+    const ctx = document.getElementById('priceChart');
+    let chart;
+    function datasetsFor(mode) {
+      const ds = [];
+      if (mode === '__avg__') {
+        ds.push({ label: 'Average', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.08)', fill: true, spanGaps: true, tension: 0.15, pointRadius: 3 });
+      } else if (mode === '__all__') {
+        (data.sellers || []).forEach((s, i) => {
+          ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.15, pointRadius: 2, borderWidth: 1.4 });
+        });
+      } else {
+        ds.push({ label: mode, data: data.series[mode] || [], borderColor: '#e03030', fill: true, spanGaps: true, tension: 0.15, pointRadius: 3 });
+      }
+      if (data.launch && data.launch.some(v => v != null)) {
+        ds.push({ label: 'Launch', data: data.launch, borderColor: '#a89090', borderDash: [5, 4], pointRadius: 0, spanGaps: true });
+      }
+      return ds;
+    }
+    function render(mode) {
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: data.labels, datasets: datasetsFor(mode) },
+        options: {
+          responsive: true,
+          animation: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { labels: { color: '#a89090', boxWidth: 10, font: { size: 10 } } },
+            tooltip: { callbacks: { label: (item) => `${item.dataset.label}: £${Number(item.parsed.y).toFixed(2)}` } }
+          },
+          scales: {
+            x: { ticks: { color: '#a89090', maxRotation: 35 }, grid: { color: '#2a1212' } },
+            y: { beginAtZero: true, ticks: { color: '#a89090', callback: (v) => `£${v}` }, grid: { color: '#2a1212' } }
+          }
+        }
+      });
+    }
+    select.addEventListener('change', () => render(select.value));
+    render('__avg__');
   }
-  select.addEventListener('change', () => render(select.value));
-  render('__avg__');
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
 })();
 </script>
 {% endif %}
@@ -363,17 +374,11 @@
   }
 
   function esc(s) {
-    return String(s || '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
   function rowHtml(name, price, extra, url) {
-    const title = url
-      ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>`
-      : esc(name);
+    const title = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
     return `<div class="deal-row"><div><strong>${title}</strong>${extra || ''}</div><div class="price-now">${esc(price)}</div></div>`;
   }
 
@@ -390,7 +395,7 @@
       );
     });
     if (!(rows || []).length && searchUrl) {
-      html += `<p style="padding:0.45rem 1rem;font-size:0.88rem;"><a href="${esc(searchUrl)}" target="_blank" rel="noopener">Search ${esc(label)} →</a></p>`;
+      html += `<p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="${esc(searchUrl)}" target="_blank" rel="noopener">Search ${esc(label)} →</a></p>`;
     }
     return html;
   }
@@ -400,13 +405,11 @@
     if (psn) {
       if ((data.psn_rows || []).length) {
         psn.innerHTML = data.psn_rows.map(r => rowHtml(
-          r.name,
-          r.display_price || (r.price + ' ' + (r.currency || 'GBP')),
-          r.is_full_game ? ' <span class="badge digital">Full</span>' : '',
-          r.url
+          r.name, r.display_price || (r.price + ' ' + (r.currency || 'GBP')),
+          r.is_full_game ? ' <span class="badge digital">Full</span>' : '', r.url
         )).join('');
       } else {
-        psn.innerHTML = '<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No PSN matches.</p>';
+        psn.innerHTML = '<p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No PSN matches.</p>';
       }
     }
     const uk = document.getElementById('ukList');
@@ -417,8 +420,9 @@
       html += renderStoreBlock(data.argos_rows, data.argos_search_url, 'Argos', 'retail');
       html += renderStoreBlock(data.currys_rows, data.currys_search_url, 'Currys', 'retail');
       html += renderStoreBlock(data.cex_rows, data.cex_search_url, 'CeX', 'used');
+      html += renderStoreBlock(data.musicmagpie_rows, data.musicmagpie_search_url, 'MusicMagpie', 'used');
       html += renderStoreBlock(data.ebay_rows, data.ebay_search_url, 'eBay', 'marketplace');
-      html += '<div style="padding:0.65rem 1rem 1rem;">' +
+      html += '<div style="padding:0.55rem 1rem 0.9rem;">' +
         (data.uk_links || []).map(l => `<a class="link-chip" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`).join('') +
         '</div>';
       uk.innerHTML = html;
@@ -433,7 +437,7 @@
         html += rowHtml(r.name, r.price + ' ' + (r.currency || 'GBP'), r.rating ? ` <span class="badge">${esc(r.rating)}★</span>` : '', r.url);
       });
       if (!(data.amazon_rows || []).length && !data.amazon_blocked) {
-        html += '<p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No rows.</p>';
+        html += '<p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No rows.</p>';
       }
       amz.innerHTML = html;
     }
@@ -456,16 +460,15 @@
       const plat = btn.getAttribute('data-platform') || '';
       chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
       focusPanels(plat);
-      panels && panels.classList.add('plat-loading');
-      const qs = filterQs(plat);
-      fetch(`/api/platform/${appId}/?${qs}`)
+      if (panels) panels.classList.add('plat-loading');
+      fetch(`/api/platform/${appId}/?${filterQs(plat)}`)
         .then(r => r.json())
         .then(data => {
           renderPlatform(data);
-          history.replaceState(null, '', `?${qs}`);
+          history.replaceState(null, '', `?${filterQs(plat)}`);
         })
         .catch(() => {})
-        .finally(() => panels && panels.classList.remove('plat-loading'));
+        .finally(() => { if (panels) panels.classList.remove('plat-loading'); });
     });
   });
 })();
