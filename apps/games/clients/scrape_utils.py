@@ -1,12 +1,19 @@
 """
 Polite public HTML helpers (BeautifulSoup).
 
+Project rule
+------------
+Sites **without a documented public API** (GAME, Argos, Currys, Smyths,
+eBay, Amazon, MusicMagpie, …) are scraped with **BeautifulSoup** on their
+public search pages only.
+
+If an unofficial/API path is **blocked** (403, captcha, empty) → fall back
+to BS4 HTML of the same public search URL. Soft-fail keeps `search_url`.
+
 Scope (strict):
   - Only pages reachable via a normal public *product search*
   - Extract product title, price, public rating aggregates, product URL
   - Do NOT collect personal seller identity, addresses, phone, email, etc.
-
-Always respect blocks (403/captcha) → return empty + search_url fallback.
 """
 
 from __future__ import annotations
@@ -65,7 +72,6 @@ def _session() -> requests.Session:
             allowed_methods=frozenset(["GET"]),
             raise_on_status=False,
         )
-        # Larger pool — UK bundle fires 6 parallel GETs
         adapter = HTTPAdapter(pool_connections=12, pool_maxsize=12, max_retries=retry)
         s.mount("https://", adapter)
         s.mount("http://", adapter)
@@ -79,7 +85,7 @@ def fetch_html(
     *,
     referer: str | None = None,
 ) -> tuple[str | None, int]:
-    """GET public HTML. Soft-fail on block/captcha/empty."""
+    """GET public HTML for BS4. Soft-fail on block/captcha/empty."""
     headers = {}
     if referer:
         headers["Referer"] = referer
@@ -104,7 +110,7 @@ def fetch_json(
     timeout: float = 9,
     headers: dict | None = None,
 ) -> tuple[Any | None, int]:
-    """GET JSON (CeX boxes API etc.). Soft-fail."""
+    """GET JSON. On failure callers should fall back to fetch_html + BS4."""
     h = {
         "Accept": "application/json, text/plain, */*",
         "User-Agent": UA,
@@ -192,7 +198,6 @@ def extract_ld_json_products(soup: BeautifulSoup, limit: int = 20) -> list[dict[
         try:
             data = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
-            # Regex fallback already used by callers; skip broken JSON here
             continue
         nodes = data if isinstance(data, list) else [data]
         for node in nodes:

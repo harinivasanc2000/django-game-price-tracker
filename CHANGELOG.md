@@ -4,40 +4,29 @@
 
 ---
 
-## 2026-08-24 07:15 BST — Local stores fix + features
+## 2026-08-24 07:35 BST — BS4 policy locked in
 
-### Fixes
-- **CeX**: game-category preference, **in-stock first**, trade-in cash badge, proper `quote_plus` search URL
-- Bundle deadline **9s** / 7 parallel workers (added MusicMagpie)
-- Cache keys bumped so old empty CeX/HTML results are not sticky
+### Rule (always)
+- Local / retail sites **without a public API** → **BeautifulSoup** on the public search page
+- If an unofficial JSON endpoint is **blocked or empty** → **BS4 HTML fallback** of the same search URL
+- Soft-fail still keeps clickable `search_url`
 
-### New features
-- **MusicMagpie** used-games public search (soft-fail + link)
-- **Cheapest local** strip — merges all UK sources, sorted by price, deduped
-- **Store health** line: `3/7 local sources returned prices`
-- CeX rows show **in stock** + **sell £X** (trade-in) when API provides them
-- MusicMagpie included in live-offer chips
+### CeX
+- API first (`wss2…/boxes`)
+- On block/empty → BS4 of `uk.webuy.com/search` (embedded JSON + product cards)
 
-### Panel
-- `_uk_physical_panel.html` redesigned: best-local block on top, then per-store rows
+Documented in `scrape_utils.py` module docstring so future stores follow the same path.
 
 ```bash
 git pull
 python manage.py runserver
-# open any detail → UK physical panel
 ```
 
 ---
 
-## 2026-08-22 19:50 BST — UK physical scrapers fixed + optimised
+## 2026-08-24 07:15 BST — Local stores fix + features
 
-- CeX JSON API; ld+json; tighter timeouts
-
----
-
-## 2026-08-22 19:35 BST — Strict title matching
-
-- No LEGO on Arkham Knight; coverage + contaminants
+- MusicMagpie, cheapest-local strip, CeX stock/trade-in, store health
 
 ---
 
