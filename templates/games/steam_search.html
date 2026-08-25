@@ -4,68 +4,70 @@
 {% block extra_css %}
 <style>
   .result-card {
-    display: flex; gap: 1rem; align-items: center;
-    background: rgba(18,8,8,0.88); border: 1px solid var(--border);
-    border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 0.55rem;
-    transition: border-color 0.15s ease;
+    display: flex; gap: 0.85rem; align-items: center;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 0.65rem 0.9rem; margin-bottom: 0.45rem;
   }
   .result-card:hover { border-color: var(--accent2); }
   .toolbar {
-    display: flex; flex-wrap: wrap; gap: 0.65rem; align-items: center;
-    margin: 1rem 0 0.75rem; justify-content: space-between;
+    display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center;
+    margin: 0.85rem 0 0.65rem; justify-content: space-between;
   }
-  .toolbar select, .toolbar label { font-size: 0.85rem; color: var(--muted); }
+  .toolbar select, .toolbar label { font-size: 0.84rem; color: var(--muted); }
   .toolbar select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 0.35rem 0.55rem;
+    border-radius: 8px; padding: 0.3rem 0.5rem;
   }
-  .chk { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.85rem; color: var(--muted); }
-  .plat-sec { margin: 1.35rem 0 0.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+  .chk { display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; font-size: 0.84rem; color: var(--muted); }
+  .plat-sec {
+    margin: 1.2rem 0 0.45rem; font-size: 0.74rem; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--muted);
+  }
   .plat-sec .off {
-    display: inline-block; margin-left: 0.4rem; font-size: 0.65rem; padding: 0.1rem 0.4rem;
+    display: inline-block; margin-left: 0.35rem; font-size: 0.62rem; padding: 0.08rem 0.35rem;
     border-radius: 4px; background: #1a3a2a; color: #86efac; text-transform: none; letter-spacing: 0;
   }
   .console-row {
-    display: flex; justify-content: space-between; gap: 0.75rem; align-items: center;
-    padding: 0.65rem 0.85rem; border: 1px solid var(--border); border-radius: 10px;
-    background: rgba(18,8,8,0.88); margin-bottom: 0.4rem; text-decoration: none !important; color: var(--text);
+    display: flex; justify-content: space-between; gap: 0.65rem; align-items: center;
+    padding: 0.55rem 0.8rem; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card); margin-bottom: 0.35rem; text-decoration: none !important; color: var(--text);
   }
   .console-row:hover { border-color: var(--accent2); }
   .best-bar {
-    margin: 0.85rem 0; padding: 0.65rem 0.85rem; border-radius: 10px;
-    border: 1px solid #1a3a2a; background: rgba(15,26,18,0.9); font-size: 0.88rem;
+    margin: 0.75rem 0; padding: 0.55rem 0.8rem; border-radius: 10px;
+    border: 1px solid #1a3a2a; background: #0f1a12; font-size: 0.86rem;
   }
   .link-chip {
-    display: inline-block; margin: 0.2rem 0.3rem 0.2rem 0; padding: 0.3rem 0.55rem;
-    border-radius: 8px; border: 1px solid var(--border); font-size: 0.78rem;
+    display: inline-block; margin: 0.15rem 0.25rem 0.15rem 0; padding: 0.28rem 0.5rem;
+    border-radius: 8px; border: 1px solid var(--border); font-size: 0.76rem;
     color: var(--text); text-decoration: none !important;
   }
 </style>
 {% endblock %}
 
 {% block content %}
-<a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.85rem;">← Home</a>
-<h1 style="font-size: 1.35rem; margin: 0.5rem 0 0.35rem;">Search all platforms</h1>
-<p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem;">
-  Official storefronts first (Steam, PSN, Xbox, Nintendo), then open a title for full UK local scrapes (GAME, Smyths, CeX, Argos…).
+<a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.84rem;">← Home</a>
+<h1 class="ico ico-search" style="font-size: 1.3rem; margin: 0.45rem 0 0.3rem;">Search all platforms</h1>
+<p style="color: var(--muted); font-size: 0.88rem; margin-bottom: 0.9rem;">
+  Official storefronts first, then open a title for full UK local scrapes.
 </p>
 
 {% include "games/_search_box.html" with q=q placeholder="Search any game…" %}
 
 {% if error %}
-  <p style="color: #f87171; margin-top: 1rem;">{{ error }}</p>
+  <p style="color: #f87171; margin-top: 0.9rem;">{{ error }}</p>
 {% endif %}
 
 {% if best_cross %}
-  <div class="best-bar">
-    <strong style="color:#86efac;">Lowest listed right now:</strong>
+  <div class="best-bar ico ico-cheap">
+    <strong style="color:#86efac;">Lowest listed:</strong>
     {{ best_cross.platform }} · {{ best_cross.title }} · £{{ best_cross.price_gbp|floatformat:2 }}
-    {% if best_cross.url %}<a href="{{ best_cross.url }}" style="margin-left:0.5rem;">Open →</a>{% endif %}
+    {% if best_cross.url %}<a href="{{ best_cross.url }}" style="margin-left:0.45rem;">Open →</a>{% endif %}
   </div>
 {% endif %}
 
 {% if platform_links and q %}
-  <div style="margin: 0.5rem 0 0.75rem;">
+  <div style="margin: 0.4rem 0 0.65rem;">
     {% for l in platform_links %}
       <a class="link-chip" href="{{ l.url }}" target="_blank" rel="noopener">{{ l.name }}</a>
     {% endfor %}
@@ -73,12 +75,12 @@
 {% endif %}
 
 {% if results %}
-  <div class="plat-sec">Steam / PC <span class="off">Official</span></div>
+  <div class="plat-sec ico ico-pc">Steam / PC <span class="off">Official</span></div>
   <div class="toolbar">
     <p style="color: var(--muted); margin: 0;">{{ results|length }} match{{ results|length|pluralize }}</p>
-    <div style="display:flex;flex-wrap:wrap;gap:0.75rem;align-items:center;">
+    <div style="display:flex;flex-wrap:wrap;gap:0.65rem;align-items:center;">
       <label class="chk"><input type="checkbox" id="hideDlc" checked> Hide likely DLC</label>
-      <form method="get" style="display:flex;align-items:center;gap:0.4rem;">
+      <form method="get" style="display:flex;align-items:center;gap:0.35rem;">
         <input type="hidden" name="q" value="{{ q }}">
         <input type="hidden" name="cc" value="{{ country }}">
         {% if current_platform %}<input type="hidden" name="platform" value="{{ current_platform }}">{% endif %}
@@ -97,23 +99,23 @@
   <div id="resultsList">
   {% for r in results %}
     <div class="result-card" data-dlc="{% if r.is_likely_dlc %}1{% else %}0{% endif %}">
-      <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}">
+      <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}"{% if current_platform %}&platform={{ current_platform }}{% endif %}">
         {% if r.tiny_image %}
-          <img src="{{ r.tiny_image }}" alt="" style="width:120px;height:45px;object-fit:cover;border-radius:6px;" loading="lazy" width="120" height="45">
+          <img src="{{ r.tiny_image }}" alt="" style="width:110px;height:41px;object-fit:cover;border-radius:6px;" loading="lazy" decoding="async" width="110" height="41">
         {% else %}
-          <div style="width:120px;height:45px;background:var(--border);border-radius:6px;"></div>
+          <div style="width:110px;height:41px;background:var(--border);border-radius:6px;"></div>
         {% endif %}
       </a>
       <div style="flex:1; min-width:0;">
-        <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}" style="font-weight:600; color: var(--text); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ r.name }}</a>
-        <div style="margin-top: 0.25rem;">
+        <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}" style="font-weight:600; color: var(--text); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ r.name }}</a>
+        <div style="margin-top: 0.2rem;">
           {% if r.is_likely_dlc %}<span class="badge dlc">Likely DLC</span>{% endif %}
-          {% for p in r.platforms %}<span class="badge" style="margin-left:0.2rem;">{{ p }}</span>{% endfor %}
-          {% if r.discount %}<span class="badge lowest" style="margin-left:0.2rem;">-{{ r.discount }}%</span>{% endif %}
+          {% for p in r.platforms %}<span class="badge" style="margin-left:0.15rem;">{{ p }}</span>{% endfor %}
+          {% if r.discount %}<span class="badge lowest" style="margin-left:0.15rem;">-{{ r.discount }}%</span>{% endif %}
         </div>
         <form method="post" action="{% url 'games:track_steam' r.app_id %}?cc={{ country }}" style="display:inline;">
           {% csrf_token %}
-          <button type="submit" style="display:inline-block; margin-top:0.35rem; font-size:0.8rem; padding:0.25rem 0.55rem; border:0; border-radius:6px; background: var(--accent); color:#fff; cursor:pointer;">Track</button>
+          <button type="submit" class="ico ico-track" style="display:inline-block; margin-top:0.3rem; font-size:0.78rem; padding:0.22rem 0.5rem; border:0; border-radius:6px; background: var(--accent); color:#fff; cursor:pointer;">Track</button>
         </form>
       </div>
       <div style="text-align:right; white-space:nowrap;">
@@ -132,13 +134,13 @@
 {% endif %}
 
 {% if psn_results %}
-  <div class="plat-sec">PlayStation Store (UK) <span class="off">Official</span></div>
+  <div class="plat-sec ico ico-ps">PlayStation Store (UK) <span class="off">Official</span></div>
   {% for r in psn_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
       <div>
         <strong>{{ r.name }}</strong>
-        {% if r.is_full_game %}<span class="badge digital" style="margin-left:0.3rem;">Full</span>{% endif %}
-        {% if r.platforms %}<span style="font-size:0.72rem;color:var(--muted);margin-left:0.35rem;">{{ r.platforms|join:", " }}</span>{% endif %}
+        {% if r.is_full_game %}<span class="badge digital" style="margin-left:0.25rem;">Full</span>{% endif %}
+        {% if r.platforms %}<span style="font-size:0.7rem;color:var(--muted);margin-left:0.3rem;">{{ r.platforms|join:", " }}</span>{% endif %}
       </div>
       <div class="price-now">{% if r.display_price %}{{ r.display_price }}{% else %}{{ r.price }} GBP{% endif %}</div>
     </a>
@@ -146,7 +148,7 @@
 {% endif %}
 
 {% if xbox_results %}
-  <div class="plat-sec">Xbox / Microsoft Store <span class="off">Official</span></div>
+  <div class="plat-sec ico ico-xbox">Xbox / Microsoft Store <span class="off">Official</span></div>
   {% for r in xbox_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
       <div><strong>{{ r.name }}</strong></div>
@@ -158,7 +160,7 @@
 {% endif %}
 
 {% if nintendo_results %}
-  <div class="plat-sec">Nintendo eShop (UK) <span class="off">Official</span></div>
+  <div class="plat-sec ico ico-switch">Nintendo eShop (UK) <span class="off">Official</span></div>
   {% for r in nintendo_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
       <div><strong>{{ r.name }}</strong></div>
@@ -169,8 +171,8 @@
   {% endfor %}
 {% elif q and nintendo_search_url %}
   {% if current_platform == 'switch' or nintendo_blocked %}
-  <div class="plat-sec">Nintendo eShop (UK) <span class="off">Official</span></div>
-  <p style="font-size:0.88rem;color:var(--muted);">
+  <div class="plat-sec ico ico-switch">Nintendo eShop (UK) <span class="off">Official</span></div>
+  <p style="font-size:0.86rem;color:var(--muted);">
     Live scrape empty or blocked —
     <a href="{{ nintendo_search_url }}" target="_blank" rel="noopener">Search Nintendo eShop UK →</a>
   </p>
@@ -178,7 +180,7 @@
 {% endif %}
 
 {% if q and not results and not psn_results and not xbox_results and not nintendo_results and not error %}
-  <p style="color: var(--muted); margin-top: 1rem;">No results. Try a shorter title or another platform filter.</p>
+  <p style="color: var(--muted); margin-top: 0.9rem;">No results. Try a shorter title or another platform filter.</p>
 {% endif %}
 {% endblock %}
 
@@ -189,8 +191,7 @@
   if (!chk) return;
   function apply() {
     document.querySelectorAll('.result-card').forEach(function (el) {
-      if (chk.checked && el.getAttribute('data-dlc') === '1') el.style.display = 'none';
-      else el.style.display = '';
+      el.style.display = (chk.checked && el.getAttribute('data-dlc') === '1') ? 'none' : '';
     });
   }
   chk.addEventListener('change', apply);

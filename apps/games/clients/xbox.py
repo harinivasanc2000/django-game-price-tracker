@@ -2,7 +2,7 @@
 Xbox / Microsoft Store (GB) — lightweight public search.
 
 Uses Microsoft displaycatalog autosuggest (no API key).
-Soft-fail + cache. Product fields only.
+Soft-fail + cache. Product fields only. Title-match filters bleed.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from urllib.parse import quote_plus
 import requests
 
 from apps.games.cache import cached
+from apps.games.clients.title_match import filter_by_title
 
 UA = "GamePriceTracker/0.3 (personal; public data)"
 AUTOSUGGEST = (
@@ -129,7 +130,7 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
             "has_price": price is not None and price > 0,
         }
         out.append(row)
-        if len(out) >= limit:
+        if len(out) >= limit * 3:
             break
 
     ids = [r["product_id"] for r in out if r.get("product_id") and not r.get("has_price")]
@@ -167,13 +168,14 @@ def _search_xbox_uncached(title: str, limit: int = 8) -> list[dict[str, Any]]:
         except (requests.RequestException, ValueError, KeyError):
             pass
 
+    out = filter_by_title(out, title, min_score=0.55)
     out.sort(
         key=lambda x: (
             not x.get("has_price"),
             float(x["price"]) if x.get("price") is not None else 9999,
         )
     )
-    return out
+    return out[:limit]
 
 
 def search_xbox(title: str, limit: int = 8) -> list[dict[str, Any]]:
@@ -181,7 +183,7 @@ def search_xbox(title: str, limit: int = 8) -> list[dict[str, Any]]:
     if not title:
         return []
     return cached(
-        f"xbox:search:v2:{title.lower()}:{limit}",
+        f"xbox:search:v3:{title.lower()}:{limit}",
         lambda: _search_xbox_uncached(title, limit),
         900,
     )
