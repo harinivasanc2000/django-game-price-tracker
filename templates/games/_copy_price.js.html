@@ -1,0 +1,16 @@
+{# Tiny global helper: click .price-now to copy #}
+<script>
+(function () {
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest('.price-now');
+    if (!el) return;
+    var text = (el.textContent || '').trim();
+    if (!text || text === 'See store' || text === 'Unknown') return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        if (window.showToast) window.showToast('Copied ' + text);
+      }).catch(function () {});
+    }
+  });
+})();
+</script>

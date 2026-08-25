@@ -4,18 +4,18 @@
 
 ---
 
-## 2026-08-24 07:35 BST — BS4 policy locked in
+## 2026-08-25 14:35 BST — More improvements
 
-### Rule (always)
-- Local / retail sites **without a public API** → **BeautifulSoup** on the public search page
-- If an unofficial JSON endpoint is **blocked or empty** → **BS4 HTML fallback** of the same search URL
-- Soft-fail still keeps clickable `search_url`
+### Relevance
+- **PSN** over-fetch + `title_match` (less DLC / wrong-edition noise)
+- **Xbox** same pattern + cache key bump
+- **Amazon UK** BS4 over-fetch ×3 → title_match; used/renewed detection
 
-### CeX
-- API first (`wss2…/boxes`)
-- On block/empty → BS4 of `uk.webuy.com/search` (embedded JSON + product cards)
-
-Documented in `scrape_utils.py` module docstring so future stores follow the same path.
+### UX
+- Console panel icons (PS / Xbox / Switch)
+- Search page icons + lighter solid cards
+- Click any **price** to copy (toast confirm) — include `_copy_price.js.html`
+- Health: `GET /health/?stores=1` pings CeX API + Steam lightly
 
 ```bash
 git pull
@@ -24,12 +24,6 @@ python manage.py runserver
 
 ---
 
-## 2026-08-24 07:15 BST — Local stores fix + features
+## 2026-08-24 — Icons + BS4 policy + local stores
 
-- MusicMagpie, cheapest-local strip, CeX stock/trade-in, store health
-
----
-
-## Earlier
-
-See git log.
+See prior entries / git log.
