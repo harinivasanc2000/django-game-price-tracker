@@ -90,7 +90,6 @@
     header nav a:hover, header nav button.nav-btn:hover {
       color: var(--accent2); text-decoration: none; background: rgba(80,20,20,0.3);
     }
-    /* Zero-network icons (emoji / unicode) */
     .ico::before { margin-right: 0.28em; font-style: normal; }
     .ico-track::before { content: "📌"; }
     .ico-search::before { content: "🔍"; }
@@ -130,7 +129,8 @@
     .badge.digital { background: #1a3a2a; color: #86efac; }
     .badge.dlc { background: #3a1520; color: #f0a0a0; }
     .badge.lowest { background: #14532d; color: #86efac; }
-    .price-now { font-weight: 700; color: var(--accent2); }
+    .price-now { font-weight: 700; color: var(--accent2); cursor: pointer; }
+    .price-now:hover { text-decoration: underline; }
     .price-was { text-decoration: line-through; color: var(--muted); font-size: 0.85em; margin-right: 0.35rem; }
     footer {
       margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);
@@ -209,6 +209,7 @@
       {% if site_settings.footer_text %}{{ site_settings.footer_text }}{% else %}Public Steam data · Approximate launch prices{% endif %}
       · <a href="{% url 'games:about' %}">About</a>
       · Press <kbd>/</kbd> to search
+      · Click a price to copy
     </footer>
   </div>
 
@@ -253,6 +254,19 @@
     window._toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2000);
   };
 
+  /* Click any .price-now to copy */
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest && e.target.closest('.price-now');
+    if (!el) return;
+    var text = (el.textContent || '').trim();
+    if (!text || text === 'See store' || text === 'Unknown') return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        window.showToast('Copied ' + text);
+      }).catch(function () {});
+    }
+  });
+
   (function () {
     var drawer = document.getElementById('trackedDrawer');
     var backdrop = document.getElementById('drawerBackdrop');
@@ -274,7 +288,6 @@
     });
   })();
 
-  /* Wallpaper: low particle counts, ~15–20fps, pause when tab hidden */
   (function () {
     var THEME_KEY = 'gpt_theme';
     var WALL_KEY = 'gpt_wallpaper';
