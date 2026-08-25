@@ -1,7 +1,8 @@
 """
-Amazon UK public *search* page — product title, price, star rating, ASIN link.
-No seller personal data. Often WAF-blocked from datacenters → search_url fallback.
-Supports platform / price / condition post-filters (no login).
+Amazon UK public *search* page — BS4 only (no public API).
+
+Product title, price, star rating, ASIN link. No seller PII.
+Often WAF-blocked from datacenters → search_url fallback.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from typing import Any
 from urllib.parse import quote_plus
 
 from apps.games.cache import cached
-from apps.games.clients.scrape_filters import filter_source_dict, parse_price_bound
+from apps.games.clients.scrape_filters import filter_source_dict
 from apps.games.clients.scrape_utils import (
     fetch_html,
     parse_money,
@@ -19,6 +20,7 @@ from apps.games.clients.scrape_utils import (
     product_row,
     soup_from,
 )
+from apps.games.clients.title_match import filter_by_title
 
 
 def search_url(title: str, extra: str = "") -> str:
@@ -30,17 +32,27 @@ def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> d
     url = search_url(title, extra)
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
 
-    html, _ = fetch_html(url, timeout=12)
-    if not html or "a-price" not in html:
+    html, status = fetch_html(url, timeout=10, referer="https://www.amazon.co.uk/")
+    if not html or status != 200:
         out["blocked"] = True
         return out
 
     soup = soup_from(html)
+    rows: list[dict] = []
     cards = soup.select('div[data-component-type="s-search-result"]')
+    if not cards:
+        # Alternate markup some locales use
+        cards = soup.select("[data-asin]")
+
     for card in cards:
-        asin = card.get("data-asin") or ""
-        title_el = card.select_one("h2 a span, h2 span")
+        asin = (card.get("data-asin") or "").strip()
+        if not asin:
+            continue
+        title_el = card.select_one("h2 a span, h2 span, h2 a")
         name = title_el.get_text(" ", strip=True) if title_el else ""
+        if not name or len(name) < 3:
+            continue
+
         whole = card.select_one(".a-price-whole")
         frac = card.select_one(".a-price-fraction")
         if whole:
@@ -48,7 +60,7 @@ def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> d
             f = frac.get_text().strip() if frac else "00"
             price = parse_money(f"{w}.{f}")
         else:
-            price_el = card.select_one(".a-price .a-offscreen")
+            price_el = card.select_one(".a-price .a-offscreen, span.a-offscreen")
             price = parse_money(price_el.get_text() if price_el else "")
 
         rating = None
@@ -56,22 +68,27 @@ def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> d
         if rating_el:
             rating = parse_rating(rating_el.get_text())
 
-        product_url = f"https://www.amazon.co.uk/dp/{asin}" if asin else url
+        blob = name.lower()
+        is_used = any(x in blob for x in ("used", "renewed", "refurbished", "pre-owned"))
+
         row = product_row(
             name=name,
             price=price,
             store_name="Amazon UK",
-            url=product_url,
+            url=f"https://www.amazon.co.uk/dp/{asin}",
             rating=rating,
+            is_used=is_used,
         )
         if row:
-            if asin:
-                row["asin"] = asin
-            out["results"].append(row)
-        if len(out["results"]) >= limit:
+            row["asin"] = asin
+            row["condition"] = "used" if is_used else "new"
+            rows.append(row)
+        if len(rows) >= limit * 3:
             break
 
-    out["blocked"] = len(out["results"]) == 0
+    rows = filter_by_title(rows, title, min_score=0.67)[:limit]
+    out["results"] = rows
+    out["blocked"] = len(rows) == 0
     return out
 
 
@@ -92,7 +109,7 @@ def search_amazon_uk(
     hi = str(max_price) if max_price is not None else ""
     cond = (condition or "").strip().lower()
     raw = cached(
-        f"amazon:bs4:v2:{title.lower()}:{extra.strip().lower()}:{limit}",
+        f"amazon:bs4:v3:{title.lower()}:{extra.strip().lower()}:{limit}",
         lambda: _search_amazon_uk_uncached(title, extra=extra, limit=limit),
         timeout=1800,
     )

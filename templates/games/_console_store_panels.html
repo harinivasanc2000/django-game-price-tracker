@@ -1,29 +1,29 @@
 {# Official digital storefronts — shown first on detail #}
 <div class="panel" data-plat-group="ps">
-  <h2>PlayStation Store (UK) <span class="badge digital">Official</span></h2>
+  <h2 class="ico ico-ps">PlayStation Store (UK) <span class="badge digital">Official</span></h2>
   <div id="psnList">
     {% if psn_rows %}
       {% for row in psn_rows %}
-        <div class="deal-row">
+        <div class="deal-row" data-price="{{ row.price }}" data-currency="{{ row.currency|default:'GBP' }}">
           <div>
             <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
-            {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.3rem;">Full</span>{% endif %}
-            {% if row.platforms %}<span style="font-size:0.72rem;color:var(--muted);margin-left:0.35rem;">{{ row.platforms|join:", " }}</span>{% endif %}
+            {% if row.is_full_game %}<span class="badge digital" style="margin-left:0.25rem;">Full</span>{% endif %}
+            {% if row.platforms %}<span style="font-size:0.7rem;color:var(--muted);margin-left:0.3rem;">{{ row.platforms|join:", " }}</span>{% endif %}
           </div>
-          <div class="price-now">{% if row.display_price %}{{ row.display_price }}{% else %}{{ row.price }} {{ row.currency }}{% endif %}</div>
+          <div class="price-now" title="Click to copy">{% if row.display_price %}{{ row.display_price }}{% else %}{{ row.price }} {{ row.currency }}{% endif %}</div>
         </div>
       {% endfor %}
     {% else %}
-      <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No PSN matches for this title.</p>
+      <p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No PSN matches for this title.</p>
     {% endif %}
   </div>
 </div>
 
 <div class="panel" data-plat-group="xbox">
-  <h2>Xbox / Microsoft Store <span class="badge digital">Official</span></h2>
+  <h2 class="ico ico-xbox">Xbox / Microsoft Store <span class="badge digital">Official</span></h2>
   {% if xbox_rows %}
     {% for row in xbox_rows %}
-      <div class="deal-row">
+      <div class="deal-row" data-price="{{ row.price }}" data-currency="{{ row.currency|default:'GBP' }}">
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
         </div>
@@ -31,15 +31,15 @@
       </div>
     {% endfor %}
   {% else %}
-    <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">No Xbox matches — try Search with platform filter Xbox.</p>
+    <p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No Xbox matches — try platform filter Xbox.</p>
   {% endif %}
 </div>
 
 <div class="panel" data-plat-group="switch">
-  <h2>Nintendo eShop (UK) <span class="badge digital">Official</span></h2>
+  <h2 class="ico ico-switch">Nintendo eShop (UK) <span class="badge digital">Official</span></h2>
   {% if nintendo_rows %}
     {% for row in nintendo_rows %}
-      <div class="deal-row">
+      <div class="deal-row" data-price="{{ row.price }}" data-currency="{{ row.currency|default:'GBP' }}">
         <div>
           <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
         </div>
@@ -47,7 +47,7 @@
       </div>
     {% endfor %}
   {% else %}
-    <p style="padding:0.8rem 1rem;color:var(--muted);font-size:0.88rem;">
+    <p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">
       {% if nintendo_search_url %}
         <a href="{{ nintendo_search_url }}" target="_blank" rel="noopener">Search Nintendo eShop UK →</a>
       {% else %}

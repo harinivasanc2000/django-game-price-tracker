@@ -16,6 +16,7 @@ from urllib.parse import quote
 import requests
 
 from apps.games.cache import cached
+from apps.games.clients.title_match import filter_by_title
 
 TUMBLER = (
     "https://store.playstation.com/store/api/chihiro/00_09_000/tumbler/"
@@ -23,13 +24,14 @@ TUMBLER = (
 )
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
 
 
 def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
     url = TUMBLER.format(query=quote(title))
-    params = {"suggested_size": max(limit, 8), "mode": "game"}
+    # Over-fetch so title_match can drop DLC / wrong editions
+    params = {"suggested_size": max(limit * 3, 12), "mode": "game"}
     headers = {
         "User-Agent": USER_AGENT,
         "Accept": "application/json",
@@ -96,11 +98,13 @@ def _search_psn_uncached(title: str, limit: int = 10) -> list[dict[str, Any]]:
                 "store_name": "PlayStation Store (UK)",
             }
         )
-        if len(results) >= limit:
+        if len(results) >= limit * 3:
             break
 
-    results.sort(key=lambda x: (not x["is_full_game"], x["price"]))
-    return results
+    # Strict title match first, then prefer full game + price
+    results = filter_by_title(results, title, min_score=0.55)
+    results.sort(key=lambda x: (not x.get("is_full_game"), float(x.get("price") or 9999)))
+    return results[:limit]
 
 
 def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -108,7 +112,7 @@ def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
     if not title:
         return []
     return cached(
-        f"psn:search:v2:{title.lower()}:{limit}",
+        f"psn:search:v3:{title.lower()}:{limit}",
         lambda: _search_psn_uncached(title, limit=limit),
         timeout=600,
     )
@@ -116,8 +120,8 @@ def search_psn(title: str, limit: int = 10) -> list[dict[str, Any]]:
 
 def best_psn_deal(title: str) -> dict[str, Any] | None:
     rows = search_psn(title, limit=12)
-    full = [r for r in rows if r["is_full_game"] and r["price"] > 0]
+    full = [r for r in rows if r.get("is_full_game") and float(r.get("price") or 0) > 0]
     if full:
         return full[0]
-    paid = [r for r in rows if r["price"] > 0]
+    paid = [r for r in rows if float(r.get("price") or 0) > 0]
     return paid[0] if paid else (rows[0] if rows else None)
