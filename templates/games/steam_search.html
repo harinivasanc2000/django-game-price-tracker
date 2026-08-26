@@ -14,10 +14,16 @@
     margin: 0.85rem 0 0.65rem; justify-content: space-between;
   }
   .toolbar select, .toolbar label { font-size: 0.84rem; color: var(--muted); }
-  .toolbar select {
+  .toolbar select, .filter-bar input, .filter-bar select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 0.3rem 0.5rem;
+    border-radius: 8px; padding: 0.3rem 0.5rem; font-size: 0.84rem; font-family: inherit;
   }
+  .filter-bar {
+    display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: end;
+    margin: 0.65rem 0 0.35rem; padding: 0.55rem 0.65rem;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+  }
+  .filter-bar label { font-size: 0.74rem; color: var(--muted); }
   .chk { display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; font-size: 0.84rem; color: var(--muted); }
   .plat-sec {
     margin: 1.2rem 0 0.45rem; font-size: 0.74rem; text-transform: uppercase;
@@ -42,6 +48,12 @@
     border-radius: 8px; border: 1px solid var(--border); font-size: 0.76rem;
     color: var(--text); text-decoration: none !important;
   }
+  .recent a {
+    display: inline-block; margin: 0.2rem 0.3rem 0.2rem 0; padding: 0.3rem 0.55rem;
+    border-radius: 999px; border: 1px solid var(--border); font-size: 0.8rem;
+    color: var(--muted); text-decoration: none !important;
+  }
+  .recent a:hover { color: var(--accent2); border-color: var(--accent2); }
 </style>
 {% endblock %}
 
@@ -49,10 +61,51 @@
 <a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.84rem;">← Home</a>
 <h1 class="ico ico-search" style="font-size: 1.3rem; margin: 0.45rem 0 0.3rem;">Search all platforms</h1>
 <p style="color: var(--muted); font-size: 0.88rem; margin-bottom: 0.9rem;">
-  Official storefronts first, then open a title for full UK local scrapes.
+  Official storefronts first · filters run server-side · results cached ~4 min.
 </p>
 
 {% include "games/_search_box.html" with q=q placeholder="Search any game…" %}
+
+{% if not q and recent_searches %}
+  <div class="recent" style="margin-top:0.75rem;">
+    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.35rem;" class="ico ico-hist">Recent</p>
+    {% for r in recent_searches %}
+      <a href="{% url 'games:steam_search' %}?q={{ r|urlencode }}">{{ r }}</a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if q %}
+<form method="get" class="filter-bar ico ico-filter">
+  <input type="hidden" name="q" value="{{ q }}">
+  <input type="hidden" name="cc" value="{{ country }}">
+  {% if current_platform %}<input type="hidden" name="platform" value="{{ current_platform }}">{% endif %}
+  <label>Min £
+    <input type="number" name="min_price" min="0" step="0.01" value="{{ min_price }}" placeholder="0" style="display:block;width:5rem;">
+  </label>
+  <label>Max £
+    <input type="number" name="max_price" min="0" step="0.01" value="{{ max_price }}" placeholder="any" style="display:block;width:5rem;">
+  </label>
+  <label class="chk" style="margin-bottom:0.2rem;">
+    <input type="hidden" name="hide_dlc" value="0">
+    <input type="checkbox" name="hide_dlc" value="1" {% if hide_dlc %}checked{% endif %}> Hide DLC
+  </label>
+  <label class="chk" style="margin-bottom:0.2rem;">
+    <input type="checkbox" name="hide_free" value="1" {% if hide_free %}checked{% endif %}> Hide free
+  </label>
+  <label>Sort
+    <select name="sort" style="display:block;">
+      <option value="relevance" {% if sort == 'relevance' %}selected{% endif %}>Relevance</option>
+      <option value="match" {% if sort == 'match' %}selected{% endif %}>Best title match</option>
+      <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>Price ↑</option>
+      <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>Price ↓</option>
+      <option value="discount" {% if sort == 'discount' %}selected{% endif %}>Discount</option>
+      <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
+    </select>
+  </label>
+  <button type="submit" class="btn" style="padding:0.4rem 0.75rem;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;">Apply</button>
+</form>
+{% endif %}
 
 {% if error %}
   <p style="color: #f87171; margin-top: 0.9rem;">{{ error }}</p>
@@ -78,28 +131,12 @@
   <div class="plat-sec ico ico-pc">Steam / PC <span class="off">Official</span></div>
   <div class="toolbar">
     <p style="color: var(--muted); margin: 0;">{{ results|length }} match{{ results|length|pluralize }}</p>
-    <div style="display:flex;flex-wrap:wrap;gap:0.65rem;align-items:center;">
-      <label class="chk"><input type="checkbox" id="hideDlc" checked> Hide likely DLC</label>
-      <form method="get" style="display:flex;align-items:center;gap:0.35rem;">
-        <input type="hidden" name="q" value="{{ q }}">
-        <input type="hidden" name="cc" value="{{ country }}">
-        {% if current_platform %}<input type="hidden" name="platform" value="{{ current_platform }}">{% endif %}
-        <label for="sort">Sort</label>
-        <select name="sort" id="sort" onchange="this.form.submit()">
-          <option value="relevance" {% if sort == 'relevance' %}selected{% endif %}>Relevance</option>
-          <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>Price ↑</option>
-          <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>Price ↓</option>
-          <option value="discount" {% if sort == 'discount' %}selected{% endif %}>Biggest discount</option>
-          <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
-        </select>
-      </form>
-    </div>
   </div>
 
   <div id="resultsList">
   {% for r in results %}
-    <div class="result-card" data-dlc="{% if r.is_likely_dlc %}1{% else %}0{% endif %}">
-      <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}"{% if current_platform %}&platform={{ current_platform }}{% endif %}">
+    <div class="result-card">
+      <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}">
         {% if r.tiny_image %}
           <img src="{{ r.tiny_image }}" alt="" style="width:110px;height:41px;object-fit:cover;border-radius:6px;" loading="lazy" decoding="async" width="110" height="41">
         {% else %}
@@ -110,6 +147,7 @@
         <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}" style="font-weight:600; color: var(--text); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ r.name }}</a>
         <div style="margin-top: 0.2rem;">
           {% if r.is_likely_dlc %}<span class="badge dlc">Likely DLC</span>{% endif %}
+          {% if r.match_score %}<span class="badge" style="margin-left:0.15rem;">match {{ r.match_score }}</span>{% endif %}
           {% for p in r.platforms %}<span class="badge" style="margin-left:0.15rem;">{{ p }}</span>{% endfor %}
           {% if r.discount %}<span class="badge lowest" style="margin-left:0.15rem;">-{{ r.discount }}%</span>{% endif %}
         </div>
@@ -180,22 +218,6 @@
 {% endif %}
 
 {% if q and not results and not psn_results and not xbox_results and not nintendo_results and not error %}
-  <p style="color: var(--muted); margin-top: 0.9rem;">No results. Try a shorter title or another platform filter.</p>
+  <p style="color: var(--muted); margin-top: 0.9rem;">No results. Try a shorter title or clear filters.</p>
 {% endif %}
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function () {
-  var chk = document.getElementById('hideDlc');
-  if (!chk) return;
-  function apply() {
-    document.querySelectorAll('.result-card').forEach(function (el) {
-      el.style.display = (chk.checked && el.getAttribute('data-dlc') === '1') ? 'none' : '';
-    });
-  }
-  chk.addEventListener('change', apply);
-  apply();
-})();
-</script>
 {% endblock %}

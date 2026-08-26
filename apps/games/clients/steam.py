@@ -1,5 +1,10 @@
 """
 Steam Store public API client (no key required).
+
+Optimised for low RAM / short wall-time:
+  - shared session + connection pool
+  - alias expansion capped at 2 queries
+  - detail / search TTLs via apps.games.cache
 """
 
 from __future__ import annotations
@@ -14,21 +19,18 @@ from apps.games.cache import cached
 
 STORE_SEARCH = "https://store.steampowered.com/api/storesearch/"
 STORE_DETAILS = "https://store.steampowered.com/api/appdetails"
-USER_AGENT = "GamePriceTracker/0.2 (personal; polite)"
+USER_AGENT = "GamePriceTracker/0.3 (personal; polite)"
 
 SEARCH_ALIASES: dict[str, list[str]] = {
     "gta": ["Grand Theft Auto", "GTA"],
-    "gta5": ["Grand Theft Auto V", "GTA V"],
+    "gta5": ["Grand Theft Auto V"],
     "gta v": ["Grand Theft Auto V"],
     "gta 5": ["Grand Theft Auto V"],
     "cyberpunk": ["Cyberpunk 2077"],
     "cp2077": ["Cyberpunk 2077"],
     "rdr2": ["Red Dead Redemption 2"],
     "rdr": ["Red Dead Redemption"],
-    "ac": ["Assassin's Creed"],
     "gow": ["God of War"],
-    "yakuza": ["Yakuza", "Like a Dragon"],
-    "kiwami": ["Yakuza Kiwami"],
     "bg3": ["Baldur's Gate 3"],
     "elden": ["ELDEN RING"],
     "tlou": ["The Last of Us"],
@@ -64,29 +66,31 @@ def _session() -> requests.Session:
     if _SESSION is None:
         s = requests.Session()
         s.headers.update({"User-Agent": USER_AGENT, "Accept": "application/json"})
-        s.mount("https://", HTTPAdapter(pool_connections=6, pool_maxsize=6))
+        s.mount("https://", HTTPAdapter(pool_connections=4, pool_maxsize=4))
         _SESSION = s
     return _SESSION
 
 
 def expand_query(term: str) -> list[str]:
-    raw = (term or "").strip()
+    raw = (term or "").strip()[:120]
     if not raw:
         return []
     key = raw.lower()
-    terms = []
+    terms: list[str] = []
     if key in SEARCH_ALIASES:
-        terms.extend(SEARCH_ALIASES[key])
-    for ak, vals in SEARCH_ALIASES.items():
-        if key.startswith(ak + " ") or key.startswith(ak):
-            terms.extend(vals)
+        terms.extend(SEARCH_ALIASES[key][:1])
+    else:
+        for ak, vals in SEARCH_ALIASES.items():
+            if key == ak or key.startswith(ak + " "):
+                terms.extend(vals[:1])
+                break
     terms.append(raw)
     seen, out = set(), []
     for t in terms:
         if t.lower() not in seen:
             seen.add(t.lower())
             out.append(t)
-    return out
+    return out[:2]  # hard cap — each query is a network hit
 
 
 def _looks_like_dlc(name: str) -> bool:
@@ -168,13 +172,14 @@ def _search_store_uncached(term: str, country: str = "GB", limit: int = 30) -> l
     if not queries:
         return []
 
+    limit = max(1, min(int(limit or 20), 40))
     merged: dict[int, dict] = {}
     sess = _session()
 
-    for q in queries[:3]:
+    for q in queries:
         params = {"term": q, "l": "english", "cc": country.lower()}
         try:
-            r = sess.get(STORE_SEARCH, params=params, timeout=10)
+            r = sess.get(STORE_SEARCH, params=params, timeout=7)
             r.raise_for_status()
             data = r.json()
         except (requests.RequestException, ValueError):
@@ -206,6 +211,10 @@ def _search_store_uncached(term: str, country: str = "GB", limit: int = 30) -> l
                 "is_likely_dlc": _looks_like_dlc(name),
                 "_score": _score_result(item, term),
             }
+            if len(merged) >= limit * 2:
+                break
+        if len(merged) >= limit * 2:
+            break
 
     results = sorted(merged.values(), key=lambda x: (-x["_score"], x["name"]))
     for r in results:
@@ -214,14 +223,16 @@ def _search_store_uncached(term: str, country: str = "GB", limit: int = 30) -> l
 
 
 def search_store(term: str, country: str = "GB", limit: int = 30) -> list[dict[str, Any]]:
-    key = f"steam:search:v2:{country}:{term.strip().lower()}:{limit}"
+    term = (term or "").strip()[:120]
+    key = f"steam:search:v3:{country}:{term.lower()}:{limit}"
     return cached(key, lambda: _search_store_uncached(term, country=country, limit=limit), 300)
 
 
 def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[str, Any]]:
-    term = (term or "").strip()
+    term = (term or "").strip()[:80]
     if len(term) < 2:
         return []
+    limit = min(int(limit or 8), 10)
     rows = search_store(term, country=country, limit=limit)
     return [
         {
@@ -241,7 +252,7 @@ def suggest_store(term: str, country: str = "GB", limit: int = 8) -> list[dict[s
 def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any] | None:
     params = {"appids": app_id, "cc": country.lower()}
     try:
-        r = _session().get(STORE_DETAILS, params=params, timeout=12)
+        r = _session().get(STORE_DETAILS, params=params, timeout=10)
         r.raise_for_status()
         data = r.json()
     except (requests.RequestException, ValueError):
@@ -259,7 +270,7 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
     library_hero = f"https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/library_hero.jpg"
     page_bg = app_data.get("background") or ""
     screenshots = []
-    for s in (app_data.get("screenshots") or [])[:6]:
+    for s in (app_data.get("screenshots") or [])[:4]:
         url = s.get("path_full") or s.get("path_thumbnail") or ""
         if url:
             screenshots.append(url)
@@ -309,21 +320,23 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
         "library_hero": library_hero,
         "page_background": page_bg,
         "screenshots": screenshots,
-        "short_description": app_data.get("short_description") or "",
+        "short_description": (app_data.get("short_description") or "")[:600],
         "platforms": platforms,
         "release_date": release,
-        "developers": app_data.get("developers") or [],
-        "publishers": app_data.get("publishers") or [],
-        "dlc_ids": app_data.get("dlc") or [],
+        "developers": (app_data.get("developers") or [])[:4],
+        "publishers": (app_data.get("publishers") or [])[:4],
+        "dlc_ids": (app_data.get("dlc") or [])[:20],
         "parent_app_id": int(parent_id) if parent_id else None,
         "parent_name": fullgame.get("name") or "",
         "categories": [
             c.get("description")
-            for c in (app_data.get("categories") or [])
+            for c in (app_data.get("categories") or [])[:12]
             if c.get("description")
         ],
         "genres": [
-            g.get("description") for g in (app_data.get("genres") or []) if g.get("description")
+            g.get("description")
+            for g in (app_data.get("genres") or [])[:8]
+            if g.get("description")
         ],
         "launch_price_note": (
             "Steam does not expose historic launch MSRP via public API. "
@@ -333,7 +346,7 @@ def _get_app_details_uncached(app_id: int, country: str = "GB") -> dict[str, Any
 
 
 def get_app_details(app_id: int, country: str = "GB") -> dict[str, Any] | None:
-    key = f"steam:detail:v2:{country}:{app_id}"
+    key = f"steam:detail:v3:{country}:{app_id}"
     return cached(key, lambda: _get_app_details_uncached(app_id, country=country), 600)
 
 
