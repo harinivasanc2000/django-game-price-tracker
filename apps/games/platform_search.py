@@ -1,12 +1,12 @@
 """
 Parallel multi-platform search — Steam + PSN + Xbox + Nintendo.
 
-Designed to be light:
-  - short timeouts inside clients
-  - Django cache on every client + top-level result cache
-  - limited result counts
+Light by design:
+  - short client timeouts + hard 6s pool deadline
+  - Django cache on clients + top-level MPS cache
+  - capped result counts (no over-fetch beyond 1.5×)
   - soft-fail per platform
-  - strict title_match so franchise bleed (LEGO / other Arkham) is filtered
+  - strict title_match to kill franchise bleed
 """
 
 from __future__ import annotations
@@ -25,13 +25,50 @@ from .clients.uk_stores import platform_query
 from .clients.xbox import microsoft_store_search_url, search_xbox, xbox_search_url
 from .fx import to_gbp_or_zero
 
-MPS_TTL = 180
+MPS_TTL = 240  # 4 min — search is hot path
+POOL_TIMEOUT = 6.0
 
 
 def _ser(row: dict) -> dict:
     out = {}
     for k, v in row.items():
-        out[k] = float(v) if isinstance(v, Decimal) else v
+        if isinstance(v, Decimal):
+            out[k] = float(v)
+        else:
+            out[k] = v
+    return out
+
+
+def _price_filter_rows(
+    rows: list[dict],
+    *,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    hide_free: bool = False,
+) -> list[dict]:
+    if min_price is None and max_price is None and not hide_free:
+        return rows
+    out = []
+    for r in rows:
+        status = r.get("price_status")
+        has = r.get("has_price")
+        try:
+            p = float(r["price"]) if r.get("price") is not None else None
+        except (TypeError, ValueError):
+            p = None
+        if hide_free and (status == "free" or (p is not None and p <= 0 and status != "unknown")):
+            continue
+        if p is not None and p > 0:
+            if min_price is not None and p < min_price:
+                continue
+            if max_price is not None and p > max_price:
+                continue
+        elif min_price is not None or max_price is not None:
+            # unknown price: keep only if no hard band required for paid items
+            if has is False or status in ("unknown", None):
+                if min_price is not None:
+                    continue
+        out.append(r)
     return out
 
 
@@ -41,9 +78,15 @@ def multi_platform_search(
     platform: str = "",
     country: str = "GB",
     limit: int = 8,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    hide_dlc: bool = False,
+    hide_free: bool = False,
 ) -> dict[str, Any]:
-    q = (query or "").strip()
+    q = (query or "").strip()[:120]
     plat = (platform or "").strip().lower()
+    limit = max(4, min(int(limit or 8), 16))
+
     empty = {
         "steam": [],
         "psn": [],
@@ -58,8 +101,10 @@ def multi_platform_search(
     if not q:
         return empty
 
-    # Bump cache key when title matcher changes
-    cache_key = f"mps:v3:{q.lower()}:{plat}:{country}:{limit}"
+    # Include filter dims in key so filtered views cache separately
+    lo = f"{min_price:.2f}" if min_price is not None else ""
+    hi = f"{max_price:.2f}" if max_price is not None else ""
+    cache_key = f"mps:v5:{q.lower()}:{plat}:{country}:{limit}:{lo}:{hi}:{int(hide_dlc)}:{int(hide_free)}"
     hit = cache.get(cache_key)
     if hit is not None:
         return hit
@@ -71,6 +116,7 @@ def multi_platform_search(
 
     steam_q = platform_query(q, plat) if plat else q
     psn_q = platform_query(q, plat) if plat.startswith("ps") else q
+    fetch_n = max(limit + 4, 10)  # modest over-fetch for title_match
 
     steam_rows: list = []
     psn_rows: list = []
@@ -79,26 +125,25 @@ def multi_platform_search(
 
     def run_steam():
         try:
-            # Over-fetch then strict-filter
-            return search_store(steam_q, country=country, limit=max(limit * 2, 12))
+            return search_store(steam_q, country=country, limit=fetch_n)
         except Exception:
             return []
 
     def run_psn():
         try:
-            return search_psn(psn_q, limit=max(limit * 2, 12))
+            return search_psn(psn_q, limit=fetch_n)
         except Exception:
             return []
 
     def run_xbox():
         try:
-            return search_xbox(q, limit=max(limit * 2, 12))
+            return search_xbox(q, limit=fetch_n)
         except Exception:
             return []
 
     def run_nint():
         try:
-            return search_nintendo(q, limit=min(max(limit * 2, 10), 12))
+            return search_nintendo(q, limit=min(fetch_n, 10))
         except Exception:
             return {"results": [], "blocked": True, "search_url": nintendo_search_url(q)}
 
@@ -116,7 +161,7 @@ def multi_platform_search(
             futures[pool.submit(run_nint)] = "nint"
 
         try:
-            for fut in as_completed(futures, timeout=8):
+            for fut in as_completed(futures, timeout=POOL_TIMEOUT):
                 kind = futures[fut]
                 try:
                     result = fut.result()
@@ -135,12 +180,28 @@ def multi_platform_search(
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
-    # Strict title filter on every bucket (same rules as UK scrapes)
-    steam_rows = filter_by_title(steam_rows, q, min_score=0.67)[:limit]
-    psn_rows = filter_by_title(psn_rows, q, min_score=0.67)[:limit]
-    xbox_rows = filter_by_title(xbox_rows, q, min_score=0.67)[:limit]
+    steam_rows = filter_by_title(steam_rows, q, min_score=0.67)
+    if hide_dlc:
+        steam_rows = [r for r in steam_rows if not r.get("is_likely_dlc")]
+    steam_rows = _price_filter_rows(
+        steam_rows, min_price=min_price, max_price=max_price, hide_free=hide_free
+    )[:limit]
+
+    psn_rows = filter_by_title(psn_rows, q, min_score=0.67)
+    psn_rows = _price_filter_rows(
+        psn_rows, min_price=min_price, max_price=max_price, hide_free=hide_free
+    )[:limit]
+
+    xbox_rows = filter_by_title(xbox_rows, q, min_score=0.67)
+    xbox_rows = _price_filter_rows(
+        xbox_rows, min_price=min_price, max_price=max_price, hide_free=hide_free
+    )[:limit]
+
     nint_rows = filter_by_title(
         [_ser(r) for r in (nint_block.get("results") or [])], q, min_score=0.67
+    )
+    nint_rows = _price_filter_rows(
+        nint_rows, min_price=min_price, max_price=max_price, hide_free=hide_free
     )[:limit]
 
     links = [

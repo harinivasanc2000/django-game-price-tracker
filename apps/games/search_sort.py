@@ -1,7 +1,6 @@
-"""Client-side-safe sorting of Steam search result dicts."""
+"""Sorting of Steam search result dicts."""
 from __future__ import annotations
 
-from decimal import Decimal
 from typing import Any
 
 
@@ -30,4 +29,15 @@ def sort_results(results: list[dict[str, Any]], sort: str) -> list[dict[str, Any
         )
     if sort == "name":
         return sorted(results, key=lambda r: (r.get("name") or "").lower())
+    if sort == "match":
+        return sorted(
+            results,
+            key=lambda r: (-float(r.get("match_score") or 0), _price_key(r)),
+        )
+    # relevance: match_score if present, else keep incoming order
+    if any(r.get("match_score") is not None for r in results):
+        return sorted(
+            results,
+            key=lambda r: (-float(r.get("match_score") or 0), _price_key(r), r.get("name") or ""),
+        )
     return results
