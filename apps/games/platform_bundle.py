@@ -5,6 +5,8 @@ Order philosophy:
   1. Official digital storefront for the selected platform
   2. UK physical + local retailers (public-search scrapes)
   3. Marketplaces
+
+Cached ~3 minutes so AJAX platform switches and reloads stay cheap.
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from decimal import Decimal
 from typing import Any
 
+from django.core.cache import cache
+
 from .clients.amazon_uk import search_amazon_uk
 from .clients.nintendo import search_nintendo
 from .clients.psn import search_psn
@@ -20,6 +24,9 @@ from .clients.scrape_filters import parse_price_bound
 from .clients.uk_stores import fetch_uk_physical_bundle, platform_query, uk_search_links
 from .clients.xbox import search_xbox
 from .detail_helpers import empty_platform_bundle
+
+BUNDLE_TTL = 180
+BUNDLE_TIMEOUT = 9.0
 
 
 def _ser(row: dict) -> dict:
@@ -37,7 +44,7 @@ def platform_bundle(
     max_price: Decimal | str | None = None,
     condition: str = "",
 ) -> dict[str, Any]:
-    title = (title or "").strip()
+    title = (title or "").strip()[:160]
     platform = (platform or "").strip().lower()
     lo = parse_price_bound(str(min_price) if min_price is not None else None)
     hi = parse_price_bound(str(max_price) if max_price is not None else None)
@@ -47,13 +54,21 @@ def platform_bundle(
     if not title:
         return base
 
+    lo_s = str(lo) if lo is not None else ""
+    hi_s = str(hi) if hi is not None else ""
+    cache_key = f"pb:v2:{title.lower()}:{platform}:{lo_s}:{hi_s}:{cond}"
+    hit = cache.get(cache_key)
+    if hit is not None:
+        return hit
+
     want_psn = platform in ("", "ps4", "ps5")
     want_xbox = platform in ("", "xbox")
     want_switch = platform in ("", "switch")
     want_physical = True
-    want_amazon = platform in ("", "ps4", "ps5", "xbox", "switch", "pc")
+    # Amazon rarely lists "used" discs usefully for games — skip when filtering used only
+    want_amazon = platform in ("", "ps4", "ps5", "xbox", "switch", "pc") and cond != "used"
 
-    limit = 10 if platform in ("ps4", "ps5", "xbox", "switch") else 8
+    limit = 8 if platform in ("ps4", "ps5", "xbox", "switch") else 6
 
     psn_query = platform_query(title, platform) if platform.startswith("ps") else title
     amz_extra = platform.upper() if platform else ""
@@ -78,15 +93,20 @@ def platform_bundle(
 
     def run_nint():
         try:
-            return search_nintendo(title, limit=min(limit, 8))
+            return search_nintendo(title, limit=min(limit, 6))
         except Exception:
             return {"results": [], "blocked": True, "search_url": ""}
 
     def run_amz():
         try:
             return search_amazon_uk(
-                title, amz_extra, limit,
-                platform=platform, min_price=lo, max_price=hi, condition=cond,
+                title,
+                amz_extra,
+                limit,
+                platform=platform,
+                min_price=lo,
+                max_price=hi,
+                condition=cond,
             )
         except Exception:
             return {"results": [], "blocked": True, "search_url": ""}
@@ -94,37 +114,49 @@ def platform_bundle(
     def run_uk():
         try:
             return fetch_uk_physical_bundle(
-                title, platform, limit,
-                min_price=lo, max_price=hi, condition=cond,
+                title,
+                platform,
+                limit,
+                min_price=lo,
+                max_price=hi,
+                condition=cond,
             )
         except Exception:
             return {}
 
-    pool = ThreadPoolExecutor(max_workers=5)
+    jobs = []
+    if want_psn:
+        jobs.append(("psn", run_psn))
+    if want_xbox:
+        jobs.append(("xbox", run_xbox))
+    if want_switch:
+        jobs.append(("nint", run_nint))
+    if want_amazon:
+        jobs.append(("amz", run_amz))
+    if want_physical:
+        jobs.append(("uk", run_uk))
+
+    pool = ThreadPoolExecutor(max_workers=min(len(jobs) or 1, 5))
     try:
-        f_ps = pool.submit(run_psn) if want_psn else None
-        f_xb = pool.submit(run_xbox) if want_xbox else None
-        f_ni = pool.submit(run_nint) if want_switch else None
-        f_am = pool.submit(run_amz) if want_amazon else None
-        f_uk = pool.submit(run_uk) if want_physical else None
-        completed, _ = wait(
-            [future for future in (f_ps, f_xb, f_ni, f_am, f_uk) if future],
-            timeout=11,
-        )
+        futures = {pool.submit(fn): name for name, fn in jobs}
+        completed, _ = wait(futures.keys(), timeout=BUNDLE_TIMEOUT)
 
-        def result_if_done(future, fallback):
-            if not future or future not in completed:
-                return fallback
+        for fut in completed:
+            name = futures[fut]
             try:
-                return future.result() or fallback
+                result = fut.result()
             except Exception:
-                return fallback
-
-        psn_rows = result_if_done(f_ps, [])
-        xbox_rows = result_if_done(f_xb, [])
-        nint = result_if_done(f_ni, nint)
-        amazon = result_if_done(f_am, amazon)
-        uk = result_if_done(f_uk, {})
+                continue
+            if name == "psn":
+                psn_rows = result or []
+            elif name == "xbox":
+                xbox_rows = result or []
+            elif name == "nint":
+                nint = result or nint
+            elif name == "amz":
+                amazon = result or amazon
+            elif name == "uk":
+                uk = result or {}
     finally:
         pool.shutdown(wait=False, cancel_futures=True)
 
@@ -191,10 +223,11 @@ def platform_bundle(
             or uk_search_links(title, platform, min_price=lo, max_price=hi, condition=cond),
             "active_filters": {
                 "platform": platform,
-                "min_price": str(lo) if lo is not None else "",
-                "max_price": str(hi) if hi is not None else "",
+                "min_price": lo_s,
+                "max_price": hi_s,
                 "condition": cond,
             },
         }
     )
+    cache.set(cache_key, base, BUNDLE_TTL)
     return base

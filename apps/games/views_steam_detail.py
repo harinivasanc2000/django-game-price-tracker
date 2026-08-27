@@ -28,6 +28,7 @@ _OFFICIAL_FOR_PLATFORM = {
 }
 
 CONDITION_CHOICES = [("", "Any condition"), ("new", "New"), ("used", "Used")]
+DETAIL_POOL_TIMEOUT = 9.0
 
 
 def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
@@ -83,20 +84,31 @@ def steam_detail(request, app_id: int):
         detail_url=f"/steam/{app_id}/",
     )
 
-    already = Game.objects.filter(steam_app_id=app_id, is_active=True).only(
-        "id", "slug", "title", "steam_app_id", "platform", "launch_price", "launch_currency"
-    ).first()
-    catalog = Game.objects.filter(steam_app_id=app_id).only(
-        "id", "launch_price", "launch_currency", "launch_price_source"
-    ).first()
+    # One DB hit instead of two
+    catalog = (
+        Game.objects.filter(steam_app_id=app_id)
+        .only(
+            "id",
+            "slug",
+            "title",
+            "steam_app_id",
+            "platform",
+            "launch_price",
+            "launch_currency",
+            "launch_price_source",
+            "is_active",
+        )
+        .first()
+    )
+    already = catalog if catalog and catalog.is_active else None
 
     want_pc_deals = platform in ("", "pc")
     store_deals, news_items = [], []
     plat = empty_platform_bundle(detail["name"], platform)
     similar = []
 
-    workers = 3 + (1 if want_pc_deals else 0)
-    pool = ThreadPoolExecutor(max_workers=workers)
+    workers = 2 + (1 if want_pc_deals else 0) + 1  # plat + news + optional deals + similar
+    pool = ThreadPoolExecutor(max_workers=min(workers, 4))
     try:
         f_plat = pool.submit(
             platform_bundle,
@@ -106,11 +118,12 @@ def steam_detail(request, app_id: int):
             max_price=max_price,
             condition=condition,
         )
-        f_news = pool.submit(steam_news, app_id, 5)
-        f_deals = pool.submit(deals_for_title, detail["name"], 10) if want_pc_deals else None
+        f_news = pool.submit(steam_news, app_id, 4)
+        f_deals = pool.submit(deals_for_title, detail["name"], 8) if want_pc_deals else None
         f_sim = pool.submit(similar_steam_titles, detail["name"], app_id, country, 4)
         completed, _ = wait(
-            [future for future in (f_plat, f_news, f_deals, f_sim) if future], timeout=12
+            [future for future in (f_plat, f_news, f_deals, f_sim) if future],
+            timeout=DETAIL_POOL_TIMEOUT,
         )
 
         if f_plat in completed:
@@ -278,7 +291,7 @@ def steam_detail(request, app_id: int):
 
     watched = None
     if request.user.is_authenticated and already:
-        watched = Watch.objects.filter(user=request.user, game=already).first()
+        watched = Watch.objects.filter(user=request.user, game=already).only("id", "target_price").first()
 
     savings_vs_launch = None
     if launch and live_offers:
