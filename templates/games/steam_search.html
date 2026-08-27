@@ -24,6 +24,12 @@
     border: 1px solid var(--border); border-radius: 10px; background: var(--card);
   }
   .filter-bar label { font-size: 0.74rem; color: var(--muted); }
+  .presets { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.45rem 0 0.25rem; }
+  .presets a {
+    font-size: 0.76rem; padding: 0.25rem 0.55rem; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--muted); text-decoration: none !important;
+  }
+  .presets a:hover, .presets a.on { border-color: var(--accent2); color: var(--accent2); }
   .chk { display: inline-flex; align-items: center; gap: 0.3rem; cursor: pointer; font-size: 0.84rem; color: var(--muted); }
   .plat-sec {
     margin: 1.2rem 0 0.45rem; font-size: 0.74rem; text-transform: uppercase;
@@ -61,7 +67,7 @@
 <a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.84rem;">← Home</a>
 <h1 class="ico ico-search" style="font-size: 1.3rem; margin: 0.45rem 0 0.3rem;">Search all platforms</h1>
 <p style="color: var(--muted); font-size: 0.88rem; margin-bottom: 0.9rem;">
-  Official storefronts first · filters run server-side · results cached ~4 min.
+  Official storefronts first · server filters · results cached ~4 min.
 </p>
 
 {% include "games/_search_box.html" with q=q placeholder="Search any game…" %}
@@ -76,6 +82,16 @@
 {% endif %}
 
 {% if q %}
+{% with base_qs="q="|add:q %}
+<div class="presets">
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&hide_dlc=1" class="{% if not max_price and not min_price %}on{% endif %}">Any price</a>
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&max_price=10&hide_dlc=1" class="{% if max_price == '10' %}on{% endif %}">Under £10</a>
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&max_price=20&hide_dlc=1" class="{% if max_price == '20' %}on{% endif %}">Under £20</a>
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&max_price=40&hide_dlc=1" class="{% if max_price == '40' %}on{% endif %}">Under £40</a>
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&hide_dlc=1&sort=price_asc">Cheapest first</a>
+</div>
+{% endwith %}
+
 <form method="get" class="filter-bar ico ico-filter">
   <input type="hidden" name="q" value="{{ q }}">
   <input type="hidden" name="cc" value="{{ country }}">

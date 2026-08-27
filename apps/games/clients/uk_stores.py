@@ -1,8 +1,8 @@
 """
 UK local / marketplace sources — public product search (no login).
 
-  CeX          → boxes JSON API (+ stock / trade-in)
-  MusicMagpie  → public HTML (used media/games)
+  CeX          → boxes JSON API (+ stock / trade-in); BS4 fallback if blocked
+  MusicMagpie  → public HTML
   eBay         → public HTML + URL filters
   GAME/Argos/Currys/Smyths → HTML + ld+json
 
@@ -32,8 +32,8 @@ from apps.games.clients.scrape_utils import (
 )
 from apps.games.clients.title_match import filter_by_title, titles_match
 
-_HTML_TIMEOUT = 7
-_BUNDLE_TIMEOUT = 9
+_HTML_TIMEOUT = 6
+_BUNDLE_TIMEOUT = 8
 
 
 def platform_query(title: str, platform: str = "") -> str:
@@ -142,7 +142,7 @@ def _rows_from_cards(
     limit: int,
 ) -> list[dict]:
     rows = []
-    for card in soup.select(selectors)[: limit + 20]:
+    for card in soup.select(selectors)[: limit + 16]:
         a = card.find("a", href=True)
         name_el = card.find(["h2", "h3", "span", "a"], class_=re.compile(r"name|title|product", re.I))
         if not name_el:
@@ -170,8 +170,7 @@ def _finalize_store(rows: list, title: str, limit: int, search_url: str) -> dict
     }
 
 
-def merge_best_local(sources: dict[str, dict], *, limit: int = 12) -> list[dict]:
-    """Cheapest relevant row across all UK local sources (dedupe by store+name)."""
+def merge_best_local(sources: dict[str, dict], *, limit: int = 10) -> list[dict]:
     seen: set[str] = set()
     merged: list[dict] = []
     for key, src in sources.items():
@@ -277,7 +276,7 @@ def _try_ebay_uncached(
         if row:
             row["condition"] = "used" if is_used else ("new" if "new" in blob else "unknown")
             rows.append(row)
-        if len(rows) >= limit * 3:
+        if len(rows) >= limit * 2:
             break
     return _finalize_store(rows, title, limit, url)
 
@@ -465,7 +464,7 @@ def fetch_uk_physical_bundle(
     links = uk_search_links(
         title, platform, min_price=min_price, max_price=max_price, condition=condition
     )
-    limit = max(4, min(int(limit or 8), 12))
+    limit = max(4, min(int(limit or 8), 10))
     cond = (condition or "").strip().lower()
     fallback = {link["name"]: link["url"] for link in links}
 
@@ -550,7 +549,7 @@ def fetch_uk_physical_bundle(
         "currys": finalize(currys),
         "smyths": finalize(smyths),
     }
-    best_local = merge_best_local(sources, limit=12)
+    best_local = merge_best_local(sources, limit=10)
     stores_ok = sum(1 for s in sources.values() if s.get("results"))
 
     return {

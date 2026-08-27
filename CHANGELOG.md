@@ -4,22 +4,20 @@
 
 ---
 
-## 2026-08-26 20:40 BST — Search optimise + filters + leaner Steam/Nintendo
+## 2026-08-27 17:45 BST — Detail speed + presets + leaner UK
 
-### Search filters (server-side)
-- Min / max £, **Hide DLC**, **Hide free**, sort including **Best title match**
-- Filters included in multi-platform cache key (`mps:v5`)
+### Performance
+- **`platform_bundle` cached 3 min** (`pb:v2`) — platform AJAX + reloads reuse data
+- Detail pool timeout **9s**; UK physical pool **8s**; HTML fetches **6s**
+- Single Game query on detail (active + launch in one hit)
+- Skip Amazon scrape when condition=`used`
+- Smaller per-store limits on focused platform views
 
-### Runtime / RAM
-- Multi-platform pool hard deadline **6s** (was 8)
-- Modest over-fetch only (`limit+4`), not ×2–×3 everywhere
-- Steam: max **2** alias queries, 4-conn pool, shorter timeouts, smaller detail payloads
-- Nintendo: title_match + 7s HTML budget
-- Query strings capped at 120 chars
+### Search UX
+- Quick presets: **Under £10 / £20 / £40**, Any price, Cheapest first
 
-### UX
-- **Recent searches** on empty search page (session history, no network)
-- Match score badge on Steam rows when available
+### Home
+- Solid cards (already lean); keep disclaimer without heavy blur dependency in new CSS paths
 
 ```bash
 git pull
