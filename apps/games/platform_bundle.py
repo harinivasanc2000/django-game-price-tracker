@@ -11,6 +11,8 @@ Cached ~3 minutes so AJAX platform switches and reloads stay cheap.
 
 from __future__ import annotations
 
+import hashlib
+import math
 from concurrent.futures import ThreadPoolExecutor, wait
 from decimal import Decimal
 from typing import Any
@@ -24,9 +26,23 @@ from .clients.scrape_filters import parse_price_bound
 from .clients.uk_stores import fetch_uk_physical_bundle, platform_query, uk_search_links
 from .clients.xbox import search_xbox
 from .detail_helpers import empty_platform_bundle
+from .constants import STORE_PLATFORMS
 
 BUNDLE_TTL = 180
 BUNDLE_TIMEOUT = 9.0
+_PLATFORM_VALUES = frozenset({"", *(value for value, _label in STORE_PLATFORMS)})
+_CONDITION_VALUES = frozenset({"", "new", "used"})
+
+
+def _bundle_cache_key(
+    title: str, platform: str, min_price: str, max_price: str, condition: str
+) -> str:
+    """Return a short backend-safe identity for user/catalogue text."""
+    identity = "|".join(
+        (title.casefold(), platform, min_price, max_price, condition)
+    )
+    digest = hashlib.blake2s(identity.encode("utf-8"), digest_size=12).hexdigest()
+    return f"pb:v3:{digest}"
 
 
 def _ser(row: dict) -> dict:
@@ -46,9 +62,15 @@ def platform_bundle(
 ) -> dict[str, Any]:
     title = (title or "").strip()[:160]
     platform = (platform or "").strip().lower()
+    if platform not in _PLATFORM_VALUES:
+        platform = ""
     lo = parse_price_bound(str(min_price) if min_price is not None else None)
     hi = parse_price_bound(str(max_price) if max_price is not None else None)
+    if lo is not None and hi is not None and lo > hi:
+        lo, hi = hi, lo
     cond = (condition or "").strip().lower()
+    if cond not in _CONDITION_VALUES:
+        cond = ""
 
     base = empty_platform_bundle(title, platform)
     if not title:
@@ -56,7 +78,7 @@ def platform_bundle(
 
     lo_s = str(lo) if lo is not None else ""
     hi_s = str(hi) if hi is not None else ""
-    cache_key = f"pb:v2:{title.lower()}:{platform}:{lo_s}:{hi_s}:{cond}"
+    cache_key = _bundle_cache_key(title, platform, lo_s, hi_s, cond)
     hit = cache.get(cache_key)
     if hit is not None:
         return hit
@@ -161,12 +183,16 @@ def platform_bundle(
         pool.shutdown(wait=False, cancel_futures=True)
 
     def price_ok(row: dict) -> bool:
+        raw_price = row.get("price")
+        has_price_band = lo is not None or hi is not None
+        if raw_price in (None, ""):
+            return not has_price_band
         try:
-            p = float(row.get("price") or 0)
-        except (TypeError, ValueError):
-            return True
-        if p <= 0:
-            return True
+            p = float(raw_price)
+        except (TypeError, ValueError, OverflowError):
+            return False
+        if not math.isfinite(p) or p < 0:
+            return False
         if lo is not None and p < float(lo):
             return False
         if hi is not None and p > float(hi):
@@ -176,6 +202,10 @@ def platform_bundle(
     psn_rows = [r for r in psn_rows if price_ok(r)]
     xbox_rows = [r for r in xbox_rows if price_ok(r)]
     nint_results = [r for r in (nint.get("results") or []) if price_ok(r)]
+
+    def filtered_rows(source: dict) -> list[dict]:
+        """Defend the bundle contract even when an individual client misses a filter."""
+        return [row for row in (source.get("results") or []) if price_ok(row)]
 
     cex = uk.get("cex") or {}
     ebay = uk.get("ebay") or {}
@@ -198,7 +228,7 @@ def platform_bundle(
             {
                 "key": key,
                 "label": label,
-                "rows": [_ser(row) for row in (source.get("results") or [])],
+                "rows": [_ser(row) for row in filtered_rows(source)],
                 "blocked": source.get("blocked", True),
                 "search_url": source.get("search_url") or "",
             }
@@ -211,32 +241,36 @@ def platform_bundle(
             "nintendo_rows": [_ser(r) for r in nint_results],
             "nintendo_blocked": bool(nint.get("blocked", True)) or not nint_results,
             "nintendo_search_url": nint.get("search_url") or "",
-            "amazon_rows": [_ser(r) for r in (amazon.get("results") or [])],
+            "amazon_rows": [_ser(r) for r in filtered_rows(amazon)],
             "amazon_blocked": amazon.get("blocked", True),
             "amazon_search_url": amazon.get("search_url"),
-            "cex_rows": [_ser(r) for r in (cex.get("results") or [])],
+            "cex_rows": [_ser(r) for r in filtered_rows(cex)],
             "cex_blocked": cex.get("blocked", True),
             "cex_search_url": cex.get("search_url"),
-            "ebay_rows": [_ser(r) for r in (ebay.get("results") or [])],
+            "ebay_rows": [_ser(r) for r in filtered_rows(ebay)],
             "ebay_blocked": ebay.get("blocked", True),
             "ebay_search_url": ebay.get("search_url"),
-            "game_rows": [_ser(r) for r in (game.get("results") or [])],
+            "game_rows": [_ser(r) for r in filtered_rows(game)],
             "game_blocked": game.get("blocked", True),
             "game_search_url": game.get("search_url"),
-            "argos_rows": [_ser(r) for r in (argos.get("results") or [])],
+            "argos_rows": [_ser(r) for r in filtered_rows(argos)],
             "argos_blocked": argos.get("blocked", True),
             "argos_search_url": argos.get("search_url"),
-            "currys_rows": [_ser(r) for r in (currys.get("results") or [])],
+            "currys_rows": [_ser(r) for r in filtered_rows(currys)],
             "currys_blocked": currys.get("blocked", True),
             "currys_search_url": currys.get("search_url"),
-            "smyths_rows": [_ser(r) for r in (smyths.get("results") or [])],
+            "smyths_rows": [_ser(r) for r in filtered_rows(smyths)],
             "smyths_blocked": smyths.get("blocked", True),
             "smyths_search_url": smyths.get("search_url"),
-            "musicmagpie_rows": [_ser(r) for r in (mm.get("results") or [])],
+            "musicmagpie_rows": [_ser(r) for r in filtered_rows(mm)],
             "musicmagpie_blocked": mm.get("blocked", True),
             "musicmagpie_search_url": mm.get("search_url"),
             "specialist_sources": specialist_sources,
-            "best_local": [_ser(r) for r in (uk.get("best_local") or [])],
+            "best_local": [
+                _ser(r)
+                for r in (uk.get("best_local") or [])
+                if r.get("in_stock") is not False and price_ok(r)
+            ],
             "stores_ok": uk.get("stores_ok") or 0,
             "stores_total": uk.get("stores_total") or 11,
             "uk_links": uk.get("uk_links")

@@ -70,6 +70,16 @@ _VARIANT_EXCLUSIONS = (
 # (used only as a hint for weighting — coverage still primary)
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
+# Roman numerals are common sequel markers (Final Fantasy VII, GTA IV, etc.).
+# Keep a deliberately bounded set so ordinary words made only from Roman
+# letters are not accidentally treated as version numbers.
+_ROMAN_NUMERALS = frozenset(
+    {
+        "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
+        "xi", "xii", "xiii", "xiv", "xv", "xvi", "xvii", "xviii", "xix", "xx",
+    }
+)
+
 
 def normalize_title(text: str) -> str:
     # NFKD makes real-world store spellings consistent (Ragnarök → Ragnarok).
@@ -87,11 +97,12 @@ def significant_tokens(text: str) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
     for tok in _TOKEN_RE.findall(normalize_title(text)):
-        if len(tok) < 2:
+        # Numbers are often essential title identity, including one-character
+        # sequels and four-digit release years.  Dropping them made RDR 2,
+        # Resident Evil 4 and Football Manager 2024 match earlier entries.
+        if len(tok) < 2 and not tok.isdigit() and tok not in _ROMAN_NUMERALS:
             continue
         if tok in _STOP:
-            continue
-        if tok.isdigit() and len(tok) == 4:  # years
             continue
         if tok not in seen:
             seen.add(tok)
@@ -124,6 +135,15 @@ def title_match_score(listing_name: str, query_title: str) -> float:
 
     # --- Contaminants: LEGO Batman when query is Arkham Knight ---
     q_set = set(q_tokens)
+
+    # Sequel/version markers are hard discriminators regardless of the softer
+    # token-coverage threshold.  This prevents a long base title from passing
+    # merely because it shares three words with its numbered sequel.
+    sequel_markers = {
+        token for token in q_tokens if token.isdigit() or token in _ROMAN_NUMERALS
+    }
+    if not sequel_markers.issubset(listing_tokens):
+        return 0.0
     for c in _CONTAMINANTS:
         if c in listing_tokens and c not in q_set:
             return 0.0

@@ -33,7 +33,25 @@ class SteamDetailPageTests(TestCase):
             "header_image": "",
             "screenshots": [],
         }
-        platform.return_value = empty_platform_bundle("Example game")
+        bundle = empty_platform_bundle("Example game")
+        bundle["specialist_sources"] = [
+            {
+                "key": "shopto",
+                "label": "ShopTo",
+                "rows": [
+                    {
+                        "name": "Example game PS5",
+                        "price": Decimal("12.99"),
+                        "currency": "GBP",
+                        "url": "https://www.shopto.net/en/example-game/",
+                    }
+                ],
+                "blocked": False,
+                "search_url": "https://www.shopto.net/en/search/?input_search=Example+game",
+            }
+        ]
+        bundle["stores_ok"] = 1
+        platform.return_value = bundle
         deals.return_value = [
             {
                 "store_name": "Fanatical",
@@ -48,3 +66,5 @@ class SteamDetailPageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'href="https://store.steampowered.com/app/12345/"')
         self.assertContains(response, 'href="https://www.cheapshark.com/redirect?dealID=example"')
+        self.assertContains(response, 'href="https://www.shopto.net/en/example-game/"')
+        self.assertIn("ShopTo", [offer["store"] for offer in response.context["live_offers"]])

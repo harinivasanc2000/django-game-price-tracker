@@ -66,8 +66,7 @@ def _check_watch_targets(game: Game, price, currency: str, store_name: str = "",
             currency=settings.DEFAULT_CURRENCY,
             target_price=watch.target_price,
             store=store_name[:120],
-            # PriceAlert.url uses Django's 200-character URLField default.
-            url=url[:200],
+            url=url[:1000],
         )
         hits += 1
     return hits
@@ -309,11 +308,13 @@ def send_pending_alerts() -> dict:
             continue
         link = f"{site_url}/game/{game.slug}/"
         subject = f"Price drop: {game.title} at {alert.price} {alert.currency}"
+        deal_line = f"Open deal: {alert.url}\n" if alert.url else ""
         message = (
             f"{game.title} is now {alert.price} {alert.currency} "
             f"(your target: {alert.target_price} {alert.currency}).\n"
             f"Store: {alert.store or 'n/a'}\n\n"
-            f"View: {link}\n"
+            f"{deal_line}"
+            f"View tracker: {link}\n"
         )
         try:
             send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email])

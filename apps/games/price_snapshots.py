@@ -14,9 +14,11 @@ from typing import Any
 
 from django.utils import timezone
 
+from .clients.scrape_utils import normalise_public_url
 from .models import Game, PriceRecord, Store
 
 SNAPSHOT_HEARTBEAT = timedelta(hours=20)
+MAX_STORED_PRICE = Decimal("99999999.99")
 
 
 def _decimal_or_none(value: Any) -> Decimal | None:
@@ -60,15 +62,30 @@ def record_snapshot(
         "currency": (currency or "GBP").upper()[:3],
         "original_price": _decimal_or_none(original_price),
         "discount_percent": _discount_or_none(discount_percent),
-        "url": (url or "")[:200],
+        # Programmatic model writes bypass URLField form validation.  Reject
+        # javascript:/data: schemes here before a value becomes a persistent
+        # clickable link on comparison, deal, guide, or alert pages.
+        "url": normalise_public_url(url)[:1000],
         "is_physical": bool(is_physical),
         "is_used": bool(is_used),
         "condition": (condition or "")[:50],
         "in_stock": bool(in_stock),
         "notes": (notes or "")[:255],
     }
-    if normalized["price"] is None or normalized["price"] < 0:
-        raise ValueError("A price snapshot requires a finite, non-negative price.")
+    if (
+        normalized["price"] is None
+        or normalized["price"] < 0
+        or normalized["price"] > MAX_STORED_PRICE
+    ):
+        raise ValueError("A price snapshot requires a finite, in-range, non-negative price.")
+    if (
+        normalized["original_price"] is not None
+        and (
+            normalized["original_price"] < 0
+            or normalized["original_price"] > MAX_STORED_PRICE
+        )
+    ):
+        raise ValueError("Original price must be finite, in-range, and non-negative.")
 
     latest = (
         PriceRecord.objects.filter(game=game, store=store)

@@ -33,6 +33,7 @@ from .models import (
     Store,
     Watch,
 )
+from .price_queries import latest_store_snapshots
 from .views_best_deals import best_deals  # noqa: F401
 from .price_snapshots import record_snapshot
 
@@ -117,12 +118,14 @@ def _gbp_point(amount, currency="GBP") -> float | None:
 
 
 def _collapse_changes(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]:
-    """Keep price changes plus both ends of a repeated-price run.
+    """Keep price changes, run ends, and periodic freshness confirmations.
 
     Refresh jobs can write the same quote many times. Keeping only the first
     quote makes it look stale, while keeping every duplicate produces a noisy
-    chart. This run-length compaction preserves both the start and the most
-    recent confirmation of each flat period.
+    chart. This run-length compaction preserves both ends plus checkpoints no
+    more than half the quote lifetime apart.  The checkpoints matter: removing
+    ten daily equal-price checks would otherwise manufacture a false seven-day
+    stale gap between the first and last observation.
     """
     if not pairs:
         return []
@@ -130,14 +133,19 @@ def _collapse_changes(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]
         return pairs
 
     out = [pairs[0]]
+    last_kept_at = datetime.fromisoformat(pairs[0][0])
+    checkpoint_gap = CHART_QUOTE_MAX_AGE / 2
     for index in range(1, len(pairs)):
         label, price = pairs[index]
+        observed_at = datetime.fromisoformat(label)
         previous_price = pairs[index - 1][1]
         next_price = pairs[index + 1][1] if index + 1 < len(pairs) else None
         changed = abs(price - previous_price) >= 0.005
         ends_flat_run = next_price is None or abs(next_price - price) >= 0.005
-        if changed or ends_flat_run:
+        confirms_freshness = observed_at - last_kept_at >= checkpoint_gap
+        if changed or ends_flat_run or confirms_freshness:
             out.append((label, price))
+            last_kept_at = observed_at
     return out
 
 
@@ -179,8 +187,12 @@ def _build_chart_payload(
 
     def add_first_row(seller, rows, default_currency="GBP") -> bool:
         added = False
-        for row in (rows or [])[:3]:
-            if not isinstance(row, dict) or row.get("price") is None:
+        for row in (rows or [])[:12]:
+            if (
+                not isinstance(row, dict)
+                or row.get("price") is None
+                or row.get("in_stock") is False
+            ):
                 continue
             added = add_point(
                 row.get("store_name") or seller,
@@ -194,21 +206,31 @@ def _build_chart_payload(
         history = list(
             PriceRecord.objects.filter(game=already)
             .select_related("store")
-            .only("price", "currency", "recorded_at", "store__name")
+            .only("price", "currency", "recorded_at", "in_stock", "store__name")
             .order_by("-recorded_at")[:CHART_HISTORY_LIMIT]
         )
         history.reverse()
         for h in history:
+            if not h.in_stock:
+                continue
             if add_point(h.store.name, h.recorded_at.isoformat(), h.price, h.currency):
                 historical_count += 1
 
     # Every live quote belongs to the same final point on the chart.
     now = timezone.now().isoformat()
     detail = detail if isinstance(detail, dict) else {}
-    if detail.get("price") is not None and detail.get("price_status") in {"paid", "free"}:
+    if (
+        detail.get("price") is not None
+        and detail.get("price_status") in {"paid", "free"}
+        and detail.get("in_stock") is not False
+    ):
         live_count += int(add_point("Steam", now, detail["price"], detail.get("currency") or "GBP"))
     for deal in (store_deals or [])[:12]:
-        if not isinstance(deal, dict) or deal.get("price") is None:
+        if (
+            not isinstance(deal, dict)
+            or deal.get("price") is None
+            or deal.get("in_stock") is False
+        ):
             continue
         live_count += int(
             add_point(
@@ -458,16 +480,19 @@ def game_compare(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
     if game.steam_app_id:
         return redirect("games:steam_detail", app_id=game.steam_app_id)
-    prices = list(
-        PriceRecord.objects.filter(game=game)
-        .select_related("store")
-        .order_by("price", "-recorded_at")[:50]
+    # PriceRecord is append-only history.  Render only each store's newest,
+    # purchasable quote so an expired £5 sale cannot beat a current £10 offer.
+    prices = [
+        price
+        for price in latest_store_snapshots([game.id])
+        if price.in_stock and _gbp_point(price.price, price.currency) is not None
+    ]
+    prices.sort(
+        key=lambda price: (
+            _gbp_point(price.price, price.currency),
+            price.store.name.casefold(),
+        )
     )
-
-    def _gbp(p):
-        return to_gbp_or_zero(p.price, p.currency)
-
-    prices.sort(key=_gbp)
     lowest = prices[0] if prices else None
     chart = _build_chart_payload(
         game,

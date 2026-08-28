@@ -69,9 +69,10 @@ def _card_from_detail(
                 lowest_gbp = gbp
                 lowest_label = r.store.name
 
-    if status == "paid" and price is not None:
+    if status in {"paid", "free"} and price is not None:
         steam_gbp = float(to_gbp_or_zero(price, currency))
-        if lowest_gbp is None or steam_gbp < lowest_gbp:
+        valid_steam_price = status == "free" or steam_gbp > 0
+        if valid_steam_price and (lowest_gbp is None or steam_gbp < lowest_gbp):
             lowest_gbp = steam_gbp
             lowest_label = "Steam"
 
@@ -82,7 +83,7 @@ def _card_from_detail(
         )
         launch = float(launch_gbp) if launch_gbp > 0 else None
     savings = None
-    if launch and lowest_gbp and launch > 0:
+    if launch and lowest_gbp is not None and launch > 0:
         savings = int(round((1 - lowest_gbp / launch) * 100))
 
     return {
@@ -208,7 +209,10 @@ def _build_home_payload() -> dict:
 
     hot = sorted(
         [c for c in cards if (c.get("savings") or 0) > 0 or (c.get("discount") or 0) > 0],
-        key=lambda c: (-(c.get("savings") or c.get("discount") or 0), c.get("lowest_gbp") or 999),
+        key=lambda c: (
+            -(c.get("savings") or c.get("discount") or 0),
+            c["lowest_gbp"] if c.get("lowest_gbp") is not None else 999,
+        ),
     )[:6]
 
     return {

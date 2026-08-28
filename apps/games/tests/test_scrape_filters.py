@@ -17,6 +17,9 @@ class ScrapeFilterTests(SimpleTestCase):
         self.assertEqual(parse_price_bound("12.50"), Decimal("12.50"))
         self.assertIsNone(parse_price_bound(""))
         self.assertIsNone(parse_price_bound("abc"))
+        for invalid in ("NaN", "Infinity", "-1", "1000001"):
+            with self.subTest(invalid=invalid):
+                self.assertIsNone(parse_price_bound(invalid))
 
     def test_condition_detection(self):
         self.assertEqual(detect_condition("Halo Infinite Pre-Owned"), "used")

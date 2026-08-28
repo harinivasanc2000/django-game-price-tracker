@@ -14,6 +14,7 @@ from urllib.parse import quote_plus
 import requests
 
 from apps.games.cache import cached
+from apps.games.clients.scrape_utils import normalise_public_url
 
 STEAM_NEWS = "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
 
@@ -77,7 +78,7 @@ def _steam_news_uncached(app_id: int, count: int = 8, deals_only: bool = True) -
         out.append(
             {
                 "title": title,
-                "url": n.get("url") or "",
+                "url": normalise_public_url(n.get("url")),
                 "date": n.get("date"),
                 "feed": n.get("feedlabel") or n.get("feedname") or "Steam",
                 "summary": summary,
@@ -92,7 +93,7 @@ def _steam_news_uncached(app_id: int, count: int = 8, deals_only: bool = True) -
             out.append(
                 {
                     "title": n.get("title") or "News",
-                    "url": n.get("url") or "",
+                    "url": normalise_public_url(n.get("url")),
                     "date": n.get("date"),
                     "feed": n.get("feedlabel") or n.get("feedname") or "Steam",
                     "summary": (n.get("contents") or "")[:200],

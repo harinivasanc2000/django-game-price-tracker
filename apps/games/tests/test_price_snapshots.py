@@ -46,3 +46,11 @@ class PriceSnapshotTests(TestCase):
 
         self.assertTrue(created)
         self.assertEqual(record.discount_percent, 100)
+
+    def test_long_retailer_url_is_not_truncated_at_legacy_default(self):
+        url = "https://retailer.example/search?redirect=" + ("a" * 500)
+        record, _ = record_snapshot(
+            game=self.game, store=self.store, price="9.99", url=url
+        )
+
+        self.assertEqual(record.url, url)

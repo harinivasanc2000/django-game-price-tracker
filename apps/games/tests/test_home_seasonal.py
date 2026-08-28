@@ -6,11 +6,37 @@ from decimal import Decimal
 from django.test import TestCase
 from django.utils import timezone
 
-from apps.games.home_view import _seasonal_app_ids
+from apps.games.home_view import _card_from_detail, _seasonal_app_ids
 from apps.games.models import Game, PriceRecord, Store
 
 
 class SeasonalHomeTests(TestCase):
+    def test_free_steam_game_remains_a_real_zero_price(self):
+        game = Game.objects.create(
+            title="Free weekend",
+            slug="free-weekend",
+            steam_app_id=404,
+            launch_price=Decimal("49.99"),
+            launch_currency="GBP",
+        )
+
+        card = _card_from_detail(
+            404,
+            {
+                "name": game.title,
+                "price": Decimal("0.00"),
+                "currency": "GBP",
+                "price_status": "free",
+            },
+            game,
+            {},
+            "Steam special right now",
+        )
+
+        self.assertEqual(card["lowest_gbp"], 0.0)
+        self.assertEqual(card["lowest_label"], "Steam")
+        self.assertEqual(card["savings"], 100)
+
     def test_recent_discount_frequency_ranks_before_current_specials(self):
         store = Store.objects.create(name="Steam", slug="steam")
         frequent = Game.objects.create(title="Frequent", slug="frequent", steam_app_id=101)

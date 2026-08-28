@@ -86,7 +86,9 @@ class PriceRecord(models.Model):
     currency = models.CharField(max_length=3, default="GBP")
     original_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     discount_percent = models.PositiveSmallIntegerField(null=True, blank=True)
-    url = models.URLField(blank=True)
+    # Retailer redirect/query URLs regularly exceed Django's 200-char default.
+    # A larger bound avoids silently truncating a working tracked-deal link.
+    url = models.URLField(max_length=1000, blank=True)
     is_physical = models.BooleanField(default=False)
     is_used = models.BooleanField(default=False)
     condition = models.CharField(max_length=50, blank=True)
@@ -143,7 +145,7 @@ class PriceAlert(models.Model):
     currency = models.CharField(max_length=3, default="GBP")
     target_price = models.DecimalField(max_digits=10, decimal_places=2)
     store = models.CharField(max_length=120, blank=True)
-    url = models.URLField(blank=True)
+    url = models.URLField(max_length=1000, blank=True)
     is_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)

@@ -340,6 +340,10 @@ def merge_best_local(sources: dict[str, dict], *, limit: int = 10) -> list[dict]
     merged: list[dict] = []
     for key, src in sources.items():
         for row in src.get("results") or []:
+            # Sold-out rows remain visible in their retailer section, but a
+            # non-purchasable listing must never be advertised as "cheapest".
+            if row.get("in_stock") is False:
+                continue
             item = dict(row)
             item.setdefault("store_name", key)
             merged.append(item)

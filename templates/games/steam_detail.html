@@ -357,6 +357,11 @@
       html += renderStoreBlock(data.smyths_rows, data.smyths_search_url, 'Smyths', 'retail');
       html += renderStoreBlock(data.argos_rows, data.argos_search_url, 'Argos', 'retail');
       html += renderStoreBlock(data.currys_rows, data.currys_search_url, 'Currys', 'retail');
+      (data.specialist_sources || []).forEach(source => {
+        html += renderStoreBlock(
+          source.rows, source.search_url, source.label || 'UK specialist', 'retail'
+        );
+      });
       html += renderStoreBlock(data.cex_rows, data.cex_search_url, 'CeX', 'used');
       html += renderStoreBlock(data.musicmagpie_rows, data.musicmagpie_search_url, 'MusicMagpie', 'used');
       html += renderStoreBlock(data.ebay_rows, data.ebay_search_url, 'eBay', 'marketplace');

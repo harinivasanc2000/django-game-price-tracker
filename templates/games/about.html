@@ -47,9 +47,9 @@
       <a class="btn" href="{% url 'games:history' %}">History</a>
     </p>
     <ul>
-      <li><strong>Home</strong> — popular titles + live Steam specials</li>
-      <li><strong>Search</strong> — Steam keyword search + autocomplete</li>
-      <li><strong>Detail</strong> — multi-store compare, chart, track, prediction heuristic</li>
+      <li><strong>Home</strong> — 90-day sale signals + live Steam specials</li>
+      <li><strong>Search</strong> — PC/PS/Xbox/Switch results, advanced filters, and 32 UK/direct store options</li>
+      <li><strong>Detail</strong> — official and 11-source UK comparison, aligned chart, tracking, and prediction heuristic</li>
       <li><strong>Guide</strong> — public “what to buy & where”</li>
       <li><strong>Research</strong> — offline ML plan + CSV export</li>
     </ul>
@@ -67,7 +67,7 @@
     <h2>For developers</h2>
     <ul>
       <li>Read <code>DEVELOPER.md</code> in the repo root (file map + “I want to change…” table)</li>
-      <li>Edit popular games: <code>apps/games/constants.py</code></li>
+      <li>Edit seasonal ranking: <code>apps/games/home_view.py</code>; fallback IDs: <code>constants.py</code></li>
       <li>New store client: <code>apps/games/clients/</code></li>
       <li>Changelog: always prepend at the top of <code>CHANGELOG.md</code></li>
       <li>Exports: <code>/export/tracked.json</code>, <code>/export/training.csv</code>, <code>/health/</code></li>
@@ -79,6 +79,7 @@
     <ul>
       <li>Prefer official stores when prices are close</li>
       <li>Keyshops / grey market can be cheaper but riskier</li>
+      <li>Social/classified sources are browser links only; no seller data is collected</li>
       <li>Author is not responsible for purchases or losses</li>
     </ul>
   </section>

@@ -40,7 +40,7 @@ def parse_price_bound(raw: str | None) -> Decimal | None:
         return None
     try:
         v = Decimal(str(raw).strip().replace("£", "").replace(",", ""))
-        return v if v >= 0 else None
+        return v if v.is_finite() and Decimal("0") <= v <= Decimal("1000000") else None
     except (InvalidOperation, ValueError):
         return None
 

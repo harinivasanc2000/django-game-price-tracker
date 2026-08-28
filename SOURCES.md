@@ -2,9 +2,19 @@
 
 This file documents **all legitimate stores, aggregators, public APIs, domains and newsletters** we plan to support, plus third-party keyshops and **UK physical resellers**.
 
-**Current focus**: United Kingdom + PlayStation games (pilot title: God of War PS4).
+**Current focus**: United Kingdom across PC, PS4, PS5, Xbox, Switch, and physical/used game retailers.
 
 **Philosophy**: Prefer official / public APIs + reputable aggregators. Be extremely careful with any internal/unofficial endpoints (e.g. CeX). Store secrets in environment variables only.
+
+## Current implemented coverage (2026-08-28)
+
+- **Official/platform results:** Steam, PlayStation Store UK, Xbox/Microsoft Store UK, and Nintendo eShop UK.
+- **Aggregated PC deals:** CheapShark, with keyshop/marketplace risk labels.
+- **Automatic UK product search:** CeX, MusicMagpie, eBay UK, GAME, Argos, Currys, Smyths, The Game Collection, Hit, ShopTo, SimplyGames, plus a separate best-effort Amazon UK client.
+- **Browser fallbacks:** all automatic sources plus official stores, Humble, Fanatical, Green Man Gaming, GOG, Epic, Loaded/CDKeys, Eneba, GG.deals, IsThereAnyDeal, AllKeyShop, Cash Converters, Facebook Marketplace, Gumtree, Vinted, and PriceRunner.
+- **Social/classified policy:** link-only; no login, seller-profile collection, or personal seller data.
+
+Retail HTML can change or be blocked at any time. Empty automated results therefore retain an encoded public search link.
 
 ---
 
@@ -50,7 +60,7 @@ This file documents **all legitimate stores, aggregators, public APIs, domains a
 - **Status**: ✅ Strongly recommended
 
 ### Other
-- CheapShark, PSprices (good for PlayStation), PlatPrices, Hot.Game
+- **CheapShark: implemented.** PSprices, PlatPrices, and Hot.Game remain possible future sources.
 
 ---
 
@@ -85,7 +95,7 @@ We are starting with **physical discs** in the UK, especially PlayStation.
 | eBay UK           | https://www.ebay.co.uk      | Marketplace (used + new). Higher variance. |
 | MusicMagpie / Decluttr | various                 | Trade-in focused.                  |
 
-**Strategy**: Start with CeX (interesting second-hand prices) + official PSN digital, then expand to Amazon UK and GAME.
+**Strategy**: Keep API sources primary, cache every public-search client, and retain a direct browser fallback when HTML changes or blocks automation.
 
 ---
 
@@ -130,7 +140,9 @@ EMAIL_HOST_PASSWORD=
 
 ---
 
-## 8. Implementation Priority (Current)
+## 8. Original implementation priority (historical)
+
+This was the initial pilot plan and is retained for reference; the current implementation has expanded beyond it.
 
 1. Django project skeleton + models (Game, Store, PriceRecord)
 2. Pilot title: **God of War (PS4)**

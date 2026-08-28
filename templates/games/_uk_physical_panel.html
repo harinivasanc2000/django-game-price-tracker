@@ -2,7 +2,7 @@
   <h2 class="ico ico-local">UK physical &amp; local</h2>
 
   <p style="padding:0.2rem 1rem 0;font-size:0.74rem;color:var(--muted);">
-    <span class="ico ico-ok">{{ stores_ok|default:0 }}/{{ stores_total|default:7 }} sources live</span>
+    <span class="ico ico-ok">{{ stores_ok|default:0 }}/{{ stores_total|default:11 }} sources live</span>
     {% if min_price or max_price or condition or current_platform %}
       · Filters:
       {% if current_platform %}<span class="badge">{{ current_platform|upper }}</span>{% endif %}
@@ -84,6 +84,23 @@
       {% if currys_search_url %}
         <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ currys_search_url }}" target="_blank" rel="noopener">Search Currys →</a></p>
       {% endif %}
+    {% endfor %}
+
+    {% for source in specialist_sources %}
+      {% for row in source.rows %}
+        <div class="deal-row">
+          <div>
+            <strong>{% if row.url %}<a href="{{ row.url }}" target="_blank" rel="noopener noreferrer">{{ row.name }}</a>{% else %}{{ row.name }}{% endif %}</strong>
+            <span class="kind retail">{{ source.label }}</span>
+            {% if row.in_stock %}<span class="badge" style="margin-left:0.15rem;">in stock</span>{% endif %}
+          </div>
+          <div class="price-now">{{ row.price }} {{ row.currency|default:"GBP" }}</div>
+        </div>
+      {% empty %}
+        {% if source.search_url %}
+          <p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="{{ source.search_url }}" target="_blank" rel="noopener noreferrer">Search {{ source.label }} →</a></p>
+        {% endif %}
+      {% endfor %}
     {% endfor %}
 
     {% for row in cex_rows %}

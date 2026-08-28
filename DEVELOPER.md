@@ -1,149 +1,185 @@
 # Developer map — read this before changing code
 
-This project grew feature-by-feature. This file is the **map** so you can find
-things quickly and change them safely.
+This guide maps the main request paths and explains the less-obvious algorithms. External retailers change often, so keep every client bounded, cached, and able to return an empty result with a usable browser link.
 
----
-
-## How to run (short)
+## Run and verify
 
 ```bash
-cd django-game-price-tracker
-source .venv/bin/activate   # or: python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+./run.sh
+```
+
+Or run each step manually:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 python manage.py migrate
-python manage.py seed_launch_prices   # optional launch MSRP data
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test
 python manage.py runserver
 ```
 
-Optional one-liner: `./run.sh` (creates venv, migrates, seeds, serves).
-
----
+`run.sh` only installs packages when imports are missing. Copy `.env.example` to `.env` for local overrides. Redis/Celery is optional for the web app.
 
 ## Folder layout
 
-```
+```text
 django-game-price-tracker/
-├── manage.py                 # Django entry
-├── requirements.txt
-├── run.sh                    # local start helper
-├── README.md                 # user-facing overview
-├── DEVELOPER.md              # this file
-├── CHANGELOG.md              # newest changes at the TOP — never overwrite
-├── SOURCES.md                # stores / APIs / keyshop warnings
-├── config/                   # Django project settings, urls, celery
+├── manage.py
+├── run.sh                     # create environment, migrate, seed, serve
+├── config/                    # settings, root URLs, Celery setup
 ├── templates/
-│   ├── base.html             # nav, drawer, themes, wallpapers
-│   └── games/                # page templates
-└── apps/games/               # almost all app logic lives here
-    ├── models.py             # Game, Store, PriceRecord, Watch, …
-    ├── constants.py          # POPULAR_APP_IDS, platform lists
-    ├── urls.py               # every URL route
-    ├── views.py              # track/untrack, chart helper, platform bundle, profile
-    ├── views_steam_detail.py # game detail page (main comparison UI)
-    ├── home_view.py          # home page
-    ├── search_view.py        # search results
-    ├── buy_guide_view.py     # /guide/ public deals
-    ├── research_view.py      # /research/ ML notes
-    ├── about_view.py         # /about/ feature list
-    ├── views_best_deals.py   # /deals/
-    ├── views_export.py       # JSON + CSV export
-    ├── fx.py                 # currency → GBP
-    ├── cache.py              # simple timed cache for API calls
-    ├── prediction.py         # buy-now heuristic (not real ML)
-    ├── clients/              # external data (Steam, CheapShark, scrapers)
-    ├── management/commands/  # seed_*, refresh_prices
-    └── templatetags/         # {% deal_prediction_panel %} etc.
+│   ├── base.html              # navigation, drawer, themes, wallpapers
+│   └── games/
+│       ├── steam_detail.html  # main comparison page + AJAX platform switch
+│       ├── steam_search.html  # advanced cross-platform search/filter UI
+│       └── _price_chart.html  # reusable safe Chart.js component
+└── apps/games/
+    ├── models.py              # Game, Store, PriceRecord, Watch, Alert, history
+    ├── urls.py                # application routes
+    ├── home_view.py           # 90-day sale-signal home ranking
+    ├── search_view.py         # query validation and search-page context
+    ├── platform_search.py     # parallel platform search, filters, raw cache
+    ├── search_sort.py         # deterministic ranking and smart-value score
+    ├── views_steam_detail.py  # live comparison orchestration
+    ├── platform_bundle.py     # official + UK physical result bundle
+    ├── views.py               # actions, history, autocomplete, graph payload
+    ├── views_best_deals.py    # current tracked/public deals
+    ├── buy_guide_view.py      # public recommendation feeds
+    ├── views_export.py        # current-offer JSON + historical CSV
+    ├── price_queries.py       # newest row per game/store in one SQL query
+    ├── price_snapshots.py     # validation and unchanged-snapshot coalescing
+    ├── cache.py               # safe keys, normal/empty-result TTLs
+    ├── cache_keys.py          # shared UI cache identities
+    ├── fx.py                  # currency to GBP
+    ├── tasks.py               # refreshes and target-price email alerts
+    ├── clients/
+    │   ├── title_match.py     # strict cross-store title relevance
+    │   ├── scrape_utils.py    # HTTP/BS4/JSON-LD/money/URL primitives
+    │   ├── scrape_filters.py  # platform, condition, accessory, price filters
+    │   ├── uk_stores.py       # 11-source UK bundle + direct links
+    │   └── ...                # Steam, PSN, Xbox, Nintendo, CheapShark, Amazon
+    ├── management/commands/   # seed and synchronous refresh commands
+    └── tests/                 # network-free unit/regression tests
 ```
 
----
+## “I want to change…”
 
-## "I want to change…"
+| Goal | Main files |
+|---|---|
+| Seasonal home order | `home_view.py`; edit `constants.py` only for final fallback IDs |
+| Search controls | `search_view.py`, `steam_search.html` |
+| Search fetching/filtering | `platform_search.py` |
+| Ranking formula | `search_sort.py` |
+| Detail layout | `steam_detail.html` and its `_*.html` includes |
+| Graph algorithm/UI | `views.py::_build_chart_payload`, `_price_chart.html` |
+| Add a UK physical source | `clients/uk_stores.py`, then expose it through `platform_bundle.py` |
+| Common BS4 parsing | `clients/scrape_utils.py` |
+| Reject wrong products | `clients/title_match.py`, `clients/scrape_filters.py` |
+| Steam/console clients | `clients/steam.py`, `psn.py`, `xbox.py`, `nintendo.py` |
+| CheapShark/public feeds | `clients/cheapshark.py`, `public_deals.py` |
+| Current-price card queries | `price_queries.py` |
+| History-write policy | `price_snapshots.py` |
+| Background refresh | `tasks.py`, `management/commands/refresh_prices.py` |
+| Themes/wallpapers | `templates/base.html`, `templates/games/settings.html` |
+| Database fields/indexes | `models.py`, then create and test a migration |
+| Admin behaviour | `admin.py` |
 
-| Goal | File(s) |
-|------|--------|
-| Home popular game list | `apps/games/constants.py` → `POPULAR_APP_IDS` |
-| Nav links | `templates/base.html` |
-| Themes / wallpapers JS | `templates/base.html` (bottom script) |
-| Detail page layout | `templates/games/steam_detail.html` |
-| Add a new URL | `apps/games/urls.py` + a small `*_view.py` |
-| Steam API calls | `apps/games/clients/steam.py` |
-| CheapShark / multi-store | `apps/games/clients/cheapshark.py`, `public_deals.py` |
-| UK scrapes (CeX, eBay…) | `apps/games/clients/uk_stores.py`, `scrape_utils.py` |
-| Digital store scrapes | `apps/games/clients/digital_stores_bs4.py` |
-| GBP conversion | `apps/games/fx.py` |
-| DB fields | `apps/games/models.py` then `makemigrations` / `migrate` |
-| Daily price refresh | `apps/games/management/commands/refresh_prices.py`, `tasks.py` |
-| Admin UI | `apps/games/admin.py` + `/admin/` |
+## Request flows
 
----
+### Search
 
-## Request flow (detail page)
+1. `search_view.steam_search` canonicalises the query and validates every GET parameter.
+2. `platform_search.multi_platform_search` checks a BLAKE2-keyed raw cache.
+3. On a miss, Steam/PSN/Xbox/Nintendo run concurrently with a six-second batch deadline.
+4. Strict title matching and platform metadata remove loose titles, DLC, and wrong generations.
+5. Price/availability/discount filters and sorting run locally, so changing display filters reuses the raw bundle.
+6. The template renders results plus grouped official, PC, and UK browser fallbacks.
 
-1. User opens `/steam/<app_id>/`
-2. `views_steam_detail.steam_detail` loads Steam app details
-3. Parallel threads fetch: CheapShark, news, UK stores, digital stores, similar titles
-4. Template shows offers, chart, panels; scrapers soft-fail (page still works)
+### Detail page
 
-**Rule:** never let one blocked store crash the whole page — wrap external calls in `try/except`.
+1. `/steam/<app_id>/` loads the official Steam record and one optional tracked `Game` row.
+2. CheapShark, news, similar titles, and `platform_bundle` run concurrently with a nine-second deadline.
+3. `platform_bundle` concurrently requests platform APIs, Amazon, and the cached 11-store UK BS4 bundle.
+4. Each blocked source becomes an empty result plus `search_url`; it never crashes the page.
+5. The page creates current offers and a safe JSON chart payload, then renders normal HTML.
+6. Platform chips call `/api/platform/<app_id>/`; its response uses the same bundle and filters.
 
----
+### Price refresh
 
-## Models (mental model)
+1. `refresh_one_game` gets Steam, then fetches PSN/Amazon/CheapShark concurrently.
+2. `record_snapshot` rejects invalid prices and coalesces unchanged rows for 20 hours.
+3. Changed price, URL, stock, condition, or discount creates a new historical point.
+4. Target watches compare trustworthy GBP values and create de-duplicated `PriceAlert` rows.
+5. Run synchronously with `python manage.py refresh_prices` or queue through Celery.
 
-- **Game** — a title you track (`steam_app_id`, `launch_price`, `is_active`)
-- **Store** — Steam, CeX, Amazon, …
-- **PriceRecord** — one price snapshot (history + CSV export)
-- **Watch** — logged-in user + target price alert
-- **BrowseHistory** — session search/view/track log
-- **SiteSettings** — admin site title / footer (pk=1 singleton)
+## Algorithms and performance choices
 
----
+### Title matching
 
-## Clients contract
+`title_match.py` uses accent-insensitive normalisation, whole-word significant tokens, query-token coverage, long-token subtitle discriminators, known sequel exclusions, and contaminant rejection. Do not weaken this to substring matching: that reintroduces accessories and franchise bleed.
 
-Every client should return **plain dicts/lists**, not Django models.
+### Smart-value search
 
-Typical product row:
+The value score is:
+
+```text
+160 × match_score
++ 0.35 × discount_percent
++ 0.12 × min(cash_saving, 100)
+- 2 × ln(1 + paid_price)
+```
+
+Title match has the dominant weight by design. All numeric inputs are finite-checked; missing prices sort last. Python's stable sort and accent-insensitive name keys make ties deterministic.
+
+### Latest current offers
+
+`PriceRecord` is append-only history. A current-price page must not use an arbitrary recent row. `latest_store_snapshots()` uses a correlated SQL subquery to return exactly one newest row per `(game, store)`, with `select_related` to prevent N+1 store/game queries.
+
+### Graph alignment
+
+The graph accepts the newest 300 stored observations plus live quotes, converts finite non-negative values to GBP, and run-length-compacts repeated flat prices. Sellers update asynchronously, so their last observed quote carries forward on a shared event timeline for at most seven days. An explicit expiry event stops stale step lines. Observed masks distinguish real checks from carried values; best and average are calculated from fresh values only.
+
+### BS4 safety and accuracy
+
+`scrape_utils.py` supplies one pooled session per worker thread, bounded response size/time, block-page detection, GBP-aware price parsing, nested JSON-LD Product/ItemList traversal, finite rating/price validation, and HTTP(S) URL normalisation with optional retailer host allowlists. Prefer structured data, then narrowly scoped card selectors. Never collect seller PII or attempt login/captcha bypasses.
+
+## Client contract
+
+Clients return plain serialisable dictionaries/lists, not Django models. A priced product normally looks like:
 
 ```python
 {
-  "name": "…",
-  "price": Decimal("9.99"),   # or float after serialize
-  "currency": "GBP",
-  "url": "https://…",
-  "store_name": "Steam",
+    "name": "Example Game PS5",
+    "price": Decimal("29.99"),
+    "currency": "GBP",
+    "url": "https://retailer.example/product/example-game",
+    "store_name": "Example Retailer",
+    "in_stock": True,
+    "condition": "new",
 }
 ```
 
-Scrapers: product data only (no personal seller PII).
+A blocked search returns:
 
----
+```python
+{"results": [], "blocked": True, "search_url": "https://retailer.example/search?..."}
+```
 
-## Features already built
+## Safe extension checklist
 
-- Search + autocomplete (Steam)
-- Detail multi-store compare (Steam, CheapShark, PSN, Amazon, UK, digital)
-- Track / untrack + right drawer
-- Launch price vs current + simple prediction panel
-- Chart (change-only points, seller dropdown, average)
-- Buy guide `/guide/` + public Steam specials
-- Research lab + training CSV export
-- Appearance settings (localStorage themes/wallpapers)
-- Health endpoint `/health/`
-- Celery tasks (optional; needs Redis)
+1. Put network code in `clients/`; use public pages/APIs and explicit timeouts.
+2. Route repeated external calls through `cached()`.
+3. Validate numbers, match titles, normalise direct links, and keep a browser fallback.
+4. Add the result to `platform_bundle`, detail context, server template, AJAX renderer, current offers, and graph if it contains prices.
+5. Add fixture-based tests; tests must not depend on a retailer being online.
+6. Run `check`, `makemigrations --check`, the full suite, and `git diff --check`.
 
----
+## Cache invalidation
 
-## Safe ways to extend
-
-1. **New store** — add function in `clients/`, call it from `_platform_bundle` or `fetch_digital_bundle`, soft-fail, show link if blocked.
-2. **New page** — `my_view.py` + template + one line in `urls.py` + nav in `base.html`.
-3. **New field on Game** — models → migrate → admin → template.
-4. **Offline ML** — train outside Django; later load a JSON of scores if you want (do not train on the web server).
-
----
+Shared UI keys live in `cache_keys.py`. Tracking and admin saves must invalidate the home-card and tracked-drawer keys. Bump a versioned network/bundle key whenever a cached payload shape changes.
 
 ## Changelog rule
 
-Always **prepend** new dated sections at the top of `CHANGELOG.md`. Never delete old entries.
+Always prepend new dated sections immediately below the opening rule in `CHANGELOG.md`. Never edit or delete older entries; they are the project reference history.
