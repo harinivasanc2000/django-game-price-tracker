@@ -14,12 +14,13 @@ from __future__ import annotations
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus
 
 from apps.games.cache import cached
 from apps.games.clients.scrape_utils import (
     fetch_html,
     fetch_json,
+    normalise_public_url,
     parse_money,
     product_row,
     soup_from,
@@ -119,7 +120,9 @@ def _boxes_bs4(query: str, limit: int = 24) -> list[dict[str, Any]]:
             continue
         href = url
         if name_el and getattr(name_el, "name", None) == "a" and name_el.get("href"):
-            href = urljoin(url, name_el["href"])
+            href = normalise_public_url(
+                name_el["href"], base_url=url, allowed_hosts=("webuy.com",)
+            ) or url
         boxes.append(
             {
                 "boxName": name,
@@ -149,7 +152,7 @@ def search_boxes(query: str, count: int = 24) -> list[dict[str, Any]]:
         return _boxes_bs4(query, limit=count)
 
     return cached(
-        f"cex:boxes:v4:{query.lower()}:{count}",
+        f"cex:boxes:v5:{query.lower()}:{count}",
         produce,
         timeout=SEARCH_TTL,
     )
@@ -173,6 +176,10 @@ def search_cex_products(
     from apps.games.clients.uk_stores import platform_query
 
     title = (title or "").strip()
+    try:
+        limit = max(1, min(int(limit), 10))
+    except (TypeError, ValueError):
+        limit = 8
     q = platform_query(title, platform) if platform else title
     search_url = f"https://uk.webuy.com/search?stext={quote_plus(q)}"
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": search_url}
@@ -192,8 +199,12 @@ def search_cex_products(
             continue
         box_id = b.get("boxId")
         href = b.get("_url") or (
-            f"https://uk.webuy.com/product-detail?id={box_id}" if box_id else search_url
+            f"https://uk.webuy.com/product-detail?id={quote_plus(str(box_id))}"
+            if box_id else search_url
         )
+        href = normalise_public_url(
+            href, base_url=search_url, allowed_hosts=("webuy.com",)
+        ) or search_url
         rating = None
         try:
             if b.get("boxRating") is not None:

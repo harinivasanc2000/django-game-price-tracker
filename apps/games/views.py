@@ -6,8 +6,8 @@ views_steam_detail) — keep this file focused on shared actions.
 """
 from __future__ import annotations
 
-import json
-from collections import defaultdict
+import math
+from collections import Counter, defaultdict
 from datetime import datetime
 from decimal import Decimal
 
@@ -21,6 +21,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from .cache import bust
+from .cache_keys import HOME_CARDS, TRACKED_DRAWER
 from .clients.external_stores import ensure_uk_stores
 from .clients.steam import get_app_details, suggest_store
 from .fx import to_gbp, to_gbp_or_zero
@@ -33,10 +34,13 @@ from .models import (
     Watch,
 )
 from .views_best_deals import best_deals  # noqa: F401
+from .price_snapshots import record_snapshot
 
 HISTORY_MAX_PER_SESSION = 100
 HISTORY_PRUNE_INTERVAL = timezone.timedelta(hours=24)
 HISTORY_PRUNE_MARK = timezone.timedelta(days=60)
+CHART_HISTORY_LIMIT = 300
+CHART_QUOTE_MAX_AGE = timezone.timedelta(days=7)
 
 
 def _session_key(request):
@@ -81,8 +85,8 @@ def _log_history(request, action, query="", steam_app_id=None, title="", detail_
 
 
 def _bust_ui_caches():
-    bust("tracked_drawer:v1")
-    bust("home:cards:v3")
+    bust(TRACKED_DRAWER)
+    bust(HOME_CARDS)
 
 
 def _unique_slug(name: str, app_id: int) -> str:
@@ -98,108 +102,228 @@ def _unique_slug(name: str, app_id: int) -> str:
 
 
 def _gbp_point(amount, currency="GBP") -> float | None:
-    v = to_gbp(amount, currency)
-    return float(v) if v is not None else None
+    """Return a finite, non-negative GBP value suitable for JSON/charting."""
+    try:
+        v = to_gbp(amount, currency)
+    except (ArithmeticError, TypeError, ValueError):
+        return None
+    if v is None:
+        return None
+    try:
+        point = float(v)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return point if math.isfinite(point) and point >= 0 else None
 
 
 def _collapse_changes(pairs: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Keep price changes plus both ends of a repeated-price run.
+
+    Refresh jobs can write the same quote many times. Keeping only the first
+    quote makes it look stale, while keeping every duplicate produces a noisy
+    chart. This run-length compaction preserves both the start and the most
+    recent confirmation of each flat period.
+    """
     if not pairs:
         return []
+    if len(pairs) <= 2:
+        return pairs
+
     out = [pairs[0]]
-    for lab, price in pairs[1:]:
-        if abs(price - out[-1][1]) >= 0.005:
-            out.append((lab, price))
+    for index in range(1, len(pairs)):
+        label, price = pairs[index]
+        previous_price = pairs[index - 1][1]
+        next_price = pairs[index + 1][1] if index + 1 < len(pairs) else None
+        changed = abs(price - previous_price) >= 0.005
+        ends_flat_run = next_price is None or abs(next_price - price) >= 0.005
+        if changed or ends_flat_run:
+            out.append((label, price))
     return out
 
 
-def _build_chart_payload(already, detail, store_deals, launch, psn_rows, amazon_rows, cex_rows, ebay_rows):
-    """Return chronologically ordered GBP series for Chart.js.
+def _build_chart_payload(
+    already,
+    detail,
+    store_deals,
+    launch,
+    psn_rows,
+    amazon_rows,
+    cex_rows,
+    ebay_rows,
+    *,
+    launch_currency="GBP",
+    live_store_rows=None,
+):
+    """Build a truthful, aligned GBP event timeline for Chart.js.
 
-    ISO timestamps are used as internal keys so prices from several stores at
-    the same minute cannot overwrite one another before display labels exist.
+    Each seller is forward-filled only after its first observation. This is a
+    standard step-series treatment for independently sampled store prices and
+    lets the market average/best lines compare the latest known quote at every
+    event instead of averaging only the one store refreshed at that instant.
+    ``observed`` marks real checks so the UI can distinguish them from carried
+    values. Quotes sharing a seller and timestamp are de-duplicated to the
+    cheapest value.
     """
-    points: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    point_maps: dict[str, dict[str, float]] = defaultdict(dict)
+    historical_count = 0
+    live_count = 0
+
+    def add_point(seller, label, amount, currency="GBP") -> bool:
+        seller = str(seller or "").strip()[:120]
+        gbp = _gbp_point(amount, currency)
+        if not seller or gbp is None:
+            return False
+        previous = point_maps[seller].get(label)
+        point_maps[seller][label] = gbp if previous is None else min(previous, gbp)
+        return True
+
+    def add_first_row(seller, rows, default_currency="GBP") -> bool:
+        added = False
+        for row in (rows or [])[:3]:
+            if not isinstance(row, dict) or row.get("price") is None:
+                continue
+            added = add_point(
+                row.get("store_name") or seller,
+                now,
+                row.get("price"),
+                row.get("currency") or default_currency,
+            ) or added
+        return added
 
     if already:
         history = list(
             PriceRecord.objects.filter(game=already)
             .select_related("store")
-            .order_by("recorded_at")[:200]
+            .only("price", "currency", "recorded_at", "store__name")
+            .order_by("-recorded_at")[:CHART_HISTORY_LIMIT]
         )
+        history.reverse()
         for h in history:
-            label = h.recorded_at.isoformat()
-            gbp = _gbp_point(h.price, h.currency)
-            if gbp is not None:
-                points[h.store.name].append((label, gbp))
+            if add_point(h.store.name, h.recorded_at.isoformat(), h.price, h.currency):
+                historical_count += 1
 
     # Every live quote belongs to the same final point on the chart.
     now = timezone.now().isoformat()
-    if detail.get("price") is not None and detail.get("price_status") == "paid":
-        g = _gbp_point(detail["price"], detail.get("currency") or "GBP")
-        if g is not None:
-            points["Steam"].append((now, g))
-    for deal in store_deals[:8]:
-        g = _gbp_point(deal["price"], deal.get("currency") or "USD")
-        if g is not None:
-            points[deal["store_name"]].append((now, g))
-    for row in psn_rows[:1]:
-        if float(row.get("price") or 0) > 0:
-            g = _gbp_point(row["price"], "GBP")
-            if g is not None:
-                points["PlayStation Store (UK)"].append((now, g))
-    for row in amazon_rows[:1]:
-        g = _gbp_point(row["price"], "GBP")
-        if g is not None:
-            points["Amazon UK"].append((now, g))
-    for row in cex_rows[:1]:
-        g = _gbp_point(row["price"], "GBP")
-        if g is not None:
-            points["CeX"].append((now, g))
-    for row in ebay_rows[:1]:
-        g = _gbp_point(row["price"], "GBP")
-        if g is not None:
-            points["eBay UK"].append((now, g))
+    detail = detail if isinstance(detail, dict) else {}
+    if detail.get("price") is not None and detail.get("price_status") in {"paid", "free"}:
+        live_count += int(add_point("Steam", now, detail["price"], detail.get("currency") or "GBP"))
+    for deal in (store_deals or [])[:12]:
+        if not isinstance(deal, dict) or deal.get("price") is None:
+            continue
+        live_count += int(
+            add_point(
+                deal.get("store_name"),
+                now,
+                deal.get("price"),
+                deal.get("currency") or "USD",
+            )
+        )
 
-    for seller in list(points.keys()):
-        points[seller] = _collapse_changes(points[seller])
+    default_sources = (
+        ("PlayStation Store (UK)", psn_rows, "GBP"),
+        ("Amazon UK", amazon_rows, "GBP"),
+        ("CeX", cex_rows, "GBP"),
+        ("eBay UK", ebay_rows, "GBP"),
+    )
+    for seller, rows, currency in (*default_sources, *(live_store_rows or [])):
+        live_count += int(add_first_row(seller, rows, currency))
 
-    labels = sorted({lab for pairs in points.values() for lab, _ in pairs})
-    if not labels:
-        labels = [now]
+    points = {
+        seller: _collapse_changes(sorted(by_label.items()))
+        for seller, by_label in point_maps.items()
+        if by_label
+    }
+    observed_timestamps = {label for pairs in points.values() for label, _ in pairs}
+    # Add an explicit boundary when a quote expires. Without this point a
+    # stepped line would visually carry a seven-day quote all the way to the
+    # next check, even when that check happened months later.
+    expiry_timestamps = set()
+    if observed_timestamps:
+        timeline_end = max(datetime.fromisoformat(label) for label in observed_timestamps)
+        for pairs in points.values():
+            for index, (label, _) in enumerate(pairs):
+                observed_at = datetime.fromisoformat(label)
+                expires_at = observed_at + CHART_QUOTE_MAX_AGE
+                next_check = (
+                    datetime.fromisoformat(pairs[index + 1][0])
+                    if index + 1 < len(pairs)
+                    else timeline_end
+                )
+                if expires_at < next_check and expires_at < timeline_end:
+                    expiry_timestamps.add(expires_at.isoformat())
+    timestamps = sorted(observed_timestamps | expiry_timestamps)
 
-    series: dict[str, list] = {}
+    series: dict[str, list[float | None]] = {}
+    observed: dict[str, list[bool]] = {}
     for seller, pairs in points.items():
-        by_lab = {lab: price for lab, price in pairs}
-        series[seller] = [by_lab.get(lab) for lab in labels]
+        by_label = dict(pairs)
+        latest = None
+        latest_at = None
+        seller_values = []
+        seller_observed = []
+        for label in timestamps:
+            is_observed = label in by_label
+            if is_observed:
+                latest = by_label[label]
+                latest_at = datetime.fromisoformat(label)
+            event_at = datetime.fromisoformat(label)
+            is_fresh = latest_at is not None and event_at - latest_at < CHART_QUOTE_MAX_AGE
+            seller_values.append(latest if is_fresh else None)
+            seller_observed.append(is_observed)
+        series[seller] = seller_values
+        observed[seller] = seller_observed
 
-    avg = []
-    for i, _ in enumerate(labels):
-        vals = [series[s][i] for s in series if series[s][i] is not None]
-        avg.append(round(sum(vals) / len(vals), 2) if vals else None)
-    avg_pairs = [(labels[i], avg[i]) for i in range(len(labels)) if avg[i] is not None]
-    avg_collapsed = _collapse_changes(avg_pairs)
-    if avg_collapsed:
-        labels = [p[0] for p in avg_collapsed]
-        avg = [p[1] for p in avg_collapsed]
-        for seller in series:
-            by_lab = {lab: price for lab, price in points.get(seller, [])}
-            series[seller] = [by_lab.get(lab) for lab in labels]
+    average: list[float | None] = []
+    best: list[float | None] = []
+    for index in range(len(timestamps)):
+        values = [values[index] for values in series.values() if values[index] is not None]
+        average.append(round(sum(values) / len(values), 2) if values else None)
+        best.append(round(min(values), 2) if values else None)
 
+    display_labels = []
+    parsed_labels = {}
+    for label in timestamps:
+        if label == now:
+            display_labels.append("Now")
+            continue
+        parsed = datetime.fromisoformat(label)
+        if timezone.is_aware(parsed):
+            parsed = timezone.localtime(parsed)
+        parsed_labels[label] = parsed
+        display_labels.append(parsed.strftime("%d %b %Y, %H:%M"))
+    # Separate checks within the same minute instead of rendering ambiguous,
+    # repeated x-axis labels. Seconds remain hidden for normal timelines.
+    duplicate_labels = Counter(display_labels)
     display_labels = [
-        "Now" if label == now else datetime.fromisoformat(label).strftime("%d %b %H:%M")
-        for label in labels
+        parsed_labels[timestamp].strftime("%d %b %Y, %H:%M:%S")
+        if label != "Now" and duplicate_labels[label] > 1
+        else label
+        for timestamp, label in zip(timestamps, display_labels)
     ]
-    launch_series = [launch for _ in labels] if launch is not None else [None for _ in labels]
-    sellers = sorted(series.keys(), key=lambda s: (s != "Steam", s.lower()))
+
+    launch_gbp = _gbp_point(launch, launch_currency) if launch is not None else None
+    if launch_gbp is not None and launch_gbp <= 0:
+        launch_gbp = None
+    launch_series = [launch_gbp for _ in timestamps]
+    sellers = sorted(series.keys(), key=lambda seller: (seller.casefold() != "steam", seller.casefold()))
+    valid_best = [value for value in best if value is not None]
     return {
         "labels": display_labels,
+        "timestamps": timestamps,
         "series": series,
-        "average": avg,
+        "observed": observed,
+        "average": average,
+        "best": best,
         "launch": launch_series,
         "sellers": sellers,
         "unit": "GBP",
         "change_only": True,
-        "has_data": bool(points),
+        "snapshot_count": historical_count,
+        "live_quote_count": live_count,
+        "quote_max_age_days": CHART_QUOTE_MAX_AGE.days,
+        "lowest": min(valid_best) if valid_best else None,
+        "latest_best": valid_best[-1] if valid_best else None,
+        "has_data": bool(timestamps),
     }
 
 
@@ -253,7 +377,7 @@ def track_steam(request, app_id: int):
         price = detail["price"]
         original = detail.get("original") or detail.get("list_price")
         discount = detail.get("discount") or None
-        PriceRecord.objects.create(
+        record_snapshot(
             game=game,
             store=store,
             price=price,
@@ -345,6 +469,17 @@ def game_compare(request, slug):
 
     prices.sort(key=_gbp)
     lowest = prices[0] if prices else None
+    chart = _build_chart_payload(
+        game,
+        {},
+        [],
+        game.launch_price,
+        [],
+        [],
+        [],
+        [],
+        launch_currency=game.launch_currency or "GBP",
+    )
     return render(
         request,
         "games/compare.html",
@@ -355,10 +490,9 @@ def game_compare(request, slug):
             "change": None,
             "retail_baseline": float(game.launch_price) if game.launch_price else None,
             "siblings": [],
-            "history_count": 0,
-            "chart_labels": "[]",
-            "chart_values": "[]",
-            "chart_stores": "[]",
+            "history_count": chart["snapshot_count"],
+            "chart_data": chart,
+            "has_chart": chart["has_data"],
             "watched": None,
         },
     )

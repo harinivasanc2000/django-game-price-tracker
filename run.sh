@@ -11,7 +11,12 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-pip install -q -r requirements.txt
+# Avoid contacting package indexes on every start. A newly-created or partial
+# environment still installs the complete pinned dependency set automatically.
+if ! python -c 'import bs4, celery, django, dotenv, environ, lxml, psycopg2, redis, requests' 2>/dev/null; then
+  echo "Installing dependencies..."
+  python -m pip install -r requirements.txt
+fi
 
 python manage.py migrate --noinput
 

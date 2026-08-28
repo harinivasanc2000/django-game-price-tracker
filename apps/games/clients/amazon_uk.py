@@ -29,6 +29,10 @@ def search_url(title: str, extra: str = "") -> str:
 
 
 def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> dict[str, Any]:
+    try:
+        limit = max(1, min(int(limit), 10))
+    except (TypeError, ValueError):
+        limit = 8
     url = search_url(title, extra)
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
 
@@ -86,7 +90,17 @@ def _search_amazon_uk_uncached(title: str, extra: str = "", limit: int = 8) -> d
         if len(rows) >= limit * 3:
             break
 
-    rows = filter_by_title(rows, title, min_score=0.67)[:limit]
+    rows = filter_by_title(rows, title, min_score=0.67)
+    unique: list[dict] = []
+    seen_asins: set[str] = set()
+    for row in rows:
+        asin = str(row.get("asin") or "")
+        if asin and asin in seen_asins:
+            continue
+        if asin:
+            seen_asins.add(asin)
+        unique.append(row)
+    rows = unique[:limit]
     out["results"] = rows
     out["blocked"] = len(rows) == 0
     return out
@@ -102,14 +116,18 @@ def search_amazon_uk(
     max_price: Decimal | None = None,
     condition: str = "",
 ) -> dict[str, Any]:
-    title = (title or "").strip()
+    title = " ".join(str(title or "").split())[:160]
     if not title:
         return {"results": [], "blocked": True, "search_url": search_url(title, extra)}
     lo = str(min_price) if min_price is not None else ""
     hi = str(max_price) if max_price is not None else ""
     cond = (condition or "").strip().lower()
+    try:
+        limit = max(1, min(int(limit), 10))
+    except (TypeError, ValueError):
+        limit = 8
     raw = cached(
-        f"amazon:bs4:v3:{title.lower()}:{extra.strip().lower()}:{limit}",
+        f"amazon:bs4:v4:{title.lower()}:{extra.strip().lower()}:{limit}",
         lambda: _search_amazon_uk_uncached(title, extra=extra, limit=limit),
         timeout=1800,
     )

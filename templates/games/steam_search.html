@@ -19,11 +19,14 @@
     border-radius: 8px; padding: 0.3rem 0.5rem; font-size: 0.84rem; font-family: inherit;
   }
   .filter-bar {
-    display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: end;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    gap: 0.55rem; align-items: end;
     margin: 0.65rem 0 0.35rem; padding: 0.55rem 0.65rem;
     border: 1px solid var(--border); border-radius: 10px; background: var(--card);
   }
-  .filter-bar label { font-size: 0.74rem; color: var(--muted); }
+  .filter-bar label { font-size: 0.74rem; color: var(--muted); min-width: 0; }
+  .filter-bar input:not([type="checkbox"]), .filter-bar select { width: 100%; display: block; box-sizing: border-box; }
+  .filter-actions { display:flex; gap:0.4rem; align-items:center; }
   .presets { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.45rem 0 0.25rem; }
   .presets a {
     font-size: 0.76rem; padding: 0.25rem 0.55rem; border-radius: 999px;
@@ -54,6 +57,21 @@
     border-radius: 8px; border: 1px solid var(--border); font-size: 0.76rem;
     color: var(--text); text-decoration: none !important;
   }
+  .link-chip.third-party, .link-chip.meta { border-style: dashed; }
+  .store-directory {
+    margin: 0.55rem 0 0.75rem; padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--card);
+  }
+  .store-directory summary { cursor: pointer; color: var(--text); font-size: 0.86rem; font-weight: 600; }
+  .store-group { margin-top: 0.65rem; }
+  .store-group h3 { margin: 0 0 0.25rem; font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .filter-notice {
+    margin: 0.5rem 0; padding: 0.45rem 0.65rem; border-radius: 8px;
+    border: 1px solid #7c5b18; background: rgba(124,91,24,0.16); font-size: 0.8rem;
+  }
+  .result-summary { color: var(--muted); font-size: 0.8rem; margin: 0.55rem 0 0; }
+  .console-thumb { width: 58px; height: 58px; object-fit: cover; border-radius: 7px; flex: 0 0 auto; }
+  .console-main { display:flex; align-items:center; gap:0.65rem; min-width:0; }
   .recent a {
     display: inline-block; margin: 0.2rem 0.3rem 0.2rem 0; padding: 0.3rem 0.55rem;
     border-radius: 999px; border: 1px solid var(--border); font-size: 0.8rem;
@@ -67,7 +85,7 @@
 <a href="{% url 'games:home' %}" style="color: var(--muted); font-size: 0.84rem;">← Home</a>
 <h1 class="ico ico-search" style="font-size: 1.3rem; margin: 0.45rem 0 0.3rem;">Search all platforms</h1>
 <p style="color: var(--muted); font-size: 0.88rem; margin-bottom: 0.9rem;">
-  Official storefronts first · server filters · results cached ~4 min.
+  UK official storefronts first · strict title matching · filters reuse cached results.
 </p>
 
 {% include "games/_search_box.html" with q=q placeholder="Search any game…" %}
@@ -84,10 +102,12 @@
 {% if q %}
 {% with base_qs="q="|add:q %}
 <div class="presets">
-  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&hide_dlc=1" class="{% if not max_price and not min_price %}on{% endif %}">Any price</a>
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&hide_dlc=1" class="{% if not max_price and not min_price and availability == 'any' and not min_discount %}on{% endif %}">Any price</a>
   <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&max_price=10&hide_dlc=1" class="{% if max_price == '10' %}on{% endif %}">Under £10</a>
   <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&max_price=20&hide_dlc=1" class="{% if max_price == '20' %}on{% endif %}">Under £20</a>
   <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&max_price=40&hide_dlc=1" class="{% if max_price == '40' %}on{% endif %}">Under £40</a>
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&availability=free&hide_dlc=1" class="{% if availability == 'free' %}on{% endif %}">Free games</a>
+  <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&availability=priced&min_discount=25&hide_dlc=1&sort=value" class="{% if availability == 'priced' and min_discount == 25 %}on{% endif %}">25%+ off</a>
   <a href="?q={{ q|urlencode }}&cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}&hide_dlc=1&sort=price_asc">Cheapest first</a>
 </div>
 {% endwith %}
@@ -97,30 +117,60 @@
   <input type="hidden" name="cc" value="{{ country }}">
   {% if current_platform %}<input type="hidden" name="platform" value="{{ current_platform }}">{% endif %}
   <label>Min £
-    <input type="number" name="min_price" min="0" step="0.01" value="{{ min_price }}" placeholder="0" style="display:block;width:5rem;">
+    <input type="number" name="min_price" min="0" step="0.01" value="{{ min_price }}" placeholder="0">
   </label>
   <label>Max £
-    <input type="number" name="max_price" min="0" step="0.01" value="{{ max_price }}" placeholder="any" style="display:block;width:5rem;">
+    <input type="number" name="max_price" min="0" step="0.01" value="{{ max_price }}" placeholder="any">
   </label>
-  <label class="chk" style="margin-bottom:0.2rem;">
+  <label>Availability
+    <select name="availability">
+      <option value="any" {% if availability == 'any' %}selected{% endif %}>Any / unknown</option>
+      <option value="priced" {% if availability == 'priced' %}selected{% endif %}>Paid with price</option>
+      <option value="free" {% if availability == 'free' %}selected{% endif %}>Free only</option>
+    </select>
+  </label>
+  <label>Minimum reported discount
+    <input type="number" name="min_discount" min="0" max="100" step="5" value="{{ min_discount }}" aria-label="Minimum reported discount percent">
+  </label>
+  <label>UK shop condition
+    <select name="condition" title="Applied to supported UK retailer links">
+      <option value="" {% if not condition %}selected{% endif %}>New or used</option>
+      <option value="new" {% if condition == 'new' %}selected{% endif %}>New</option>
+      <option value="used" {% if condition == 'used' %}selected{% endif %}>Used / pre-owned</option>
+    </select>
+  </label>
+  <label class="chk" style="margin-bottom:0.45rem;">
     <input type="hidden" name="hide_dlc" value="0">
-    <input type="checkbox" name="hide_dlc" value="1" {% if hide_dlc %}checked{% endif %}> Hide DLC
-  </label>
-  <label class="chk" style="margin-bottom:0.2rem;">
-    <input type="checkbox" name="hide_free" value="1" {% if hide_free %}checked{% endif %}> Hide free
+    <input type="checkbox" name="hide_dlc" value="1" {% if hide_dlc %}checked{% endif %}> Full games only
   </label>
   <label>Sort
-    <select name="sort" style="display:block;">
+    <select name="sort">
       <option value="relevance" {% if sort == 'relevance' %}selected{% endif %}>Relevance</option>
       <option value="match" {% if sort == 'match' %}selected{% endif %}>Best title match</option>
+      <option value="value" {% if sort == 'value' %}selected{% endif %}>Smart value</option>
       <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>Price ↑</option>
       <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>Price ↓</option>
       <option value="discount" {% if sort == 'discount' %}selected{% endif %}>Discount</option>
+      <option value="savings" {% if sort == 'savings' %}selected{% endif %}>Cash saving</option>
       <option value="name" {% if sort == 'name' %}selected{% endif %}>Name A–Z</option>
     </select>
   </label>
-  <button type="submit" class="btn" style="padding:0.4rem 0.75rem;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;">Apply</button>
+  <label>Per platform
+    <select name="limit">
+      {% for option in result_limits %}<option value="{{ option }}" {% if result_limit == option %}selected{% endif %}>{{ option }} results</option>{% endfor %}
+    </select>
+  </label>
+  <div class="filter-actions">
+    <button type="submit" class="btn" style="padding:0.4rem 0.75rem;border-radius:8px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;">Apply</button>
+    {% if has_active_filters %}<a href="?q={{ q|urlencode }}{% if current_platform %}&platform={{ current_platform }}{% endif %}" style="font-size:0.76rem;">Reset</a>{% endif %}
+  </div>
 </form>
+{% endif %}
+
+{% for notice in filter_notices %}<p class="filter-notice">{{ notice }}</p>{% endfor %}
+
+{% if q %}
+  <p class="result-summary">{{ result_count }} close {% if result_count == 1 %}match{% else %}matches{% endif %} across selected UK platforms. Price filters only include verifiable numeric prices.</p>
 {% endif %}
 
 {% if error %}
@@ -136,11 +186,19 @@
 {% endif %}
 
 {% if platform_links and q %}
-  <div style="margin: 0.4rem 0 0.65rem;">
-    {% for l in platform_links %}
-      <a class="link-chip" href="{{ l.url }}" target="_blank" rel="noopener">{{ l.name }}</a>
+  {% regroup platform_links by group as link_groups %}
+  <details class="store-directory">
+    <summary>Search {{ platform_links|length }} UK {% if platform_links|length == 1 %}store{% else %}stores{% endif %} and comparison sites directly</summary>
+    {% for group in link_groups %}
+      <div class="store-group">
+        <h3>{{ group.grouper }}</h3>
+        {% for l in group.list %}
+          <a class="link-chip {{ l.kind }}" href="{{ l.url }}" target="_blank" rel="noopener noreferrer" title="{{ l.note }}">{{ l.name }}</a>
+        {% endfor %}
+      </div>
     {% endfor %}
-  </div>
+    <p style="font-size:0.7rem;color:var(--muted);margin:0.55rem 0 0;">Dashed links may be marketplaces, keyshops, or aggregators. Verify region, platform, DRM, fees, and seller reputation before buying.</p>
+  </details>
 {% endif %}
 
 {% if results %}
@@ -163,7 +221,7 @@
         <a href="{% url 'games:steam_detail' r.app_id %}?cc={{ country }}{% if current_platform %}&platform={{ current_platform }}{% endif %}" style="font-weight:600; color: var(--text); display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ r.name }}</a>
         <div style="margin-top: 0.2rem;">
           {% if r.is_likely_dlc %}<span class="badge dlc">Likely DLC</span>{% endif %}
-          {% if r.match_score %}<span class="badge" style="margin-left:0.15rem;">match {{ r.match_score }}</span>{% endif %}
+          {% if r.match_score %}{% widthratio r.match_score 1 100 as match_percent %}<span class="badge" style="margin-left:0.15rem;">{{ match_percent }}% title match</span>{% endif %}
           {% for p in r.platforms %}<span class="badge" style="margin-left:0.15rem;">{{ p }}</span>{% endfor %}
           {% if r.discount %}<span class="badge lowest" style="margin-left:0.15rem;">-{{ r.discount }}%</span>{% endif %}
         </div>
@@ -174,8 +232,8 @@
       </div>
       <div style="text-align:right; white-space:nowrap;">
         {% if r.price_status == "paid" %}
-          {% if r.discount and r.original %}<div class="price-was">{{ r.original }} {{ r.currency }}</div>{% endif %}
-          <div class="price-now">{{ r.price }} {{ r.currency }}</div>
+          {% if r.discount and r.original %}<div class="price-was">{% if r.currency == 'GBP' %}£{% endif %}{{ r.original|floatformat:2 }}{% if r.currency != 'GBP' %} {{ r.currency }}{% endif %}</div>{% endif %}
+          <div class="price-now">{% if r.currency == 'GBP' %}£{% endif %}{{ r.price|floatformat:2 }}{% if r.currency != 'GBP' %} {{ r.currency }}{% endif %}</div>
         {% elif r.price_status == "free" %}
           <div class="price-now">Free</div>
         {% else %}
@@ -191,10 +249,13 @@
   <div class="plat-sec ico ico-ps">PlayStation Store (UK) <span class="off">Official</span></div>
   {% for r in psn_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
-      <div>
-        <strong>{{ r.name }}</strong>
-        {% if r.is_full_game %}<span class="badge digital" style="margin-left:0.25rem;">Full</span>{% endif %}
-        {% if r.platforms %}<span style="font-size:0.7rem;color:var(--muted);margin-left:0.3rem;">{{ r.platforms|join:", " }}</span>{% endif %}
+      <div class="console-main">
+        {% if r.image %}<img class="console-thumb" src="{{ r.image }}" alt="" loading="lazy" decoding="async" width="58" height="58">{% endif %}
+        <div>
+          <strong>{{ r.name }}</strong>
+          {% if r.is_full_game %}<span class="badge digital" style="margin-left:0.25rem;">Full game</span>{% endif %}
+          {% if r.platforms %}<div style="font-size:0.7rem;color:var(--muted);margin-top:0.18rem;">{{ r.platforms|join:", " }}</div>{% endif %}
+        </div>
       </div>
       <div class="price-now">{% if r.display_price %}{{ r.display_price }}{% else %}{{ r.price }} GBP{% endif %}</div>
     </a>
@@ -205,9 +266,12 @@
   <div class="plat-sec ico ico-xbox">Xbox / Microsoft Store <span class="off">Official</span></div>
   {% for r in xbox_results %}
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
-      <div><strong>{{ r.name }}</strong></div>
+      <div class="console-main">
+        {% if r.image %}<img class="console-thumb" src="{{ r.image }}" alt="" loading="lazy" decoding="async" width="58" height="58">{% endif %}
+        <div><strong>{{ r.name }}</strong></div>
+      </div>
       <div class="price-now">
-        {% if r.has_price %}{{ r.price }} {{ r.currency }}{% else %}See store{% endif %}
+        {% if r.has_price %}{% if r.currency == 'GBP' %}£{% endif %}{{ r.price|floatformat:2 }}{% if r.currency != 'GBP' %} {{ r.currency }}{% endif %}{% else %}See store{% endif %}
       </div>
     </a>
   {% endfor %}
@@ -219,7 +283,7 @@
     <a class="console-row" href="{{ r.url }}" target="_blank" rel="noopener">
       <div><strong>{{ r.name }}</strong></div>
       <div class="price-now">
-        {% if r.has_price %}{{ r.price }} {{ r.currency }}{% else %}See store{% endif %}
+        {% if r.has_price %}{% if r.currency == 'GBP' %}£{% endif %}{{ r.price|floatformat:2 }}{% if r.currency != 'GBP' %} {{ r.currency }}{% endif %}{% else %}See store{% endif %}
       </div>
     </a>
   {% endfor %}

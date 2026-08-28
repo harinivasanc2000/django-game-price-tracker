@@ -4,22 +4,24 @@ Tracked list stays in the side drawer (not on the main screen).
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait
 from collections import defaultdict
 
 from django.contrib import messages
 from django.core.cache import cache
-from django.db.models import Count, Max, OuterRef, Q, Subquery
+from django.db.models import Count, Max, Q
 from django.shortcuts import render
 from django.utils import timezone
 
+from .cache_keys import HOME_CARDS
 from .clients.public_deals import steam_featured
 from .clients.steam import get_app_details
 from .constants import POPULAR_APP_IDS
 from .fx import to_gbp_or_zero
-from .models import Game, PriceRecord
+from .models import Game
+from .price_queries import latest_store_snapshots
 
-HOME_CACHE_KEY = "home:cards:v3"
+HOME_CACHE_KEY = HOME_CARDS
 HOME_CACHE_TTL = 180  # 3 minutes — balances freshness vs Steam rate limits
 SEASONAL_SALE_WINDOW_DAYS = 90
 HOME_CARD_LIMIT = 12
@@ -59,10 +61,11 @@ def _card_from_detail(
     lowest_label = None
     if catalog and catalog.id in latest_by_game:
         for r in latest_by_game[catalog.id]:
-            if float(r.price) <= 0:
+            if not r.in_stock or float(r.price) <= 0:
                 continue
             gbp = float(to_gbp_or_zero(r.price, r.currency))
-            if lowest_gbp is None or gbp < lowest_gbp:
+            # Unknown currencies resolve to zero; never advertise those as free.
+            if gbp > 0 and (lowest_gbp is None or gbp < lowest_gbp):
                 lowest_gbp = gbp
                 lowest_label = r.store.name
 
@@ -72,7 +75,12 @@ def _card_from_detail(
             lowest_gbp = steam_gbp
             lowest_label = "Steam"
 
-    launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
+    launch = None
+    if catalog and catalog.launch_price:
+        launch_gbp = to_gbp_or_zero(
+            catalog.launch_price, catalog.launch_currency or "GBP"
+        )
+        launch = float(launch_gbp) if launch_gbp > 0 else None
     savings = None
     if launch and lowest_gbp and launch > 0:
         savings = int(round((1 - lowest_gbp / launch) * 100))
@@ -167,20 +175,7 @@ def _build_home_payload() -> dict:
     # handful of history rows can accidentally advertise an expired sale.
     latest_by_game: dict[int, list] = defaultdict(list)
     if catalog_ids:
-        newest_for_store = (
-            PriceRecord.objects.filter(
-                game_id=OuterRef("game_id"), store_id=OuterRef("store_id")
-            )
-            .order_by("-recorded_at", "-pk")
-            .values("pk")[:1]
-        )
-        rows = (
-            PriceRecord.objects.filter(
-                game_id__in=catalog_ids, pk=Subquery(newest_for_store)
-            )
-            .select_related("store")
-            .order_by("-recorded_at")
-        )
+        rows = latest_store_snapshots(catalog_ids).order_by("-recorded_at")
         for r in rows:
             latest_by_game[r.game_id].append(r)
 
@@ -192,12 +187,17 @@ def _build_home_payload() -> dict:
         except Exception:
             return aid, None
 
-    # Cap workers — a seasonal grid is 12 titles, so no need for 12 sockets.
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    # Cap workers and the *whole* batch. A context-manager would wait for every
+    # slow socket on exit even after a timeout, defeating graceful degradation.
+    pool = ThreadPoolExecutor(max_workers=6)
+    try:
         futs = [pool.submit(fetch, aid) for aid in app_ids]
-        for fut in as_completed(futs):
+        completed, _ = wait(futs, timeout=9)
+        for fut in completed:
             aid, det = fut.result()
             details[aid] = det
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     cards = [
         _card_from_detail(

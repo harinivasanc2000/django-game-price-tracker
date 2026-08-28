@@ -107,6 +107,80 @@ class TrackingRegressionTests(TestCase):
         chart = _build_chart_payload(None, {}, [], None, [], [], [], [])
         self.assertFalse(chart["has_data"])
 
+    def test_chart_aligns_sellers_with_asynchronous_refresh_times(self):
+        """A market line must compare last-known quotes, not one refresh at a time."""
+        game = Game.objects.create(title="Aligned", slug="aligned", platform=Game.Platform.PC)
+        steam = Store.objects.create(name="Steam", slug="aligned-steam")
+        cex = Store.objects.create(name="CeX", slug="aligned-cex")
+        now = timezone.now()
+        steam_old = PriceRecord.objects.create(game=game, store=steam, price=Decimal("20.00"))
+        cex_record = PriceRecord.objects.create(game=game, store=cex, price=Decimal("15.00"))
+        steam_new = PriceRecord.objects.create(game=game, store=steam, price=Decimal("10.00"))
+        PriceRecord.objects.filter(pk=steam_old.pk).update(recorded_at=now - timedelta(days=3))
+        PriceRecord.objects.filter(pk=cex_record.pk).update(recorded_at=now - timedelta(days=2))
+        PriceRecord.objects.filter(pk=steam_new.pk).update(recorded_at=now - timedelta(days=1))
+
+        chart = _build_chart_payload(game, {}, [], None, [], [], [], [])
+
+        self.assertEqual(chart["series"]["Steam"], [20.0, 20.0, 10.0])
+        self.assertEqual(chart["series"]["CeX"], [None, 15.0, 15.0])
+        self.assertEqual(chart["observed"]["Steam"], [True, False, True])
+        self.assertEqual(chart["average"], [20.0, 17.5, 12.5])
+        self.assertEqual(chart["best"], [20.0, 15.0, 10.0])
+
+    def test_chart_uses_cheapest_same_store_live_row_and_includes_free_games(self):
+        chart = _build_chart_payload(
+            None,
+            {"price": Decimal("0.00"), "currency": "GBP", "price_status": "free"},
+            [],
+            None,
+            [], [], [], [],
+            live_store_rows=[
+                (
+                    "GAME UK",
+                    [
+                        {"price": Decimal("29.99"), "currency": "GBP"},
+                        {"price": Decimal("19.99"), "currency": "GBP"},
+                    ],
+                    "GBP",
+                )
+            ],
+        )
+
+        self.assertTrue(chart["has_data"])
+        self.assertEqual(chart["series"]["Steam"], [0.0])
+        self.assertEqual(chart["series"]["GAME UK"], [19.99])
+        self.assertEqual(chart["best"], [0.0])
+
+    def test_chart_does_not_carry_stale_quotes_into_a_newer_market_average(self):
+        game = Game.objects.create(title="Freshness", slug="freshness", platform=Game.Platform.PC)
+        old_store = Store.objects.create(name="Old quote", slug="old-quote")
+        fresh_store = Store.objects.create(name="Fresh quote", slug="fresh-quote")
+        old = PriceRecord.objects.create(game=game, store=old_store, price=Decimal("5.00"))
+        fresh = PriceRecord.objects.create(game=game, store=fresh_store, price=Decimal("25.00"))
+        PriceRecord.objects.filter(pk=old.pk).update(recorded_at=timezone.now() - timedelta(days=10))
+        PriceRecord.objects.filter(pk=fresh.pk).update(recorded_at=timezone.now())
+
+        chart = _build_chart_payload(game, {}, [], None, [], [], [], [])
+
+        self.assertEqual(chart["series"]["Old quote"], [5.0, None, None])
+        self.assertEqual(chart["average"], [5.0, None, 25.0])
+        self.assertEqual(chart["best"], [5.0, None, 25.0])
+
+    def test_non_steam_compare_page_renders_safe_graph_payload(self):
+        game = Game.objects.create(title="Console chart", slug="console-chart", platform=Game.Platform.PS5)
+        store = Store.objects.create(name="Bad </script><script>alert(1)</script>", slug="safe-chart-store")
+        PriceRecord.objects.create(game=game, store=store, price=Decimal("39.99"))
+
+        response = self.client.get(reverse("games:compare", args=[game.slug]))
+        content = response.content.decode()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="priceChart"')
+        self.assertContains(response, 'id="price-chart-data"')
+        self.assertNotIn("</script><script>alert(1)</script>", content)
+        self.assertIn(r"Bad \u003C/script\u003E\u003Cscript\u003Ealert(1)\u003C/script\u003E", content)
+
 
 class ExportRegressionTests(TestCase):
     """Exports are public endpoints and should be resilient to bad query strings."""
@@ -129,4 +203,7 @@ class ExportRegressionTests(TestCase):
         response = self.client.get(reverse("games:export_tracked"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["games"][0]["latest"]["price"], "10.00")
+        exported = response.json()["games"][0]
+        self.assertEqual(exported["latest"]["price"], "10.00")
+        self.assertEqual(len(exported["current_offers"]), 1)
+        self.assertEqual(exported["current_offers"][0]["price"], "10.00")

@@ -20,11 +20,22 @@
     background: var(--card); border: 1px solid var(--border);
     border-radius: 12px; padding: 1.25rem; margin: 1.5rem 0;
   }
+  .chart-toolbar { display:flex; flex-wrap:wrap; align-items:center; gap:0.55rem; margin:0.45rem 0 0.6rem; }
+  .chart-toolbar label, .chart-caption, .chart-explanation, .chart-status { font-size:0.76rem; color:var(--muted); }
+  .chart-toolbar select {
+    background:var(--bg); color:var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:0.3rem 0.5rem; font:inherit; font-size:0.84rem;
+  }
+  .chart-caption { margin:0; }
+  .chart-caption strong { color:var(--text); }
+  .chart-explanation { margin:0.2rem 0 0.45rem; line-height:1.4; }
+  .chart-canvas-wrap { position:relative; height:clamp(240px, 38vw, 380px); }
+  .chart-status { margin:0.45rem 0 0; }
   .change-up { color: #f87171; }
   .change-down { color: #4ade80; }
   .change-same { color: var(--muted); }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+{% if has_chart %}<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -80,53 +91,11 @@
   </form>
 </div>
 
-{% if history_count %}
+{% if has_chart %}
 <div class="chart-wrap">
   <h2 style="font-size: 1rem; margin-bottom: 1rem; color: var(--muted);">Price history ({{ history_count }} snapshot{{ history_count|pluralize }})</h2>
-  <canvas id="priceChart" height="120"></canvas>
+  {% include "games/_price_chart.html" %}
 </div>
-<script>
-  const labels = {{ chart_labels|safe }};
-  const values = {{ chart_values|safe }};
-  const stores = {{ chart_stores|safe }};
-  const baseline = {{ retail_baseline|default:"null" }};
-  const datasets = [{
-    label: 'Current price',
-    data: values,
-    borderColor: '#e03030',
-    backgroundColor: 'rgba(224, 48, 48, 0.12)',
-    fill: true, tension: 0.25, pointRadius: 3,
-  }];
-  if (baseline !== null && labels.length) {
-    datasets.push({
-      label: 'Retail baseline',
-      data: labels.map(() => baseline),
-      borderColor: '#a89090',
-      borderDash: [6, 4],
-      pointRadius: 0,
-      fill: false,
-    });
-  }
-  new Chart(document.getElementById('priceChart'), {
-    type: 'line',
-    data: { labels, datasets },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { labels: { color: '#a89090' } },
-        tooltip: {
-          callbacks: {
-            afterLabel: (ctx) => stores[ctx.dataIndex] || ''
-          }
-        }
-      },
-      scales: {
-        x: { ticks: { color: '#a89090', maxRotation: 45 }, grid: { color: '#3a1515' } },
-        y: { ticks: { color: '#a89090' }, grid: { color: '#3a1515' } }
-      }
-    }
-  });
-</script>
 {% endif %}
 
 <h2 style="font-size: 1.1rem; margin-bottom: 1rem; color: var(--muted);">Offers</h2>

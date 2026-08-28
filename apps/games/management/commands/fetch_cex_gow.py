@@ -6,8 +6,9 @@ Usage:
 """
 
 from django.core.management.base import BaseCommand
-from apps.games.models import Game, Store, PriceRecord
+from apps.games.models import Game, Store
 from apps.games.clients.cex import find_god_of_war_ps4
+from apps.games.price_snapshots import record_snapshot
 
 
 class Command(BaseCommand):
@@ -48,7 +49,7 @@ class Command(BaseCommand):
 
         created = 0
         for row in results:
-            PriceRecord.objects.create(
+            _, was_created = record_snapshot(
                 game=game,
                 store=store,
                 price=row["price"],
@@ -60,7 +61,13 @@ class Command(BaseCommand):
                 in_stock=row.get("in_stock", True),
                 notes=row.get("name", "")[:255],
             )
-            created += 1
-            self.stdout.write(f"  + {row['name']}: {row['price']} GBP")
+            created += int(was_created)
+            marker = "+" if was_created else "="
+            self.stdout.write(f"  {marker} {row['name']}: {row['price']} GBP")
 
-        self.stdout.write(self.style.SUCCESS(f"\nSaved {created} price record(s) from CeX."))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"\nSaved {created} changed price record(s) from CeX "
+                f"({len(results) - created} unchanged)."
+            )
+        )

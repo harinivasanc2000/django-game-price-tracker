@@ -1,13 +1,15 @@
 """Public buy guide: what is on sale and where (Steam + CheapShark)."""
 from __future__ import annotations
 
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 
 from django.shortcuts import render
 
-from .clients.public_deals import buy_recommendations, steam_featured
+from .clients.public_deals import buy_recommendations
 from .fx import to_gbp_or_zero
-from .models import Game, PriceRecord
+from .models import Game
+from .price_queries import latest_store_snapshots
 
 
 def buy_guide(request):
@@ -22,26 +24,40 @@ def buy_guide(request):
         "free_picks": [],
         "country": country,
     }
+    pool = ThreadPoolExecutor(max_workers=1)
     try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            public = pool.submit(buy_recommendations, country).result(timeout=18)
-    except Exception:
+        future = pool.submit(buy_recommendations, country)
         try:
-            public["steam_specials"] = (steam_featured(country).get("specials") or [])[:10]
+            public = future.result(timeout=15)
         except Exception:
+            # Keep rendering from tracked snapshots; slow feeds may finish and
+            # warm their caches for the next request.
             pass
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+    games = list(
+        Game.objects.filter(is_active=True)
+        .only("id", "title", "steam_app_id", "slug", "launch_price", "launch_currency")
+        .order_by("title")[:40]
+    )
+    current_by_game = defaultdict(list)
+    for record in latest_store_snapshots(game.id for game in games):
+        current_by_game[record.game_id].append(record)
 
     tracked_tips = []
-    for g in Game.objects.filter(is_active=True).order_by("title")[:40]:
-        rec = (
-            PriceRecord.objects.filter(game=g)
-            .select_related("store")
-            .order_by("-recorded_at")
-            .first()
-        )
-        if not rec or float(rec.price) <= 0:
+    for g in games:
+        candidates = []
+        for record in current_by_game.get(g.id, []):
+            if not record.in_stock or float(record.price) <= 0:
+                continue
+            gbp = to_gbp_or_zero(record.price, record.currency)
+            if gbp > 0:
+                candidates.append((gbp, record))
+        if not candidates:
             continue
-        gbp = float(to_gbp_or_zero(rec.price, rec.currency))
+        gbp_value, rec = min(candidates, key=lambda item: item[0])
+        gbp = float(gbp_value)
         vs = None
         if g.launch_price and float(g.launch_price) > 0:
             launch = float(to_gbp_or_zero(g.launch_price, g.launch_currency or "GBP"))
@@ -53,6 +69,7 @@ def buy_guide(request):
                 "app_id": g.steam_app_id,
                 "slug": g.slug,
                 "store": rec.store.name,
+                "url": rec.url,
                 "price_gbp": gbp,
                 "vs_launch": vs,
                 "kind": rec.store.store_type,

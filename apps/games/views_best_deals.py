@@ -2,30 +2,24 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, wait
 
-from django.db.models import OuterRef, Subquery
 from django.shortcuts import render
 from django.utils import timezone
 
 from .clients.public_deals import cheapshark_top_deals, steam_featured
 from .fx import to_gbp_or_zero
-from .models import Game, PriceRecord
+from .models import Game
+from .price_queries import latest_store_snapshots
 
 
 def best_deals(request):
     """Show each game's cheapest *current* store snapshot, not its newest history row."""
-    # Select the newest price for every (game, store) pair in one query.  A
-    # global "newest record" can be a more expensive shop and is not a deal.
-    newest_for_store = (
-        PriceRecord.objects.filter(game_id=OuterRef("game_id"), store_id=OuterRef("store_id"))
-        .order_by("-recorded_at", "-pk")
-        .values("pk")[:1]
+    # Bound the current-snapshot query before evaluating it on larger histories.
+    game_ids = list(
+        Game.objects.filter(is_active=True).order_by("title").values_list("id", flat=True)[:80]
     )
-    current_prices = (
-        PriceRecord.objects.filter(game__is_active=True, pk=Subquery(newest_for_store))
-        .select_related("game", "store")
-        .order_by("game__title")
-    )
+    current_prices = latest_store_snapshots(game_ids).order_by("game__title")
 
     # Keep the page bounded while retaining all stores for each selected game.
     current_by_game = defaultdict(list)
@@ -60,6 +54,7 @@ def best_deals(request):
                 "currency": rec.currency,
                 "price_gbp": gbp,
                 "store": rec.store.name,
+                "url": rec.url,
                 "recorded_at": rec.recorded_at,
                 # A price can remain useful, but users should know it has not
                 # been checked recently before treating it as actionable.
@@ -69,16 +64,24 @@ def best_deals(request):
         )
     rows.sort(key=lambda r: r["price_gbp"])
 
-    public_cs = []
-    steam_specials = []
+    public_cs, steam_specials = [], []
+    pool = ThreadPoolExecutor(max_workers=2)
     try:
-        public_cs = cheapshark_top_deals(limit=18, upper_price=50)
-    except Exception:
-        public_cs = []
-    try:
-        steam_specials = (steam_featured("GB").get("specials") or [])[:10]
-    except Exception:
-        steam_specials = []
+        f_cs = pool.submit(cheapshark_top_deals, limit=18, upper_price=50)
+        f_steam = pool.submit(steam_featured, "GB")
+        completed, _ = wait((f_cs, f_steam), timeout=12)
+        if f_cs in completed:
+            try:
+                public_cs = f_cs.result() or []
+            except Exception:
+                pass
+        if f_steam in completed:
+            try:
+                steam_specials = (f_steam.result().get("specials") or [])[:10]
+            except Exception:
+                pass
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
     return render(
         request,

@@ -7,21 +7,22 @@ from __future__ import annotations
 
 from django.core.cache import cache
 
+from .cache_keys import SITE_SETTINGS, TRACKED_DRAWER
 from .models import Game, SiteSettings
 
 
 def site_ui(request):
     # Site settings: cache 5 minutes (admin changes are rare)
-    settings_obj = cache.get("site_settings:v1")
+    settings_obj = cache.get(SITE_SETTINGS)
     if settings_obj is None:
         try:
             settings_obj = SiteSettings.load()
         except Exception:
             settings_obj = None
-        cache.set("site_settings:v1", settings_obj, 300)
+        cache.set(SITE_SETTINGS, settings_obj, 300)
 
     # Tracked drawer: only columns the template needs, max 30, cached 60s
-    tracked = cache.get("tracked_drawer:v1")
+    tracked = cache.get(TRACKED_DRAWER)
     if tracked is None:
         try:
             tracked = list(
@@ -39,7 +40,7 @@ def site_ui(request):
             )
         except Exception:
             tracked = []
-        cache.set("tracked_drawer:v1", tracked, 60)
+        cache.set(TRACKED_DRAWER, tracked, 60)
 
     return {
         "site_settings": settings_obj,

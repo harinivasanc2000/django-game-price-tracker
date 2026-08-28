@@ -160,11 +160,11 @@
   <div class="sec"><span>From your tracked list</span><a href="{% url 'games:best_deals' %}" style="color:var(--muted);font-size:0.8rem;text-transform:none;letter-spacing:0;">All tracked →</a></div>
   <div class="grid">
     {% for t in tracked_tips %}
-      <a class="card" href="{% if t.app_id %}{% url 'games:steam_detail' t.app_id %}{% else %}{% url 'games:compare' t.slug %}{% endif %}">
+      <a class="card" href="{% if t.url %}{{ t.url }}{% elif t.app_id %}{% url 'games:steam_detail' t.app_id %}{% else %}{% url 'games:compare' t.slug %}{% endif %}" {% if t.url %}target="_blank" rel="noopener noreferrer"{% endif %}>
         <div class="t">{{ t.title }}</div>
         <div class="p">£{{ t.price_gbp|floatformat:2 }}</div>
         <div class="m">{{ t.store }}{% if t.vs_launch is not None %} · {{ t.vs_launch }}% under launch{% endif %}</div>
-        <div class="tip">Your latest snapshot.</div>
+        <div class="tip">Your latest snapshot{% if t.url %} — open this store deal ↗{% endif %}.</div>
       </a>
     {% endfor %}
   </div>

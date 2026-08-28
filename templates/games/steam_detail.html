@@ -68,11 +68,17 @@
     margin: 0.4rem 0.9rem 0.8rem; padding: 0.55rem 0.7rem; border-radius: 9px;
     background: #1a1008; border: 1px solid #5a4020; color: #e8c090; font-size: 0.76rem; line-height: 1.4;
   }
-  .chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; margin: 0.35rem 0 0.6rem; }
+  .chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem; margin: 0.45rem 0 0.6rem; }
+  .chart-toolbar label, .chart-caption, .chart-explanation, .chart-status { font-size: 0.74rem; color: var(--muted); }
   .chart-toolbar select {
     background: var(--bg); color: var(--text); border: 1px solid var(--border);
     border-radius: 8px; padding: 0.3rem 0.5rem; font-size: 0.84rem;
   }
+  .chart-caption { margin: 0.28rem 0 0; }
+  .chart-caption strong { color: var(--text); }
+  .chart-explanation { margin: 0.2rem 0 0.45rem; line-height: 1.4; }
+  .chart-canvas-wrap { position: relative; height: clamp(230px, 34vw, 360px); }
+  .chart-status { margin: 0.45rem 0 0; }
   .kind { font-size: 0.6rem; padding: 0.08rem 0.28rem; border-radius: 4px; }
   .kind.official { background: #1a3a2a; color: #86efac; }
   .kind.marketplace { background: #1e3a5f; color: #7dd3fc; }
@@ -193,15 +199,7 @@
     {% if has_chart %}
     <div class="panel" style="padding: 0.8rem 0.9rem;">
       <h2 class="ico ico-chart" style="padding: 0;">Price history (GBP)</h2>
-      <p style="font-size: 0.72rem; color: var(--muted); margin: 0.2rem 0 0.45rem;">GBP · chronological · flat periods collapsed.</p>
-      <div class="chart-toolbar">
-        <label for="sellerSelect" style="font-size:0.78rem;color:var(--muted);">Show</label>
-        <select id="sellerSelect">
-          <option value="__avg__">Average</option>
-          <option value="__all__">All sellers</option>
-        </select>
-      </div>
-      <canvas id="priceChart" height="110"></canvas>
+      {% include "games/_price_chart.html" %}
     </div>
     {% endif %}
 
@@ -288,66 +286,6 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if has_chart %}
-<script>
-(function () {
-  function boot() {
-    if (typeof Chart === 'undefined') { setTimeout(boot, 40); return; }
-    const data = {{ chart_json|safe }};
-    const colors = ['#e03030','#e8a838','#3ecf6a','#5b8def','#c084fc','#f472b6','#2dd4bf','#a3a3a3'];
-    const select = document.getElementById('sellerSelect');
-    if (!select) return;
-    (data.sellers || []).forEach(s => {
-      const opt = document.createElement('option');
-      opt.value = s; opt.textContent = s; select.appendChild(opt);
-    });
-    const ctx = document.getElementById('priceChart');
-    let chart;
-    function datasetsFor(mode) {
-      const ds = [];
-      if (mode === '__avg__') {
-        ds.push({ label: 'Average', data: data.average, borderColor: '#e03030', backgroundColor: 'rgba(224,48,48,0.08)', fill: true, spanGaps: true, tension: 0.15, pointRadius: 3 });
-      } else if (mode === '__all__') {
-        (data.sellers || []).forEach((s, i) => {
-          ds.push({ label: s, data: data.series[s], borderColor: colors[i % colors.length], spanGaps: true, tension: 0.15, pointRadius: 2, borderWidth: 1.4 });
-        });
-      } else {
-        ds.push({ label: mode, data: data.series[mode] || [], borderColor: '#e03030', fill: true, spanGaps: true, tension: 0.15, pointRadius: 3 });
-      }
-      if (data.launch && data.launch.some(v => v != null)) {
-        ds.push({ label: 'Launch', data: data.launch, borderColor: '#a89090', borderDash: [5, 4], pointRadius: 0, spanGaps: true });
-      }
-      return ds;
-    }
-    function render(mode) {
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: { labels: data.labels, datasets: datasetsFor(mode) },
-        options: {
-          responsive: true,
-          animation: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { labels: { color: '#a89090', boxWidth: 10, font: { size: 10 } } },
-            tooltip: { callbacks: { label: (item) => `${item.dataset.label}: £${Number(item.parsed.y).toFixed(2)}` } }
-          },
-          scales: {
-            x: { ticks: { color: '#a89090', maxRotation: 35 }, grid: { color: '#2a1212' } },
-            y: { beginAtZero: true, ticks: { color: '#a89090', callback: (v) => `£${v}` }, grid: { color: '#2a1212' } }
-          }
-        }
-      });
-    }
-    select.addEventListener('change', () => render(select.value));
-    render('__avg__');
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
-  else boot();
-})();
-</script>
-{% endif %}
-
 <script>
 (function () {
   const chips = document.getElementById('platformChips');

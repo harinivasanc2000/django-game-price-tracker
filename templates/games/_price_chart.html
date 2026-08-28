@@ -1,0 +1,238 @@
+{% comment %}
+Reusable Chart.js price timeline. ``json_script`` safely serialises seller
+names and keeps untrusted text out of executable JavaScript.
+{% endcomment %}
+<p class="chart-caption">
+  {% if chart_data.lowest != None %}
+    Lowest shown: <strong>£{{ chart_data.lowest|floatformat:2 }}</strong>
+    {% if chart_data.latest_best != None %}· Latest known best: <strong>£{{ chart_data.latest_best|floatformat:2 }}</strong>{% endif %}
+    · {{ chart_data.sellers|length }} seller{{ chart_data.sellers|length|pluralize }}
+  {% endif %}
+</p>
+<p class="chart-explanation">
+  Step lines carry a seller's last known quote for up to {{ chart_data.quote_max_age_days }} days; dots mark actual checks.
+</p>
+<div class="chart-toolbar" aria-label="Price chart controls">
+  <label for="sellerSelect">Series</label>
+  <select id="sellerSelect">
+    <option value="__best__">Best known (fresh)</option>
+    <option value="__avg__">Market average</option>
+    <option value="__all__">All sellers</option>
+  </select>
+  <label for="chartRange">Range</label>
+  <select id="chartRange">
+    <option value="all">All history</option>
+    <option value="30">30 days</option>
+    <option value="90">90 days</option>
+    <option value="365">1 year</option>
+  </select>
+</div>
+<div class="chart-canvas-wrap">
+  <canvas
+    id="priceChart"
+    role="img"
+    aria-label="Interactive price history chart in pounds sterling"
+  >Price history chart. Use the controls above or the text summary below.</canvas>
+</div>
+<p id="chartStatus" class="chart-status" aria-live="polite">Loading price history…</p>
+{{ chart_data|json_script:"price-chart-data" }}
+<script>
+(function () {
+  'use strict';
+
+  const payloadNode = document.getElementById('price-chart-data');
+  const canvas = document.getElementById('priceChart');
+  const sellerSelect = document.getElementById('sellerSelect');
+  const rangeSelect = document.getElementById('chartRange');
+  const status = document.getElementById('chartStatus');
+  if (!payloadNode || !canvas || !sellerSelect || !rangeSelect) return;
+
+  let data;
+  try {
+    data = JSON.parse(payloadNode.textContent);
+  } catch (error) {
+    if (status) status.textContent = 'Price history could not be decoded.';
+    return;
+  }
+
+  (data.sellers || []).forEach((seller) => {
+    const option = document.createElement('option');
+    option.value = seller;
+    option.textContent = seller;
+    sellerSelect.appendChild(option);
+  });
+
+  const money = new Intl.NumberFormat('en-GB', {
+    style: 'currency', currency: 'GBP', minimumFractionDigits: 2
+  });
+  const themeStyles = window.getComputedStyle(document.body);
+  const mutedColor = themeStyles.getPropertyValue('--muted').trim() || '#a89090';
+  const gridColor = themeStyles.getPropertyValue('--border').trim() || '#2a1212';
+  const accentColor = themeStyles.getPropertyValue('--accent2').trim() || '#e03030';
+  const goodColor = themeStyles.getPropertyValue('--good').trim() || '#3ecf6a';
+  const palette = [
+    '#e03030', '#e8a838', '#3ecf6a', '#5b8def', '#c084fc', '#f472b6',
+    '#2dd4bf', '#fb7185', '#84cc16', '#38bdf8', '#f97316', '#a3a3a3'
+  ];
+  let chart = null;
+
+  function sellerColor(index) {
+    if (index < palette.length) return palette[index];
+    // Golden-angle spacing keeps additional seller colours visually distinct.
+    return `hsl(${Math.round((index * 137.508) % 360)} 70% 62%)`;
+  }
+
+  function visibleIndexes() {
+    const timestamps = data.timestamps || [];
+    if (rangeSelect.value === 'all') return timestamps.map((_, index) => index);
+    const days = Number(rangeSelect.value);
+    const cutoff = Date.now() - (days * 86400000);
+    return timestamps.reduce((indexes, timestamp, index) => {
+      const parsed = Date.parse(timestamp);
+      if (Number.isFinite(parsed) && parsed >= cutoff) indexes.push(index);
+      return indexes;
+    }, []);
+  }
+
+  function subset(values, indexes) {
+    return indexes.map((index) => (values || [])[index] ?? null);
+  }
+
+  function priceDataset(label, values, color, indexes, extra) {
+    return Object.assign({
+      label,
+      data: subset(values, indexes),
+      borderColor: color,
+      backgroundColor: `${color}18`,
+      borderWidth: 1.8,
+      fill: false,
+      spanGaps: false,
+      stepped: 'after',
+      tension: 0,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+    }, extra || {});
+  }
+
+  function datasetsFor(mode, indexes) {
+    const datasets = [];
+    if (mode === '__best__') {
+      datasets.push(priceDataset('Best known (fresh)', data.best, goodColor, indexes, {
+        backgroundColor: 'rgba(62, 207, 106, 0.10)', fill: true, borderWidth: 2.2
+      }));
+    } else if (mode === '__avg__') {
+      datasets.push(priceDataset('Market average', data.average, accentColor, indexes, {
+        backgroundColor: 'rgba(224, 48, 48, 0.09)', fill: true, borderWidth: 2.2
+      }));
+    } else if (mode === '__all__') {
+      (data.sellers || []).forEach((seller, sellerIndex) => {
+        const observed = (data.observed || {})[seller] || [];
+        datasets.push(priceDataset(seller, data.series[seller], sellerColor(sellerIndex), indexes, {
+          sellerKey: seller,
+          pointRadius: (context) => observed[indexes[context.dataIndex]] ? 2.5 : 0,
+        }));
+      });
+    } else {
+      const observed = (data.observed || {})[mode] || [];
+      datasets.push(priceDataset(mode, (data.series || {})[mode], accentColor, indexes, {
+        sellerKey: mode,
+        backgroundColor: 'rgba(224, 48, 48, 0.09)',
+        fill: true,
+        borderWidth: 2.2,
+        pointRadius: (context) => observed[indexes[context.dataIndex]] ? 3 : 0,
+      }));
+    }
+    if ((data.launch || []).some((value) => value != null)) {
+      datasets.push({
+        label: 'Launch / MSRP reference',
+        data: subset(data.launch, indexes),
+        borderColor: mutedColor,
+        borderDash: [6, 4],
+        borderWidth: 1.2,
+        pointRadius: 0,
+        fill: false,
+        spanGaps: false,
+      });
+    }
+    return datasets;
+  }
+
+  function render() {
+    const indexes = visibleIndexes();
+    const labels = subset(data.labels, indexes);
+    const datasets = datasetsFor(sellerSelect.value, indexes);
+    if (chart) chart.destroy();
+
+    if (!indexes.length) {
+      if (status) status.textContent = 'No recorded checks fall within this range. Choose All history.';
+      return;
+    }
+
+    const plottedValues = datasets.flatMap((dataset) => dataset.data || []).filter(Number.isFinite);
+    const includesFree = plottedValues.some((value) => value === 0);
+    chart = new Chart(canvas, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        animation: false,
+        normalized: true,
+        resizeDelay: 120,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: mutedColor, boxWidth: 11, usePointStyle: true, font: { size: 10 } }
+          },
+          tooltip: {
+            filter: (item) => item.parsed.y != null,
+            callbacks: {
+              label: (item) => `${item.dataset.label}: ${money.format(item.parsed.y)}`,
+              afterLabel: (item) => {
+                const seller = item.dataset.sellerKey;
+                if (!seller) return '';
+                const observed = (data.observed || {})[seller] || [];
+                return observed[indexes[item.dataIndex]] ? 'Observed check' : 'Last known quote';
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: mutedColor, autoSkip: true, maxTicksLimit: 8, maxRotation: 35 },
+            grid: { color: gridColor }
+          },
+          y: {
+            beginAtZero: includesFree,
+            grace: '8%',
+            ticks: { color: mutedColor, callback: (value) => money.format(value) },
+            grid: { color: gridColor },
+            title: { display: true, text: 'Price (GBP)', color: mutedColor }
+          }
+        }
+      }
+    });
+    if (status) {
+      status.textContent = `Showing ${indexes.length} price event${indexes.length === 1 ? '' : 's'} across ${(data.sellers || []).length} seller${(data.sellers || []).length === 1 ? '' : 's'}.`;
+    }
+  }
+
+  sellerSelect.addEventListener('change', render);
+  rangeSelect.addEventListener('change', render);
+
+  function boot(attempt) {
+    if (typeof Chart !== 'undefined') {
+      render();
+      return;
+    }
+    if (attempt >= 80) {
+      if (status) status.textContent = 'The interactive chart library did not load. The price summary is still available above.';
+      return;
+    }
+    window.setTimeout(() => boot(attempt + 1), 50);
+  }
+  boot(0);
+})();
+</script>

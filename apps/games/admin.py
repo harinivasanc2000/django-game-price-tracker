@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.core.cache import cache
+from .cache_keys import HOME_CARDS, SITE_SETTINGS, TRACKED_DRAWER
 from .models import (
     Game,
     Store,
@@ -44,6 +46,8 @@ class GameAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        # Admin edits can change both navigation cards and seasonal ranking.
+        cache.delete_many([TRACKED_DRAWER, HOME_CARDS])
         AdminChangeLog.objects.create(
             actor=getattr(request.user, "username", "admin") or "admin",
             action="game_save" if change else "game_create",
@@ -61,6 +65,7 @@ class PriceRecordAdmin(admin.ModelAdmin):
     search_fields = ("game__title", "store__name")
     date_hierarchy = "recorded_at"
     raw_id_fields = ("game", "store")
+    list_select_related = ("game", "store")
 
 
 @admin.register(Watch)
@@ -69,6 +74,7 @@ class WatchAdmin(admin.ModelAdmin):
     list_filter = ("created_at",)
     search_fields = ("user__username", "game__title")
     raw_id_fields = ("user", "game")
+    list_select_related = ("user", "game")
 
 
 @admin.register(PriceAlert)
@@ -77,6 +83,7 @@ class PriceAlertAdmin(admin.ModelAdmin):
     list_filter = ("is_sent", "currency")
     search_fields = ("watch__user__username", "watch__game__title", "store")
     date_hierarchy = "created_at"
+    list_select_related = ("watch__user", "watch__game")
 
 
 @admin.register(BrowseHistory)
@@ -99,6 +106,9 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+        # Context processors cache this singleton for five minutes; make an
+        # appearance edit visible on the very next page load.
+        cache.delete(SITE_SETTINGS)
         AdminChangeLog.objects.create(
             actor=getattr(request.user, "username", "admin") or "admin",
             action="site_settings",

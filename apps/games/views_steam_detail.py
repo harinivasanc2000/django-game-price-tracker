@@ -1,8 +1,8 @@
 """Detail page — official storefronts first, then local UK scrapes + filters."""
 from __future__ import annotations
 
-import json
 from concurrent.futures import ThreadPoolExecutor, wait
+import math
 
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -38,7 +38,14 @@ def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
         store = (o.get("store") or "").strip()
         is_pref = 0 if store in preferred else 1
         kind_bias = 0 if (not preferred and o.get("kind") == "official") else 1
-        return (is_pref, kind_bias if is_pref else 0, float(o.get("price_gbp") or 9999))
+        try:
+            price = float(o.get("price_gbp"))
+        except (TypeError, ValueError, OverflowError):
+            price = math.inf
+        if not math.isfinite(price) or price < 0:
+            price = math.inf
+        # Zero is a valid free-game price and must not be treated as missing.
+        return (is_pref, kind_bias if is_pref else 0, price)
 
     return sorted(offers, key=key)
 
@@ -171,6 +178,7 @@ def steam_detail(request, app_id: int):
     xbox_rows = plat.get("xbox_rows") or []
     nintendo_rows = plat.get("nintendo_rows") or []
     amazon_rows = plat.get("amazon_rows") or []
+    specialist_sources = plat.get("specialist_sources") or []
     social_links = social_news_links(detail["name"], platform=platform)
 
     launch = float(catalog.launch_price) if catalog and catalog.launch_price else None
@@ -186,11 +194,27 @@ def steam_detail(request, app_id: int):
         amazon_rows,
         plat.get("cex_rows") or [],
         plat.get("ebay_rows") or [],
+        launch_currency=launch_currency,
+        # Include every priced UK source returned by the platform bundle. The
+        # chart helper de-duplicates a seller at the shared live timestamp.
+        live_store_rows=[
+            ("Xbox / Microsoft Store", xbox_rows, "GBP"),
+            ("Nintendo eShop (UK)", nintendo_rows, "GBP"),
+            ("GAME UK", plat.get("game_rows") or [], "GBP"),
+            ("Smyths Toys", plat.get("smyths_rows") or [], "GBP"),
+            ("Argos", plat.get("argos_rows") or [], "GBP"),
+            ("Currys", plat.get("currys_rows") or [], "GBP"),
+            ("MusicMagpie", plat.get("musicmagpie_rows") or [], "GBP"),
+            *[
+                (source.get("label"), source.get("rows") or [], "GBP")
+                for source in specialist_sources
+            ],
+        ],
     )
 
     live_offers: list[dict] = []
 
-    if detail.get("price_status") == "paid" and detail.get("price") is not None:
+    if detail.get("price_status") in {"paid", "free"} and detail.get("price") is not None:
         live_offers.append(
             {
                 "store": "Steam",
@@ -273,6 +297,19 @@ def steam_detail(request, app_id: int):
                     "url": rows[0].get("url") or plat.get(key.replace("_rows", "_search_url")),
                 }
             )
+    for source in specialist_sources:
+        rows = source.get("rows") or []
+        if rows:
+            live_offers.append(
+                {
+                    "store": source.get("label") or "UK specialist",
+                    "price": rows[0]["price"],
+                    "price_gbp": to_gbp_or_zero(rows[0]["price"], "GBP"),
+                    "currency": "GBP",
+                    "kind": "retail",
+                    "url": rows[0].get("url") or source.get("search_url"),
+                }
+            )
     if store_deals:
         live_offers.append(
             {
@@ -295,9 +332,17 @@ def steam_detail(request, app_id: int):
 
     savings_vs_launch = None
     if launch and live_offers:
-        best_gbp = float(live_offers[0]["price_gbp"])
-        if launch > 0:
-            savings_vs_launch = int(round((1 - best_gbp / launch) * 100))
+        launch_gbp = float(to_gbp_or_zero(launch, launch_currency))
+        offer_prices = []
+        for offer in live_offers:
+            try:
+                offer_gbp = float(offer.get("price_gbp"))
+            except (TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(offer_gbp) and offer_gbp >= 0:
+                offer_prices.append(offer_gbp)
+        if launch_gbp > 0 and offer_prices:
+            savings_vs_launch = int(round((1 - min(offer_prices) / launch_gbp) * 100))
 
     wallpaper = detail.get("header_image") or ""
 
@@ -347,9 +392,10 @@ def steam_detail(request, app_id: int):
             "musicmagpie_rows": plat.get("musicmagpie_rows") or [],
             "musicmagpie_blocked": plat.get("musicmagpie_blocked", True),
             "musicmagpie_search_url": plat.get("musicmagpie_search_url"),
+            "specialist_sources": specialist_sources,
             "best_local": plat.get("best_local") or [],
             "stores_ok": plat.get("stores_ok") or 0,
-            "stores_total": plat.get("stores_total") or 7,
+            "stores_total": plat.get("stores_total") or 11,
             "uk_links": plat.get("uk_links") or [],
             "digital_rows": digital_rows,
             "digital_links": digital_links,
@@ -361,7 +407,9 @@ def steam_detail(request, app_id: int):
             "launch_source": launch_source,
             "savings_vs_launch": savings_vs_launch,
             "best_third_party": store_deals[0] if store_deals else None,
-            "chart_json": json.dumps(chart),
+            # Pass structured data through Django's json_script filter in the
+            # template so store names cannot break out of an inline script.
+            "chart_data": chart,
             "has_chart": bool(chart.get("has_data")),
             "watched": watched,
             "is_watched": watched is not None,

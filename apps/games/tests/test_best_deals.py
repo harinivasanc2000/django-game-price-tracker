@@ -19,7 +19,12 @@ class BestDealsTests(TestCase):
         steam = Store.objects.create(name="Steam", slug="steam")
         gog = Store.objects.create(name="GOG", slug="gog")
         old_sale = PriceRecord.objects.create(game=game, store=steam, price=Decimal("5.00"))
-        current_steam = PriceRecord.objects.create(game=game, store=steam, price=Decimal("15.00"))
+        current_steam = PriceRecord.objects.create(
+            game=game,
+            store=steam,
+            price=Decimal("15.00"),
+            url="https://store.steampowered.com/app/123/",
+        )
         current_gog = PriceRecord.objects.create(game=game, store=gog, price=Decimal("20.00"))
         PriceRecord.objects.filter(pk=old_sale.pk).update(recorded_at=timezone.now() - timedelta(days=1))
         PriceRecord.objects.filter(pk=current_steam.pk).update(recorded_at=timezone.now() - timedelta(minutes=2))
@@ -32,3 +37,5 @@ class BestDealsTests(TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["store"], "Steam")
         self.assertEqual(rows[0]["price_gbp"], Decimal("15.00"))
+        self.assertEqual(rows[0]["url"], current_steam.url)
+        self.assertContains(response, current_steam.url)

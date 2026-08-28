@@ -59,12 +59,13 @@
 {% if rows %}
   <div style="display:grid;gap:0.45rem;">
     {% for row in rows %}
-      <a href="{% if row.game.steam_app_id %}{% url 'games:steam_detail' row.game.steam_app_id %}{% else %}{% url 'games:compare' row.game.slug %}{% endif %}"
+      <a href="{% if row.url %}{{ row.url }}{% elif row.game.steam_app_id %}{% url 'games:steam_detail' row.game.steam_app_id %}{% else %}{% url 'games:compare' row.game.slug %}{% endif %}"
+         {% if row.url %}target="_blank" rel="noopener noreferrer"{% endif %}
          style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;padding:0.7rem 0.85rem;border-radius:12px;border:1px solid var(--border);background:rgba(18,8,8,0.88);color:var(--text);text-decoration:none;">
         <div>
           <div style="font-weight:600;">{{ row.game.title }}</div>
           <div style="font-size:0.78rem;color:var(--muted);margin-top:0.15rem;">
-            {{ row.store }} · {{ row.recorded_at|date:"d M H:i" }}
+            {{ row.store }} · {{ row.recorded_at|date:"d M H:i" }}{% if row.url %} · Open deal ↗{% endif %}
             {% if row.is_stale %} · <span style="color:#fbbf24;">Needs refresh</span>{% endif %}
             {% if row.vs_launch_pct is not None %}
               · <span style="color:{% if row.vs_launch_pct >= 20 %}#86efac{% else %}var(--muted){% endif %}">{{ row.vs_launch_pct }}% under launch</span>

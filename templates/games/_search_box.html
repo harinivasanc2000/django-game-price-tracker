@@ -73,23 +73,50 @@
   function hide() { dd.hidden = true; active = -1; }
 
   function render(list) {
-    items = list || [];
+    items = (list || []).filter((suggestion) => {
+      const appId = Number(suggestion.app_id);
+      return Number.isInteger(appId) && appId > 0;
+    });
     if (!items.length) { hide(); return; }
     const plat = (document.getElementById('platformSelect') || {}).value || '';
-    dd.innerHTML = items.map((s, i) => {
+    const fragment = document.createDocumentFragment();
+    items.forEach((s, i) => {
       const price = s.price_status === 'free' ? 'Free'
         : s.price_status === 'unknown' ? 'Unknown'
         : (s.price ? s.price + ' ' + (s.currency || '') : 'Unknown');
       const dlc = s.is_likely_dlc ? ' · DLC?' : '';
-      const img = s.tiny_image
-        ? `<img src="${s.tiny_image}" alt="" loading="lazy">`
-        : `<div style="width:72px;height:27px;background:var(--border);border-radius:4px;"></div>`;
-      const href = `/steam/${s.app_id}/${plat ? '?platform=' + encodeURIComponent(plat) : ''}`;
-      return `<a class="suggest-item" data-i="${i}" href="${href}">
-        ${img}
-        <div class="s-name">${s.name}<div class="s-meta">${price}${dlc}</div></div>
-      </a>`;
-    }).join('');
+      const link = document.createElement('a');
+      link.className = 'suggest-item';
+      link.dataset.i = String(i);
+      link.href = `/steam/${Number(s.app_id)}/${plat ? '?platform=' + encodeURIComponent(plat) : ''}`;
+
+      // Suggestions come from a remote catalogue. Build text nodes instead of
+      // interpolating remote titles/URLs into innerHTML.
+      let imageNode;
+      try {
+        const imageUrl = new URL(String(s.tiny_image || ''), window.location.origin);
+        if (!['http:', 'https:'].includes(imageUrl.protocol)) throw new Error('unsafe image');
+        imageNode = document.createElement('img');
+        imageNode.src = imageUrl.href;
+        imageNode.alt = '';
+        imageNode.loading = 'lazy';
+      } catch (error) {
+        imageNode = document.createElement('div');
+        imageNode.style.cssText = 'width:72px;height:27px;background:var(--border);border-radius:4px;';
+      }
+      link.appendChild(imageNode);
+
+      const name = document.createElement('div');
+      name.className = 's-name';
+      name.appendChild(document.createTextNode(String(s.name || 'Unknown title')));
+      const meta = document.createElement('div');
+      meta.className = 's-meta';
+      meta.textContent = `${price}${dlc}`;
+      name.appendChild(meta);
+      link.appendChild(name);
+      fragment.appendChild(link);
+    });
+    dd.replaceChildren(fragment);
     dd.hidden = false;
   }
 

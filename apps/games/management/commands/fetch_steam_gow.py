@@ -7,8 +7,9 @@ Usage:
 """
 
 from django.core.management.base import BaseCommand
-from apps.games.models import Game, Store, PriceRecord
+from apps.games.models import Game, Store
 from apps.games.clients.steam import get_god_of_war_steam, GOD_OF_WAR_STEAM_APP_ID
+from apps.games.price_snapshots import record_snapshot
 
 
 class Command(BaseCommand):
@@ -49,11 +50,11 @@ class Command(BaseCommand):
         self.stdout.write(f"Fetching Steam price for God of War (cc={country})...")
         result = get_god_of_war_steam(country=country)
 
-        if not result:
+        if not result or result.get("price") is None:
             self.stdout.write(self.style.ERROR("Could not fetch Steam price. Try again later."))
             return
 
-        rec = PriceRecord.objects.create(
+        _, was_created = record_snapshot(
             game=game,
             store=store,
             price=result["price"],
@@ -69,7 +70,8 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Saved: {result['name']} — {result['price']} {result['currency']}"
+                f"{'Saved' if was_created else 'Unchanged'}: "
+                f"{result['name']} — {result['price']} {result['currency']}"
                 + (f" (-{result['discount']}%)" if result.get("discount") else "")
             )
         )

@@ -3,33 +3,28 @@ from __future__ import annotations
 
 import csv
 import io
+from collections import defaultdict
 
 from django.http import HttpResponse, JsonResponse
-from django.db.models import OuterRef, Subquery
 from django.utils import timezone
 
 from .fx import to_gbp_or_zero
 from .models import Game, PriceRecord
+from .price_queries import latest_store_snapshots
 
 
 def export_tracked_json(request):
     games = list(Game.objects.filter(is_active=True).order_by("title")[:100])
     game_ids = [game.id for game in games]
-    # One query for all newest rows instead of one query per exported game.
-    newest_price = (
-        PriceRecord.objects.filter(game_id=OuterRef("game_id"))
-        .order_by("-recorded_at", "-pk")
-        .values("pk")[:1]
-    )
-    latest_by_game = {
-        record.game_id: record
-        for record in PriceRecord.objects.filter(
-            game_id__in=game_ids, pk=Subquery(newest_price)
-        ).select_related("store")
-    }
+    # Export each store's current snapshot in one query. Keeping the original
+    # singular ``latest`` field preserves compatibility with older consumers.
+    current_by_game = defaultdict(list)
+    for record in latest_store_snapshots(game_ids):
+        current_by_game[record.game_id].append(record)
     payload = []
     for g in games:
-        rec = latest_by_game.get(g.id)
+        current = current_by_game.get(g.id, [])
+        rec = max(current, key=lambda row: (row.recorded_at, row.pk), default=None)
         item = {
             "title": g.title,
             "slug": g.slug,
@@ -49,6 +44,33 @@ def export_tracked_json(request):
             }
         else:
             item["latest"] = None
+        offers = []
+        for offer in current:
+            gbp = to_gbp_or_zero(offer.price, offer.currency)
+            offers.append(
+                {
+                    "store": offer.store.name,
+                    "store_type": offer.store.store_type,
+                    "price": str(offer.price),
+                    "currency": offer.currency,
+                    "price_gbp": float(gbp) if gbp > 0 else None,
+                    "in_stock": offer.in_stock,
+                    "is_physical": offer.is_physical,
+                    "is_used": offer.is_used,
+                    "condition": offer.condition,
+                    "url": offer.url,
+                    "recorded_at": offer.recorded_at.isoformat(),
+                }
+            )
+        offers.sort(
+            key=lambda row: (
+                not row["in_stock"],
+                row["price_gbp"] is None,
+                row["price_gbp"] or 0,
+                row["store"].casefold(),
+            )
+        )
+        item["current_offers"] = offers
         payload.append(item)
 
     return JsonResponse(

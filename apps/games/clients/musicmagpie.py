@@ -8,12 +8,13 @@ from __future__ import annotations
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
-from urllib.parse import quote_plus, urljoin
+from urllib.parse import quote_plus
 
 from apps.games.cache import cached
 from apps.games.clients.scrape_utils import (
     extract_ld_json_products,
     fetch_html,
+    normalise_public_url,
     parse_money,
     product_row,
     soup_from,
@@ -29,6 +30,10 @@ def search_url(title: str, platform: str = "") -> str:
 
 
 def _search_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
+    try:
+        limit = max(1, min(int(limit), 10))
+    except (TypeError, ValueError):
+        limit = 8
     url = search_url(title, platform)
     out: dict[str, Any] = {"results": [], "blocked": False, "search_url": url}
     html, _ = fetch_html(url, timeout=7, referer="https://www.musicmagpie.co.uk/")
@@ -44,9 +49,11 @@ def _search_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str
             price = Decimal(str(item["price"]))
         except (InvalidOperation, KeyError, TypeError):
             continue
-        href = item.get("url") or url
-        if href and not href.startswith("http"):
-            href = urljoin(url, href)
+        if str(item.get("currency") or "GBP").upper() != "GBP":
+            continue
+        href = normalise_public_url(
+            item.get("url"), base_url=url, allowed_hosts=("musicmagpie.co.uk",)
+        ) or url
         row = product_row(
             name=item.get("name", ""),
             price=price,
@@ -68,8 +75,15 @@ def _search_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str
             if len(name) < 3:
                 continue
             price_el = card.find(class_=re.compile(r"price", re.I))
-            price = parse_money(price_el.get_text() if price_el else card.get_text(" ", strip=True))
-            href = urljoin(url, a["href"]) if a else url
+            price = parse_money(
+                price_el.get_text() if price_el else card.get_text(" ", strip=True),
+                require_currency=price_el is None,
+            )
+            href = normalise_public_url(
+                a.get("href") if a else "",
+                base_url=url,
+                allowed_hosts=("musicmagpie.co.uk",),
+            ) or url
             row = product_row(
                 name=name, price=price, store_name="MusicMagpie", url=href, is_used=True
             )
@@ -79,18 +93,27 @@ def _search_uncached(title: str, platform: str = "", limit: int = 8) -> dict[str
             if len(rows) >= limit * 3:
                 break
 
-    rows = filter_by_title(rows, title, min_score=0.67)[:limit]
+    rows = filter_by_title(rows, title, min_score=0.67)
+    deduped: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        key = ((row.get("name") or "").casefold(), row.get("url") or "")
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(row)
+    rows = deduped[:limit]
     out["results"] = rows
     out["blocked"] = len(rows) == 0
     return out
 
 
 def try_musicmagpie(title: str, platform: str = "", limit: int = 8) -> dict[str, Any]:
-    title = (title or "").strip()
+    title = re.sub(r"\s+", " ", str(title or "")).strip()[:160]
     if not title:
         return {"results": [], "blocked": True, "search_url": ""}
     return cached(
-        f"mmagpie:v1:{title.lower()}:{platform}:{limit}",
+        f"mmagpie:v2:{title.lower()}:{platform}:{limit}",
         lambda: _search_uncached(title, platform=platform, limit=limit),
         timeout=1800,
     )

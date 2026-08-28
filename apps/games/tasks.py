@@ -13,17 +13,20 @@ them out (console backend in dev).
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, wait
+
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 
-from .models import Game, PriceRecord, Store, AdminChangeLog, Watch, PriceAlert
+from .models import Game, Store, AdminChangeLog, Watch, PriceAlert
 from .fx import to_gbp_or_zero
 from .clients.steam import get_app_details
 from .clients.cheapshark import deals_for_title
 from .clients.psn import best_psn_deal
 from .clients.amazon_uk import search_amazon_uk
+from .price_snapshots import record_snapshot
 
 
 def _store(slug: str, name: str, store_type: str, website: str = "", notes: str = "") -> Store:
@@ -63,7 +66,8 @@ def _check_watch_targets(game: Game, price, currency: str, store_name: str = "",
             currency=settings.DEFAULT_CURRENCY,
             target_price=watch.target_price,
             store=store_name[:120],
-            url=url[:300],
+            # PriceAlert.url uses Django's 200-character URLField default.
+            url=url[:200],
         )
         hits += 1
     return hits
@@ -96,7 +100,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
             original = detail.get("original")
             discount = detail.get("discount") or None
             notes = detail["name"][:255]
-            rec = PriceRecord.objects.create(
+            rec, _ = record_snapshot(
                 game=game,
                 store=steam,
                 price=price,
@@ -119,9 +123,32 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
     else:
         result["errors"].append("steam fetch failed")
 
+    # These sources are independent network calls. Fetch them concurrently,
+    # then perform all ORM writes in this main thread (important for SQLite).
+    # The batch deadline keeps one slow shop from delaying every tracked game.
+    secondary = {}
+    pool = ThreadPoolExecutor(max_workers=3)
+    futures = {
+        "psn": pool.submit(best_psn_deal, game.title),
+        "amazon": pool.submit(search_amazon_uk, game.title, limit=3),
+        "cheapshark": pool.submit(deals_for_title, game.title, limit=5),
+    }
+    try:
+        completed, _ = wait(tuple(futures.values()), timeout=18)
+        for source, future in futures.items():
+            if future not in completed:
+                result["errors"].append(f"{source}: timeout")
+                continue
+            try:
+                secondary[source] = future.result()
+            except Exception as exc:  # noqa: BLE001 — each source soft-fails
+                result["errors"].append(f"{source}: {exc}")
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
     # PSN UK
     try:
-        psn = best_psn_deal(game.title)
+        psn = secondary.get("psn")
         if psn and psn.get("price") is not None and float(psn["price"]) > 0:
             store = _store(
                 "psn-uk",
@@ -130,7 +157,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 "https://store.playstation.com/en-gb",
                 "Public Chihiro tumbler search",
             )
-            rec = PriceRecord.objects.create(
+            rec, _ = record_snapshot(
                 game=game,
                 store=store,
                 price=psn["price"],
@@ -150,7 +177,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
 
     # Amazon UK (often WAF-blocked)
     try:
-        amz = search_amazon_uk(game.title, limit=3)
+        amz = secondary.get("amazon") or {}
         rows = amz.get("results") or []
         if rows:
             store = _store(
@@ -161,7 +188,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 "Public search HTML when available",
             )
             row = rows[0]
-            rec = PriceRecord.objects.create(
+            rec, _ = record_snapshot(
                 game=game,
                 store=store,
                 price=row["price"],
@@ -179,7 +206,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
 
     # CheapShark
     try:
-        deals = deals_for_title(game.title, limit=5)
+        deals = secondary.get("cheapshark") or []
         if deals:
             best = deals[0]
             slug = "cs-" + "".join(
@@ -192,7 +219,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
                 best.get("url") or "https://www.cheapshark.com",
                 "Via CheapShark — may include keyshops. Verify seller.",
             )
-            rec = PriceRecord.objects.create(
+            rec, _ = record_snapshot(
                 game=game,
                 store=tp,
                 price=best["price"],

@@ -39,9 +39,10 @@ def empty_platform_bundle(title: str = "", platform: str = "") -> dict[str, Any]
         "musicmagpie_rows": [],
         "musicmagpie_blocked": True,
         "musicmagpie_search_url": "",
+        "specialist_sources": [],
         "best_local": [],
         "stores_ok": 0,
-        "stores_total": 7,
+        "stores_total": 11,
         "uk_links": uk_search_links(title, platform=platform) if title else [],
     }
 

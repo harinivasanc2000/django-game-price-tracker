@@ -184,6 +184,25 @@ def platform_bundle(
     currys = uk.get("currys") or {}
     smyths = uk.get("smyths") or {}
     mm = uk.get("musicmagpie") or {}
+    # These stores share a generic BS4 contract, so carry them as structured
+    # sources rather than adding four more near-identical template branches.
+    specialist_sources = []
+    for key, label in (
+        ("the_game_collection", "The Game Collection"),
+        ("hit", "Hit"),
+        ("shopto", "ShopTo"),
+        ("simplygames", "SimplyGames"),
+    ):
+        source = uk.get(key) or {}
+        specialist_sources.append(
+            {
+                "key": key,
+                "label": label,
+                "rows": [_ser(row) for row in (source.get("results") or [])],
+                "blocked": source.get("blocked", True),
+                "search_url": source.get("search_url") or "",
+            }
+        )
 
     base.update(
         {
@@ -216,9 +235,10 @@ def platform_bundle(
             "musicmagpie_rows": [_ser(r) for r in (mm.get("results") or [])],
             "musicmagpie_blocked": mm.get("blocked", True),
             "musicmagpie_search_url": mm.get("search_url"),
+            "specialist_sources": specialist_sources,
             "best_local": [_ser(r) for r in (uk.get("best_local") or [])],
             "stores_ok": uk.get("stores_ok") or 0,
-            "stores_total": uk.get("stores_total") or 7,
+            "stores_total": uk.get("stores_total") or 11,
             "uk_links": uk.get("uk_links")
             or uk_search_links(title, platform, min_price=lo, max_price=hi, condition=cond),
             "active_filters": {
