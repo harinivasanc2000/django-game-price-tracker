@@ -82,7 +82,7 @@ def _log_history(request, action, query="", steam_app_id=None, title="", detail_
 
 def _bust_ui_caches():
     bust("tracked_drawer:v1")
-    bust("home:cards:v2")
+    bust("home:cards:v3")
 
 
 def _unique_slug(name: str, app_id: int) -> str:

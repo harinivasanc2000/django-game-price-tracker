@@ -27,6 +27,7 @@ Pure functions, no network — safe for unit tests.
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Iterable
 
 # Noise that never identifies a specific game
@@ -58,13 +59,21 @@ _CONTAMINANTS = frozenset(
     }
 )
 
+# Franchise entries which share a short base title but are different games.
+# Keep this deliberately small and evidence-based; broad suffix rejection would
+# incorrectly hide legitimate editions such as "Ultimate Edition".
+_VARIANT_EXCLUSIONS = (
+    (frozenset({"god", "war"}), frozenset({"ragnarok"})),
+)
+
 # Subtitle / entry discriminators often shared across a franchise
 # (used only as a hint for weighting — coverage still primary)
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
 def normalize_title(text: str) -> str:
-    t = (text or "").lower()
+    # NFKD makes real-world store spellings consistent (Ragnarök → Ragnarok).
+    t = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
     t = t.replace("&", " and ")
     t = t.replace("'", "").replace("’", "")
     t = re.sub(r"[:/|_–—·•]+", " ", t)
@@ -118,6 +127,12 @@ def title_match_score(listing_name: str, query_title: str) -> float:
     for c in _CONTAMINANTS:
         if c in listing_tokens and c not in q_set:
             return 0.0
+
+    # A known sequel marker is stronger evidence than a shared franchise name.
+    for base_tokens, forbidden_tokens in _VARIANT_EXCLUSIONS:
+        if base_tokens.issubset(q_set) and not (forbidden_tokens & q_set):
+            if forbidden_tokens & listing_tokens:
+                return 0.0
 
     # --- Coverage of query tokens (whole-word) ---
     hits = [t for t in q_tokens if _whole_word_present(t, listing_norm)]

@@ -48,12 +48,8 @@ class TitleMatchTests(SimpleTestCase):
     def test_god_of_war_not_confused_with_ragnarok(self):
         # Query is the 2018 God of War — Ragnarök has an extra discriminator token
         self.assertFalse(titles_match("God of War Ragnarök", "God of War"))
-        # Actually "God of War" tokens = [god, war] — Ragnarök listing has both
-        # Contaminant alone may not fire. Discriminator for 2-token needs BOTH.
-        # Ragnarök has god+war → would pass 2-token rule. That's OK for short titles;
-        # longer queries are stricter. Document expected soft behaviour:
         score = title_match_score("God of War Ragnarök", "God of War")
-        self.assertGreaterEqual(score, 0.67)
+        self.assertLess(score, 0.67)
 
     def test_cyberpunk_accepts_editions(self):
         self.assertTrue(titles_match("Cyberpunk 2077 Ultimate Edition", "Cyberpunk 2077"))

@@ -19,7 +19,7 @@ from .constants import POPULAR_APP_IDS
 from .fx import to_gbp_or_zero
 from .models import Game, PriceRecord
 
-HOME_CACHE_KEY = "home:cards:v2"
+HOME_CACHE_KEY = "home:cards:v3"
 HOME_CACHE_TTL = 180  # 3 minutes — balances freshness vs Steam rate limits
 SEASONAL_SALE_WINDOW_DAYS = 90
 HOME_CARD_LIMIT = 12
