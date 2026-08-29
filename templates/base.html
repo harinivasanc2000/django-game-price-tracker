@@ -188,7 +188,7 @@
     <header>
       <a href="/" class="logo">{% if site_settings %}{{ site_settings.site_title }}{% else %}Game <span>Price</span> Tracker{% endif %}</a>
       <nav>
-        <button type="button" class="nav-btn ico ico-track" id="openTracked">Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}</button>
+        <button type="button" class="nav-btn ico ico-track" id="openTracked" aria-controls="trackedDrawer" aria-expanded="false" aria-haspopup="dialog">Tracked{% if tracked_count %} ({{ tracked_count }}){% endif %}</button>
         <a class="ico ico-search" href="{% url 'games:steam_search' %}">Search</a>
         <a class="ico ico-deals" href="{% url 'games:best_deals' %}">Deals</a>
         <a class="ico ico-guide" href="{% url 'games:buy_guide' %}">Guide</a>
@@ -214,10 +214,10 @@
   </div>
 
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
-  <aside class="drawer" id="trackedDrawer" aria-hidden="true">
+  <aside class="drawer" id="trackedDrawer" role="dialog" aria-modal="true" aria-labelledby="trackedDrawerTitle" aria-hidden="true" tabindex="-1" inert>
     <div class="drawer-head">
-      <strong class="ico ico-track">Tracked</strong>
-      <button type="button" class="nav-btn" id="closeTracked">Close</button>
+      <strong class="ico ico-track" id="trackedDrawerTitle">Tracked</strong>
+      <button type="button" class="nav-btn" id="closeTracked" aria-label="Close tracked games">Close</button>
     </div>
     <div class="drawer-body">
       {% if tracked_drawer %}
@@ -270,15 +270,69 @@
   (function () {
     var drawer = document.getElementById('trackedDrawer');
     var backdrop = document.getElementById('drawerBackdrop');
-    var open = function () { drawer.classList.add('open'); backdrop.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); };
-    var close = function () { drawer.classList.remove('open'); backdrop.classList.remove('open'); drawer.setAttribute('aria-hidden', 'true'); };
     var ot = document.getElementById('openTracked');
     var ct = document.getElementById('closeTracked');
+    var previouslyFocused = null;
+
+    if (!drawer || !backdrop) return;
+
+    var focusableElements = function () {
+      return Array.prototype.filter.call(
+        drawer.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'),
+        function (element) { return element.getAttribute('aria-hidden') !== 'true'; }
+      );
+    };
+    var isOpen = function () { return drawer.classList.contains('open'); };
+    var open = function () {
+      if (isOpen()) return;
+      previouslyFocused = document.activeElement;
+      drawer.classList.add('open');
+      backdrop.classList.add('open');
+      drawer.removeAttribute('inert');
+      drawer.setAttribute('aria-hidden', 'false');
+      if (ot) ot.setAttribute('aria-expanded', 'true');
+      var focusable = focusableElements();
+      (focusable[0] || drawer).focus();
+    };
+    var close = function () {
+      if (!isOpen()) return;
+      drawer.classList.remove('open');
+      backdrop.classList.remove('open');
+      if (ot) ot.setAttribute('aria-expanded', 'false');
+      // Move focus outside before hiding the dialog from assistive technology.
+      var restoreTarget = previouslyFocused && document.contains(previouslyFocused) ? previouslyFocused : ot;
+      if (restoreTarget && restoreTarget.focus) restoreTarget.focus();
+      drawer.setAttribute('aria-hidden', 'true');
+      drawer.setAttribute('inert', '');
+      previouslyFocused = null;
+    };
     if (ot) ot.addEventListener('click', open);
     if (ct) ct.addEventListener('click', close);
     if (backdrop) backdrop.addEventListener('click', close);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') close();
+      if (e.key === 'Escape' && isOpen()) {
+        e.preventDefault();
+        close();
+        return;
+      }
+      if (e.key === 'Tab' && isOpen()) {
+        var focusable = focusableElements();
+        if (!focusable.length) {
+          e.preventDefault();
+          drawer.focus();
+          return;
+        }
+        var first = focusable[0];
+        var last = focusable[focusable.length - 1];
+        if (e.shiftKey && (document.activeElement === first || document.activeElement === drawer || !drawer.contains(document.activeElement))) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && (document.activeElement === last || document.activeElement === drawer || !drawer.contains(document.activeElement))) {
+          e.preventDefault();
+          first.focus();
+        }
+        return;
+      }
       if (e.key === '/' && !e.metaKey && !e.ctrlKey) {
         var tag = (e.target && e.target.tagName) || '';
         if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;

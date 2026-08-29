@@ -1,19 +1,19 @@
-"""
-Background price refresh tasks.
+"""Low-overhead background refreshes for every supported price source.
 
-- Steam (official, region-aware)
-- PSN UK (public tumbler search)
-- CheapShark best deal (third-party / key shops)
-- Amazon UK when HTML is available (often blocked by WAF)
-
-After each snapshot we check the user Watch target prices and record
-PriceAlert rows when a target is hit. `send_pending_alerts` then emails
-them out (console backend in dev).
+Steam is fetched directly because it is identified by app id.  Every other
+official/UK source is obtained through one cached :func:`platform_bundle`
+call, so a page view and a background refresh can share the same network work.
+Only the best valid offer per retailer is written through ``record_snapshot``;
+that keeps the append-only history useful without storing every search result.
 """
 
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, wait
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+import re
+from typing import Any, Iterable
 
 from celery import shared_task
 from django.conf import settings
@@ -22,11 +22,100 @@ from django.utils import timezone
 
 from .models import Game, Store, AdminChangeLog, Watch, PriceAlert
 from .fx import to_gbp_or_zero
+from .clients.scrape_utils import normalise_public_url
 from .clients.steam import get_app_details
 from .clients.cheapshark import deals_for_title
-from .clients.psn import best_psn_deal
-from .clients.amazon_uk import search_amazon_uk
+from .platform_bundle import platform_bundle
 from .price_snapshots import record_snapshot
+
+
+# Keep the refresh fan-out deliberately small. ``platform_bundle`` performs its
+# own bounded source fan-out; this outer pool only overlaps that cached lookup
+# with CheapShark and always waits for both workers before returning.
+REFRESH_WORKERS = 2
+MAX_REFRESH_PRICE = Decimal("99999999.99")
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceSpec:
+    """Stable database identity and storage defaults for a bundle source."""
+
+    slug: str
+    name: str
+    store_type: str
+    website: str
+    is_physical: bool = False
+    is_used: bool = False
+
+
+# The bundle keys are part of the internal API shared by the detail page and
+# refresh worker. One Store row per source gives PriceRecord a compact and
+# query-friendly cross-platform series without requiring another table.
+_BUNDLE_SOURCES: dict[str, _SourceSpec] = {
+    "psn_rows": _SourceSpec(
+        "psn-uk", "PlayStation Store (UK)", Store.StoreType.OFFICIAL,
+        "https://store.playstation.com/en-gb",
+    ),
+    "xbox_rows": _SourceSpec(
+        "xbox-uk", "Xbox / Microsoft Store", Store.StoreType.OFFICIAL,
+        "https://www.xbox.com/en-GB",
+    ),
+    "nintendo_rows": _SourceSpec(
+        "nintendo-eshop-uk", "Nintendo eShop (UK)", Store.StoreType.OFFICIAL,
+        "https://www.nintendo.com/en-gb/",
+    ),
+    "amazon_rows": _SourceSpec(
+        "amazon-uk", "Amazon UK", Store.StoreType.MARKETPLACE,
+        "https://www.amazon.co.uk", is_physical=True,
+    ),
+    "cex_rows": _SourceSpec(
+        "cex-uk", "CeX", Store.StoreType.PHYSICAL, "https://uk.webuy.com",
+        is_physical=True, is_used=True,
+    ),
+    "ebay_rows": _SourceSpec(
+        "ebay-uk", "eBay UK", Store.StoreType.MARKETPLACE,
+        "https://www.ebay.co.uk", is_physical=True,
+    ),
+    "game_rows": _SourceSpec(
+        "game-uk", "GAME UK", Store.StoreType.PHYSICAL,
+        "https://www.game.co.uk", is_physical=True,
+    ),
+    "argos_rows": _SourceSpec(
+        "argos-uk", "Argos", Store.StoreType.PHYSICAL,
+        "https://www.argos.co.uk", is_physical=True,
+    ),
+    "currys_rows": _SourceSpec(
+        "currys-uk", "Currys", Store.StoreType.PHYSICAL,
+        "https://www.currys.co.uk", is_physical=True,
+    ),
+    "smyths_rows": _SourceSpec(
+        "smyths-uk", "Smyths Toys", Store.StoreType.PHYSICAL,
+        "https://www.smythstoys.com/uk/en-gb", is_physical=True,
+    ),
+    "musicmagpie_rows": _SourceSpec(
+        "musicmagpie-uk", "MusicMagpie", Store.StoreType.PHYSICAL,
+        "https://www.musicmagpie.co.uk", is_physical=True, is_used=True,
+    ),
+}
+
+_SPECIALIST_SOURCES: dict[str, _SourceSpec] = {
+    "the_game_collection": _SourceSpec(
+        "the-game-collection", "The Game Collection", Store.StoreType.PHYSICAL,
+        "https://www.thegamecollection.net", is_physical=True,
+    ),
+    "hit": _SourceSpec(
+        "hit-uk", "Hit", Store.StoreType.PHYSICAL,
+        "https://hit.co.uk", is_physical=True,
+    ),
+    "shopto": _SourceSpec(
+        "shopto-uk", "ShopTo", Store.StoreType.PHYSICAL,
+        "https://www.shopto.net", is_physical=True,
+    ),
+    "simplygames": _SourceSpec(
+        "simplygames-uk", "SimplyGames", Store.StoreType.PHYSICAL,
+        "https://www.simplygames.com", is_physical=True,
+    ),
+}
 
 
 def _store(slug: str, name: str, store_type: str, website: str = "", notes: str = "") -> Store:

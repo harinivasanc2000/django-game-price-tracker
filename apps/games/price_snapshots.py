@@ -12,6 +12,7 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from django.db import transaction
 from django.utils import timezone
 
 from .clients.scrape_utils import normalise_public_url
@@ -87,24 +88,29 @@ def record_snapshot(
     ):
         raise ValueError("Original price must be finite, in-range, and non-negative.")
 
-    latest = (
-        PriceRecord.objects.filter(game=game, store=store)
-        .order_by("-recorded_at", "-pk")
-        .first()
-    )
-    if latest and latest.recorded_at >= timezone.now() - SNAPSHOT_HEARTBEAT:
-        comparable = (
-            latest.price == normalized["price"]
-            and latest.currency == normalized["currency"]
-            and latest.original_price == normalized["original_price"]
-            and latest.discount_percent == normalized["discount_percent"]
-            and latest.url == normalized["url"]
-            and latest.is_physical == normalized["is_physical"]
-            and latest.is_used == normalized["is_used"]
-            and latest.condition == normalized["condition"]
-            and latest.in_stock == normalized["in_stock"]
+    # Lock the stable parent row while comparing/inserting. Two workers can
+    # otherwise both observe the same old snapshot and insert duplicates. The
+    # short transaction contains no network work and serialises only one game.
+    with transaction.atomic():
+        Game.objects.select_for_update().only("pk").get(pk=game.pk)
+        latest = (
+            PriceRecord.objects.filter(game=game, store=store)
+            .order_by("-recorded_at", "-pk")
+            .first()
         )
-        if comparable:
-            return latest, False
+        if latest and latest.recorded_at >= timezone.now() - SNAPSHOT_HEARTBEAT:
+            comparable = (
+                latest.price == normalized["price"]
+                and latest.currency == normalized["currency"]
+                and latest.original_price == normalized["original_price"]
+                and latest.discount_percent == normalized["discount_percent"]
+                and latest.url == normalized["url"]
+                and latest.is_physical == normalized["is_physical"]
+                and latest.is_used == normalized["is_used"]
+                and latest.condition == normalized["condition"]
+                and latest.in_stock == normalized["in_stock"]
+            )
+            if comparable:
+                return latest, False
 
-    return PriceRecord.objects.create(game=game, store=store, **normalized), True
+        return PriceRecord.objects.create(game=game, store=store, **normalized), True

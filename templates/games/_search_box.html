@@ -7,6 +7,12 @@
       id="steamSearchInput"
       value="{{ q|default:'' }}"
       placeholder="{{ placeholder|default:'Search games…' }}"
+      role="combobox"
+      aria-label="Search games"
+      aria-autocomplete="list"
+      aria-controls="suggestDropdown"
+      aria-expanded="false"
+      aria-haspopup="listbox"
       {% if autofocus %}autofocus{% endif %}
     >
     <select name="platform" id="platformSelect" title="Platform">
@@ -19,7 +25,7 @@
     </select>
     <button type="submit">Search</button>
   </form>
-  <div id="suggestDropdown" class="suggest-dd" hidden></div>
+  <div id="suggestDropdown" class="suggest-dd" role="listbox" aria-label="Game suggestions" hidden></div>
 </div>
 
 <style>
@@ -67,20 +73,65 @@
   if (!input || !dd) return;
 
   let timer = null;
-  let items = [];
   let active = -1;
+  let requestController = null;
+  let requestVersion = 0;
 
-  function hide() { dd.hidden = true; active = -1; }
+  function suggestionHref(appId) {
+    const platform = (document.getElementById('platformSelect') || {}).value || '';
+    return `/steam/${appId}/${platform ? '?platform=' + encodeURIComponent(platform) : ''}`;
+  }
+
+  function clearActive() {
+    active = -1;
+    input.removeAttribute('aria-activedescendant');
+    dd.querySelectorAll('.suggest-item').forEach((node) => {
+      node.classList.remove('active');
+      node.setAttribute('aria-selected', 'false');
+    });
+  }
+
+  function hide() {
+    clearActive();
+    dd.hidden = true;
+    input.setAttribute('aria-expanded', 'false');
+  }
+
+  function invalidatePendingRequest() {
+    requestVersion += 1;
+    if (requestController) requestController.abort();
+    requestController = null;
+  }
+
+  function setActive(next, nodes) {
+    clearActive();
+    if (next < 0 || next >= nodes.length) return;
+    active = next;
+    const node = nodes[active];
+    node.classList.add('active');
+    node.setAttribute('aria-selected', 'true');
+    input.setAttribute('aria-activedescendant', node.id);
+    node.scrollIntoView({ block: 'nearest' });
+  }
+
+  function updateSuggestionLinks() {
+    dd.querySelectorAll('.suggest-item').forEach((node) => {
+      const appId = Number(node.dataset.appId);
+      if (Number.isInteger(appId) && appId > 0) node.href = suggestionHref(appId);
+    });
+    clearActive();
+  }
 
   function render(list) {
-    items = (list || []).filter((suggestion) => {
+    clearActive();
+    const items = (list || []).filter((suggestion) => {
       const appId = Number(suggestion.app_id);
       return Number.isInteger(appId) && appId > 0;
     });
     if (!items.length) { hide(); return; }
-    const plat = (document.getElementById('platformSelect') || {}).value || '';
     const fragment = document.createDocumentFragment();
     items.forEach((s, i) => {
+      const appId = Number(s.app_id);
       const price = s.price_status === 'free' ? 'Free'
         : s.price_status === 'unknown' ? 'Unknown'
         : (s.price ? s.price + ' ' + (s.currency || '') : 'Unknown');
@@ -88,7 +139,11 @@
       const link = document.createElement('a');
       link.className = 'suggest-item';
       link.dataset.i = String(i);
-      link.href = `/steam/${Number(s.app_id)}/${plat ? '?platform=' + encodeURIComponent(plat) : ''}`;
+      link.dataset.appId = String(appId);
+      link.id = `steam-suggestion-${i}`;
+      link.setAttribute('role', 'option');
+      link.setAttribute('aria-selected', 'false');
+      link.href = suggestionHref(appId);
 
       // Suggestions come from a remote catalogue. Build text nodes instead of
       // interpolating remote titles/URLs into innerHTML.
@@ -118,19 +173,40 @@
     });
     dd.replaceChildren(fragment);
     dd.hidden = false;
+    input.setAttribute('aria-expanded', 'true');
   }
 
   function fetchSuggest(q) {
-    if (q.length < 2) { hide(); return; }
-    fetch(`/api/suggest/?q=${encodeURIComponent(q)}&cc=GB`)
-      .then(r => r.json())
-      .then(data => render(data.suggestions || []))
-      .catch(() => hide());
+    if (q.length < 2) { invalidatePendingRequest(); hide(); return; }
+    if (requestController) requestController.abort();
+    requestController = typeof AbortController === 'undefined' ? null : new AbortController();
+    const version = ++requestVersion;
+    const options = requestController ? { signal: requestController.signal } : {};
+    fetch(`/api/suggest/?q=${encodeURIComponent(q)}&cc=GB`, options)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Suggestion request failed (${response.status})`);
+        return response.json();
+      })
+      .then((data) => {
+        // Ignore a late response if the user has already changed the query.
+        if (version !== requestVersion || input.value.trim() !== q) return;
+        render(data.suggestions || []);
+      })
+      .catch((error) => {
+        if (error && error.name === 'AbortError') return;
+        if (version === requestVersion) hide();
+      })
+      .finally(() => {
+        if (version === requestVersion) requestController = null;
+      });
   }
 
   input.addEventListener('input', () => {
     clearTimeout(timer);
+    invalidatePendingRequest();
+    hide();
     const q = input.value.trim();
+    if (q.length < 2) return;
     timer = setTimeout(() => fetchSuggest(q), 220);
   });
 
@@ -138,22 +214,27 @@
     const nodes = dd.querySelectorAll('.suggest-item');
     if (e.key === 'ArrowDown' && !dd.hidden && nodes.length) {
       e.preventDefault();
-      active = Math.min(active + 1, nodes.length - 1);
-      nodes.forEach((n, i) => n.classList.toggle('active', i === active));
+      setActive(Math.min(active + 1, nodes.length - 1), nodes);
     } else if (e.key === 'ArrowUp' && !dd.hidden && nodes.length) {
       e.preventDefault();
-      active = Math.max(active - 1, 0);
-      nodes.forEach((n, i) => n.classList.toggle('active', i === active));
+      setActive(active < 0 ? nodes.length - 1 : Math.max(active - 1, 0), nodes);
     } else if (e.key === 'Enter' && active >= 0 && nodes[active]) {
       e.preventDefault();
       window.location = nodes[active].href;
     } else if (e.key === 'Escape') {
+      invalidatePendingRequest();
       hide();
     }
   });
 
+  const platform = document.getElementById('platformSelect');
+  if (platform) platform.addEventListener('change', updateSuggestionLinks);
+
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.search-wrap')) hide();
+    if (!e.target.closest('.search-wrap')) {
+      invalidatePendingRequest();
+      hide();
+    }
   });
 })();
 </script>

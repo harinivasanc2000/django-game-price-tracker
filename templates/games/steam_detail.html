@@ -95,7 +95,6 @@
   .news-item a { color: var(--text); font-size: 0.86rem; font-weight: 500; text-decoration: none !important; }
   .news-item a:hover { color: var(--accent2); }
   .news-item .meta { font-size: 0.7rem; color: var(--muted); margin-top: 0.15rem; }
-  .plat-loading { opacity: 0.5; pointer-events: none; }
   .watch-box { margin-top: 0.8rem; padding: 0.65rem; border-radius: 11px; border: 1px solid var(--border); background: var(--bg); }
   .watch-box input {
     width: 5.2rem; padding: 0.3rem 0.4rem; border-radius: 8px;
@@ -139,9 +138,9 @@
         <div class="plat-row" id="platformChips" data-app="{{ app_id }}" data-cc="{{ country }}"
              data-min="{{ min_price }}" data-max="{{ max_price }}" data-condition="{{ condition }}">
           {% for val, label in store_platforms %}
-            <button type="button" data-platform="{{ val }}" class="{% if current_platform == val %}on{% endif %}">{{ label }}</button>
+            <button type="button" data-platform="{{ val }}" aria-pressed="{% if current_platform == val %}true{% else %}false{% endif %}" class="{% if current_platform == val %}on{% endif %}">{{ label }}</button>
           {% endfor %}
-          <button type="button" data-platform="" class="{% if not current_platform %}on{% endif %}">All</button>
+          <button type="button" data-platform="" aria-pressed="{% if not current_platform %}true{% else %}false{% endif %}" class="{% if not current_platform %}on{% endif %}">All</button>
         </div>
 
         {% include "games/_deal_filters.html" with platforms=store_platforms %}
@@ -288,9 +287,9 @@
 {% block extra_js %}
 <script>
 (function () {
+  'use strict';
   const chips = document.getElementById('platformChips');
   if (!chips) return;
-  const appId = chips.dataset.app;
   const cc = chips.dataset.cc || 'GB';
   const minP = chips.dataset.min || '';
   const maxP = chips.dataset.max || '';
@@ -311,84 +310,9 @@
     });
   }
 
-  function esc(s) {
-    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  function rowHtml(name, price, extra, url) {
-    const title = url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
-    return `<div class="deal-row"><div><strong>${title}</strong>${extra || ''}</div><div class="price-now">${esc(price)}</div></div>`;
-  }
-
-  function renderStoreBlock(rows, searchUrl, label, kindClass) {
-    let html = '';
-    (rows || []).forEach(r => {
-      html += rowHtml(
-        r.name,
-        (r.price != null ? r.price + ' ' + (r.currency || 'GBP') : ''),
-        ` <span class="kind ${kindClass || ''}">${esc(label)}</span>` +
-          (r.condition ? ` <span class="badge">${esc(r.condition)}</span>` : '') +
-          (r.rating ? ` <span class="badge">${esc(r.rating)}★</span>` : ''),
-        r.url
-      );
-    });
-    if (!(rows || []).length && searchUrl) {
-      html += `<p style="padding:0.4rem 1rem;font-size:0.86rem;"><a href="${esc(searchUrl)}" target="_blank" rel="noopener">Search ${esc(label)} →</a></p>`;
-    }
-    return html;
-  }
-
-  function renderPlatform(data) {
-    const psn = document.getElementById('psnList');
-    if (psn) {
-      if ((data.psn_rows || []).length) {
-        psn.innerHTML = data.psn_rows.map(r => rowHtml(
-          r.name, r.display_price || (r.price + ' ' + (r.currency || 'GBP')),
-          r.is_full_game ? ' <span class="badge digital">Full</span>' : '', r.url
-        )).join('');
-      } else {
-        psn.innerHTML = '<p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No PSN matches.</p>';
-      }
-    }
-    const uk = document.getElementById('ukList');
-    if (uk) {
-      let html = '';
-      html += renderStoreBlock(data.game_rows, data.game_search_url, 'GAME', 'retail');
-      html += renderStoreBlock(data.smyths_rows, data.smyths_search_url, 'Smyths', 'retail');
-      html += renderStoreBlock(data.argos_rows, data.argos_search_url, 'Argos', 'retail');
-      html += renderStoreBlock(data.currys_rows, data.currys_search_url, 'Currys', 'retail');
-      (data.specialist_sources || []).forEach(source => {
-        html += renderStoreBlock(
-          source.rows, source.search_url, source.label || 'UK specialist', 'retail'
-        );
-      });
-      html += renderStoreBlock(data.cex_rows, data.cex_search_url, 'CeX', 'used');
-      html += renderStoreBlock(data.musicmagpie_rows, data.musicmagpie_search_url, 'MusicMagpie', 'used');
-      html += renderStoreBlock(data.ebay_rows, data.ebay_search_url, 'eBay', 'marketplace');
-      html += '<div style="padding:0.55rem 1rem 0.9rem;">' +
-        (data.uk_links || []).map(l => `<a class="link-chip" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`).join('') +
-        '</div>';
-      uk.innerHTML = html;
-    }
-    const amz = document.getElementById('amazonList');
-    if (amz) {
-      let html = '';
-      if (data.amazon_blocked) {
-        html += `<div class="disclaimer">Amazon may block bots. ${data.amazon_search_url ? `<a href="${esc(data.amazon_search_url)}" target="_blank" rel="noopener">Search →</a>` : ''}</div>`;
-      }
-      (data.amazon_rows || []).forEach(r => {
-        html += rowHtml(r.name, r.price + ' ' + (r.currency || 'GBP'), r.rating ? ` <span class="badge">${esc(r.rating)}★</span>` : '', r.url);
-      });
-      if (!(data.amazon_rows || []).length && !data.amazon_blocked) {
-        html += '<p style="padding:0.7rem 0.9rem;color:var(--muted);font-size:0.86rem;">No rows.</p>';
-      }
-      amz.innerHTML = html;
-    }
-  }
-
   function filterQs(plat) {
     const p = new URLSearchParams();
-    p.set('platform', plat || '');
+    if (plat) p.set('platform', plat);
     p.set('cc', cc);
     if (minP) p.set('min_price', minP);
     if (maxP) p.set('max_price', maxP);
@@ -396,22 +320,16 @@
     return p.toString();
   }
 
-  focusPanels('{{ current_platform|default:"" }}');
+  const selected = chips.querySelector('button[aria-pressed="true"]');
+  focusPanels(selected ? selected.dataset.platform || '' : '');
 
   chips.querySelectorAll('button[data-platform]').forEach(btn => {
     btn.addEventListener('click', () => {
       const plat = btn.getAttribute('data-platform') || '';
-      chips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
-      focusPanels(plat);
-      if (panels) panels.classList.add('plat-loading');
-      fetch(`/api/platform/${appId}/?${filterQs(plat)}`)
-        .then(r => r.json())
-        .then(data => {
-          renderPlatform(data);
-          history.replaceState(null, '', `?${filterQs(plat)}`);
-        })
-        .catch(() => {})
-        .finally(() => { if (panels) panels.classList.remove('plat-loading'); });
+      // A platform changes every derived section (top pick, graph, official
+      // panels, local source count and filters).  A normal navigation reuses
+      // the short-lived server cache while keeping all of that state atomic.
+      window.location.assign(`${window.location.pathname}?${filterQs(plat)}`);
     });
   });
 })();

@@ -29,6 +29,33 @@ _OFFICIAL_FOR_PLATFORM = {
 
 CONDITION_CHOICES = [("", "Any condition"), ("new", "New"), ("used", "Used")]
 DETAIL_POOL_TIMEOUT = 9.0
+_PLATFORM_VALUES = frozenset(value for value, _label in PLATFORMS)
+_CONDITION_VALUES = frozenset(value for value, _label in CONDITION_CHOICES)
+
+
+def _normalise_country(raw: str | None) -> str:
+    """Accept only a two-letter ASCII store country, defaulting to UK."""
+    country = (raw or "GB").strip().upper()
+    return country if len(country) == 2 and country.isascii() and country.isalpha() else "GB"
+
+
+def _normalise_filters(request):
+    """Canonicalise every detail/API filter before network or cache use."""
+    platform = request.GET.get("platform", "").strip().lower()
+    if platform not in _PLATFORM_VALUES:
+        platform = ""
+    condition = request.GET.get("condition", "").strip().lower()
+    if condition not in _CONDITION_VALUES:
+        condition = ""
+    min_price = parse_price_bound(request.GET.get("min_price"))
+    max_price = parse_price_bound(request.GET.get("max_price"))
+    if min_price is not None and max_price is not None and min_price > max_price:
+        min_price, max_price = max_price, min_price
+    return _normalise_country(request.GET.get("cc")), platform, min_price, max_price, condition
+
+
+def _decimal_text(value) -> str:
+    return format(value.normalize(), "f") if value is not None else ""
 
 
 def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
@@ -51,11 +78,7 @@ def _sort_live_offers(offers: list[dict], platform: str) -> list[dict]:
 
 
 def platform_deals_api(request, app_id: int):
-    platform = request.GET.get("platform", "").strip().lower()
-    country = request.GET.get("cc", "GB").strip().upper() or "GB"
-    min_price = parse_price_bound(request.GET.get("min_price"))
-    max_price = parse_price_bound(request.GET.get("max_price"))
-    condition = request.GET.get("condition", "").strip().lower()
+    country, platform, min_price, max_price, condition = _normalise_filters(request)
     detail = get_app_details(app_id, country=country)
     if not detail:
         return JsonResponse({"error": "not found"}, status=404)
@@ -73,11 +96,7 @@ def platform_deals_api(request, app_id: int):
 
 
 def steam_detail(request, app_id: int):
-    country = request.GET.get("cc", "GB").strip().upper() or "GB"
-    platform = request.GET.get("platform", "").strip().lower()
-    min_price = parse_price_bound(request.GET.get("min_price"))
-    max_price = parse_price_bound(request.GET.get("max_price"))
-    condition = request.GET.get("condition", "").strip().lower()
+    country, platform, min_price, max_price, condition = _normalise_filters(request)
 
     detail = get_app_details(app_id, country=country)
     if not detail:
@@ -214,68 +233,51 @@ def steam_detail(request, app_id: int):
 
     live_offers: list[dict] = []
 
-    if detail.get("price_status") in {"paid", "free"} and detail.get("price") is not None:
-        live_offers.append(
-            {
-                "store": "Steam",
-                "price": detail["price"],
-                "price_gbp": to_gbp_or_zero(detail["price"], detail.get("currency") or "GBP"),
-                "currency": detail.get("currency") or "GBP",
-                "kind": "official",
-                "url": detail.get("url"),
-            }
-        )
-    for row in psn_rows:
-        if float(row.get("price") or 0) > 0:
+    def append_offer(
+        rows,
+        store: str,
+        kind: str,
+        *,
+        default_currency: str = "GBP",
+        fallback_url: str = "",
+        require_has_price: bool = False,
+        allow_free: bool = False,
+    ) -> None:
+        """Append the first purchasable row with a trustworthy GBP conversion."""
+        for row in rows or []:
+            if not isinstance(row, dict) or row.get("in_stock") is False:
+                continue
+            if require_has_price and not row.get("has_price"):
+                continue
+            price = row.get("price")
+            currency = row.get("currency") or default_currency
+            price_gbp = v._gbp_point(price, currency)
+            if price_gbp is None or (price_gbp <= 0 and not allow_free):
+                continue
             live_offers.append(
                 {
-                    "store": "PSN UK",
-                    "price": row["price"],
-                    "price_gbp": to_gbp_or_zero(row["price"], "GBP"),
-                    "currency": "GBP",
-                    "kind": "official",
-                    "url": row.get("url"),
+                    "store": store,
+                    "price": price,
+                    "price_gbp": price_gbp,
+                    "currency": currency,
+                    "kind": kind,
+                    "url": row.get("url") or fallback_url,
                 }
             )
-            break
-    for row in xbox_rows:
-        if row.get("has_price") and float(row.get("price") or 0) > 0:
-            live_offers.append(
-                {
-                    "store": "Xbox",
-                    "price": row["price"],
-                    "price_gbp": to_gbp_or_zero(row["price"], row.get("currency") or "GBP"),
-                    "currency": row.get("currency") or "GBP",
-                    "kind": "official",
-                    "url": row.get("url"),
-                }
-            )
-            break
-    for row in nintendo_rows:
-        if row.get("has_price") and float(row.get("price") or 0) > 0:
-            live_offers.append(
-                {
-                    "store": "Nintendo UK",
-                    "price": row["price"],
-                    "price_gbp": to_gbp_or_zero(row["price"], "GBP"),
-                    "currency": "GBP",
-                    "kind": "official",
-                    "url": row.get("url"),
-                }
-            )
-            break
+            return
 
-    if amazon_rows:
-        live_offers.append(
-            {
-                "store": "Amazon UK",
-                "price": amazon_rows[0]["price"],
-                "price_gbp": to_gbp_or_zero(amazon_rows[0]["price"], "GBP"),
-                "currency": "GBP",
-                "kind": "marketplace",
-                "url": amazon_rows[0].get("url"),
-            }
+    if detail.get("price_status") in {"paid", "free"}:
+        append_offer(
+            [detail],
+            "Steam",
+            "official",
+            default_currency=detail.get("currency") or "GBP",
+            allow_free=detail.get("price_status") == "free",
         )
+    append_offer(psn_rows, "PSN UK", "official")
+    append_offer(xbox_rows, "Xbox", "official", require_has_price=True)
+    append_offer(nintendo_rows, "Nintendo UK", "official", require_has_price=True)
+    append_offer(amazon_rows, "Amazon UK", "marketplace")
     for key, label, kind in (
         ("game_rows", "GAME UK", "retail"),
         ("smyths_rows", "Smyths", "retail"),
@@ -285,44 +287,29 @@ def steam_detail(request, app_id: int):
         ("musicmagpie_rows", "MusicMagpie", "used"),
         ("ebay_rows", "eBay UK", "marketplace"),
     ):
-        rows = plat.get(key) or []
-        if rows:
-            live_offers.append(
-                {
-                    "store": label,
-                    "price": rows[0]["price"],
-                    "price_gbp": to_gbp_or_zero(rows[0]["price"], "GBP"),
-                    "currency": "GBP",
-                    "kind": kind,
-                    "url": rows[0].get("url") or plat.get(key.replace("_rows", "_search_url")),
-                }
-            )
-    for source in specialist_sources:
-        rows = source.get("rows") or []
-        if rows:
-            live_offers.append(
-                {
-                    "store": source.get("label") or "UK specialist",
-                    "price": rows[0]["price"],
-                    "price_gbp": to_gbp_or_zero(rows[0]["price"], "GBP"),
-                    "currency": "GBP",
-                    "kind": "retail",
-                    "url": rows[0].get("url") or source.get("search_url"),
-                }
-            )
-    if store_deals:
-        live_offers.append(
-            {
-                "store": store_deals[0]["store_name"],
-                "price": store_deals[0]["price"],
-                "price_gbp": to_gbp_or_zero(
-                    store_deals[0]["price"], store_deals[0].get("currency") or "USD"
-                ),
-                "currency": store_deals[0].get("currency") or "USD",
-                "kind": "third-party",
-                "url": store_deals[0].get("url"),
-            }
+        append_offer(
+            plat.get(key) or [],
+            label,
+            kind,
+            fallback_url=plat.get(key.replace("_rows", "_search_url")) or "",
         )
+    for source in specialist_sources:
+        append_offer(
+            source.get("rows") or [],
+            source.get("label") or "UK specialist",
+            "retail",
+            fallback_url=source.get("search_url") or "",
+        )
+    for deal in store_deals or []:
+        before = len(live_offers)
+        append_offer(
+            [deal],
+            deal.get("store_name") or "PC retailer",
+            "third-party",
+            default_currency=deal.get("currency") or "USD",
+        )
+        if len(live_offers) > before:
+            break
 
     live_offers = _sort_live_offers(live_offers, platform)
 
@@ -357,8 +344,8 @@ def steam_detail(request, app_id: int):
             "condition_choices": CONDITION_CHOICES,
             "steam_os": detail.get("platforms") or [],
             "current_platform": platform,
-            "min_price": request.GET.get("min_price", ""),
-            "max_price": request.GET.get("max_price", ""),
+            "min_price": _decimal_text(min_price),
+            "max_price": _decimal_text(max_price),
             "condition": condition,
             "already_tracked": already,
             "catalog_game": catalog,
