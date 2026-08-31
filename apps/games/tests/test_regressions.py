@@ -54,20 +54,18 @@ class TrackingRegressionTests(TestCase):
         self.assertFalse(PriceRecord.objects.exists())
         delay.assert_called_once()
 
-    @patch("apps.games.tasks.search_amazon_uk")
-    @patch("apps.games.tasks.best_psn_deal")
+    @patch("apps.games.tasks.platform_bundle")
     @patch("apps.games.tasks.deals_for_title")
     @patch("apps.games.tasks.get_app_details")
     def test_refresh_does_not_save_unknown_steam_price(
-        self, get_detail, deals, psn, amazon
+        self, get_detail, deals, bundle
     ):
         game = Game.objects.create(
             title="Unpriced game", slug="unpriced-game", platform=Game.Platform.PC, steam_app_id=self.app_id
         )
         get_detail.return_value = self.unknown_detail
         deals.return_value = []
-        psn.return_value = None
-        amazon.return_value = {"results": []}
+        bundle.return_value = {}
 
         result = refresh_one_game(game)
 
@@ -166,6 +164,69 @@ class TrackingRegressionTests(TestCase):
         self.assertEqual(chart["series"]["Old quote"], [5.0, None, None])
         self.assertEqual(chart["average"], [5.0, None, 25.0])
         self.assertEqual(chart["best"], [5.0, None, 25.0])
+
+    def test_chart_keeps_flat_price_fresh_when_daily_checks_continue(self):
+        game = Game.objects.create(title="Heartbeat", slug="heartbeat", platform=Game.Platform.PC)
+        store = Store.objects.create(name="Daily shop", slug="daily-shop")
+        now = timezone.now()
+        records = [
+            PriceRecord.objects.create(game=game, store=store, price=Decimal("12.00"))
+            for _ in range(11)
+        ]
+        for days_ago, record in zip(range(10, -1, -1), records):
+            PriceRecord.objects.filter(pk=record.pk).update(
+                recorded_at=now - timedelta(days=days_ago)
+            )
+
+        chart = _build_chart_payload(game, {}, [], None, [], [], [], [])
+
+        self.assertTrue(chart["series"]["Daily shop"])
+        self.assertNotIn(None, chart["series"]["Daily shop"])
+
+    def test_chart_ignores_explicitly_unavailable_history_and_live_rows(self):
+        game = Game.objects.create(title="Unavailable", slug="unavailable", platform=Game.Platform.PC)
+        store = Store.objects.create(name="Sold out shop", slug="sold-out-shop")
+        PriceRecord.objects.create(
+            game=game,
+            store=store,
+            price=Decimal("1.00"),
+            in_stock=False,
+        )
+
+        chart = _build_chart_payload(
+            game,
+            {"price": Decimal("0"), "price_status": "free", "in_stock": False},
+            [],
+            None,
+            [], [], [], [],
+            live_store_rows=[
+                ("Sold out live", [{"price": Decimal("2"), "in_stock": False}], "GBP")
+            ],
+        )
+
+        self.assertFalse(chart["has_data"])
+        self.assertNotIn("Sold out shop", chart["sellers"])
+
+    def test_compare_uses_latest_in_stock_offer_per_store(self):
+        game = Game.objects.create(title="Current only", slug="current-only", platform=Game.Platform.PS5)
+        first_store = Store.objects.create(name="First", slug="current-first")
+        second_store = Store.objects.create(name="Second", slug="current-second")
+        sold_out_store = Store.objects.create(name="Unavailable", slug="current-unavailable")
+        old = PriceRecord.objects.create(game=game, store=first_store, price=Decimal("5.00"))
+        current = PriceRecord.objects.create(game=game, store=first_store, price=Decimal("20.00"))
+        best = PriceRecord.objects.create(game=game, store=second_store, price=Decimal("10.00"))
+        PriceRecord.objects.create(
+            game=game, store=sold_out_store, price=Decimal("1.00"), in_stock=False
+        )
+        PriceRecord.objects.filter(pk=old.pk).update(
+            recorded_at=timezone.now() - timedelta(days=2)
+        )
+
+        response = self.client.get(reverse("games:compare", args=[game.slug]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["lowest"].pk, best.pk)
+        self.assertEqual({row.pk for row in response.context["prices"]}, {current.pk, best.pk})
 
     def test_non_steam_compare_page_renders_safe_graph_payload(self):
         game = Game.objects.create(title="Console chart", slug="console-chart", platform=Game.Platform.PS5)

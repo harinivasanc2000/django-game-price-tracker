@@ -4,6 +4,47 @@
 
 ---
 
+## 2026-08-31 — Small reliability follow-up
+
+- Prevented busy shared worker pools from caching partial search, bundle, or home results for the normal full lifetime
+- Fixed optional PostgreSQL URL parsing and kept Celery Beat on the environment-controlled refresh schedule
+- Expired unconfirmed seven-day-old quotes from current-deal surfaces while preserving their historical records
+
+---
+
+## 2026-08-30 — Cross-platform history, fixed resource ceilings, and correctness pass
+
+### Compact all-platform price history
+- Rebuilt the refresh worker around the existing indexed `PriceRecord` stream: Steam, PlayStation, Xbox, Nintendo, Amazon, all 11 UK sources (including four specialist shops), and up to six distinct CheapShark retailers now store comparable per-store history
+- Added console/manual game refreshes without requiring a Steam app id; a single cached all-platform bundle supplies official and local prices, while one best finite offer per source prevents duplicate search-result rows
+- Store price, URL, discount, condition, and stock changes immediately; unchanged quotes now create one 72-hour freshness checkpoint instead of daily rows, remaining inside the graph's seven-day quote lifetime
+- Persist explicit sold-out transitions so current-deal queries cannot fall back to an older in-stock sale; sold-out/unknown offers never trigger target-price alerts and unsafe links are stripped before storage
+- Serialised each game's compare/create sequence with an atomic parent-row lock and SQLite immediate transactions; watches and existing alert keys are preloaded once per refresh
+- Replaced the fixed daily Beat entry with an environment-controlled 12-hour schedule, bounded worker/prefetch/result settings, synchronous `refresh_prices` support, optional PostgreSQL `DATABASE_URL`, and Redis cache configuration examples
+
+### Low-resource / fast-result architecture
+- Replaced nested per-request executors with three lazy process-wide pools: 6 page I/O workers, 5 platform-bundle workers, and 6 UK-store workers; limits are environment-tunable and timed-out queued work is cancelled
+- Added per-key single-flight cache production so simultaneous home/search/store misses share one external request instead of stampeding retailers; idle lock entries are removed automatically
+- Cached legitimate `None`/not-found responses with the short negative-result TTL, eliminating repeated Steam misses, and removed a redundant second platform-bundle cache write
+- Bounded the local memory cache at 800 entries, retained short blocked-result TTLs, and enabled SQLite WAL, normal synchronisation, persistent connections, and `BEGIN IMMEDIATE` writes
+- Reduced home cold-start fan-out, reused bundle/client caches across pages and background refreshes, and kept Redis/PostgreSQL optional so the default local install remains zero-service
+- Raised the supported Django floor to 5.1 for the SQLite transaction settings and consolidated Beat configuration so the environment-controlled 12-hour sweep cannot be overwritten during Celery startup
+
+### Deals, filters, graphs, and safety
+- Required numeric and Roman-numeral title markers, fixing RDR 2, Resident Evil 4, Football Manager 2024, Cyberpunk 2077, and Final Fantasy VII matching their base/other entries
+- Fixed reversed platform price bounds, invalid conditions/platforms/countries, bounded numeric inputs, unknown/free rows outside an active band, and persistent non-HTTP retailer/news URLs
+- Removed explicitly sold-out rows from top picks, alerts, current comparison offers, and best/average chart series; non-Steam compare pages now select each store's newest in-stock row instead of its historical cheapest sale
+- Expired unconfirmed quotes from current deal cards, comparisons, and exports after seven days while retaining the full append-only history for charts and offline analysis
+- Preserved periodic confirmations during flat-price graph compaction and changed Chart.js to real elapsed-time spacing on a linear epoch axis; seller colours remain valid beyond 12 series
+- Replaced partial platform AJAX updates with cached full filtered navigation so official panels, links, source counts, top pick, and graph update atomically
+- Made autocomplete abort/version stale requests, reset keyboard state, refresh platform links, and expose combobox/listbox semantics; added tracked-drawer modal focus management
+
+### Documentation and regression coverage
+- Corrected UK source/API descriptions, Steam/PSN-only full-game filtering, CeX API-first behavior, current environment variables, and platform navigation documentation
+- Added deterministic regressions for cross-platform history/coalescing/stock changes, cache single-flight, sequel matching, latest current offers, graph freshness/time data, malformed filters, unsafe links, autocomplete races, and drawer accessibility
+
+---
+
 ## 2026-08-28 — UK/BS4, advanced search, graphs, and full polish
 
 ### UK stores + BeautifulSoup

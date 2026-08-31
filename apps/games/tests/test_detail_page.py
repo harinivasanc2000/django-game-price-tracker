@@ -40,10 +40,18 @@ class SteamDetailPageTests(TestCase):
                 "label": "ShopTo",
                 "rows": [
                     {
+                        "name": "Example game sold out",
+                        "price": Decimal("1.00"),
+                        "currency": "GBP",
+                        "url": "https://www.shopto.net/en/example-game-sold-out/",
+                        "in_stock": False,
+                    },
+                    {
                         "name": "Example game PS5",
                         "price": Decimal("12.99"),
                         "currency": "GBP",
                         "url": "https://www.shopto.net/en/example-game/",
+                        "in_stock": True,
                     }
                 ],
                 "blocked": False,
@@ -67,4 +75,18 @@ class SteamDetailPageTests(TestCase):
         self.assertContains(response, 'href="https://store.steampowered.com/app/12345/"')
         self.assertContains(response, 'href="https://www.cheapshark.com/redirect?dealID=example"')
         self.assertContains(response, 'href="https://www.shopto.net/en/example-game/"')
-        self.assertIn("ShopTo", [offer["store"] for offer in response.context["live_offers"]])
+        shopto = next(
+            offer for offer in response.context["live_offers"] if offer["store"] == "ShopTo"
+        )
+        self.assertEqual(shopto["price"], Decimal("12.99"))
+        self.assertContains(response, "window.location.assign")
+        self.assertNotContains(response, "fetch(`/api/platform/")
+
+        malformed = self.client.get(
+            reverse("games:steam_detail", args=[app_id]),
+            {"platform": "\\", "condition": "broken", "cc": "not-a-country"},
+        )
+        self.assertEqual(malformed.status_code, 200)
+        self.assertEqual(malformed.context["current_platform"], "")
+        self.assertEqual(malformed.context["condition"], "")
+        self.assertEqual(malformed.context["country"], "GB")

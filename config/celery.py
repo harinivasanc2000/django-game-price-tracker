@@ -15,7 +15,6 @@ Or combined:
 
 import os
 from celery import Celery
-from celery.schedules import crontab
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -23,16 +22,5 @@ app = Celery("config")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 app.autodiscover_tasks()
 
-# Daily refresh at 06:00 Europe/London (server TZ should match)
-app.conf.beat_schedule = {
-    "refresh-tracked-prices-daily": {
-        "task": "apps.games.tasks.refresh_all_tracked_prices",
-        "schedule": crontab(hour=6, minute=0),
-    },
-    # Flush queued price-drop emails every 15 minutes.
-    "send-pending-alerts-quarterly": {
-        "task": "apps.games.tasks.send_pending_alerts",
-        "schedule": crontab(minute="*/15"),
-    },
-}
-app.conf.timezone = "Europe/London"
+# Beat schedules and timezone live in Django settings so environment overrides
+# have one source of truth and cannot be replaced during Celery app import.

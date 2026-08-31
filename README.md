@@ -26,14 +26,18 @@ python manage.py test
 python manage.py runserver
 ```
 
-Copy `.env.example` to `.env` if you want local overrides. Redis/Celery is optional; `python manage.py refresh_prices` works without it.
+Copy `.env.example` to `.env` if you want local overrides. Redis/Celery is optional; `python manage.py refresh_prices` records a compact cross-platform snapshot without it. To run the automatic 12-hour schedule, start a Redis server and a worker/beat process:
+
+```bash
+celery -A config worker --beat --loglevel=INFO --concurrency=2
+```
 
 ## Main pages
 
 | URL | Purpose |
 |---|---|
 | `/` | 90-day sale signals, current Steam specials, and stable fallbacks |
-| `/search/` | Unified Steam, PSN, Xbox, Nintendo, and UK-store search |
+| `/search/` | Cross-platform results plus 32 encoded UK/direct store links |
 | `/steam/<app_id>/` | Live multi-store comparison, filters, graph, and tracking |
 | `/guide/` | Public deal feeds and buying guidance |
 | `/deals/` | Lowest current tracked offers plus public deals |
@@ -50,24 +54,28 @@ Search supports:
 
 - All platforms, PC, PS4, PS5, Xbox, or Switch.
 - Minimum/maximum GBP, paid/free availability, minimum verified discount, and new/used UK-link condition.
-- Full-games-only filtering, PS4/PS5 metadata checks, and 5/10/16 results per platform.
+- Steam/PSN full-games filtering, PS4/PS5 metadata checks, and 5/10/16 results per platform.
 - Relevance, strict title match, smart value, price, discount, cash saving, and name sorting.
 - Quick presets for free games, common price ceilings, 25%+ discounts, and cheapest first.
 
-Automatic UK price extraction uses public product-search pages for CeX, MusicMagpie, eBay UK, GAME, Argos, Currys, Smyths, The Game Collection, Hit, ShopTo, and SimplyGames. Amazon UK is also attempted separately. Every source soft-fails to a clickable search link when a site blocks automated access.
+The 11-source UK bundle uses CeX's unofficial JSON endpoint first with a public BS4 fallback; MusicMagpie, eBay UK, GAME, Argos, Currys, Smyths, The Game Collection, Hit, ShopTo, and SimplyGames use public HTML. Amazon UK is attempted separately. Every source soft-fails to a clickable search link when a site blocks automated access.
 
 The all-platform directory currently exposes 32 encoded destinations: official platform stores, authorised PC sellers, comparison services, UK retail, used shops, marketplaces, and social/classified fallbacks. Facebook Marketplace, Gumtree, Vinted, and similar services are link-only; the app does not log in or collect seller personal information.
 
 ## Techniques used
 
-- **Strict title matching:** Unicode/accent normalisation, significant-token coverage, whole-word checks, subtitle discriminators, and contaminant rejection prevent accessories, DLC, and nearby franchise entries from being treated as the requested game.
+- **Strict title matching:** Unicode/accent normalisation, whole-word coverage, mandatory numeric/Roman sequel markers, subtitle discriminators, and contaminant rejection prevent accessories, DLC, and nearby franchise entries from being treated as the requested game.
 - **Smart-value ranking:** `160 × title match + 0.35 × discount + 0.12 × capped cash saving − 2 × ln(1 + price)`. Relevance deliberately dominates a suspiciously cheap loose match; unknown/NaN/infinite prices sort last.
-- **Reusable raw search cache:** canonical NFKC queries and fixed-length BLAKE2 keys let price/filter/sort changes reuse one four-platform result bundle instead of repeating network work.
+- **Reusable raw search cache:** canonical NFKC queries and fixed-length BLAKE2 keys let price/filter/sort changes reuse one four-platform result bundle; single-flight locks collapse simultaneous misses into one producer.
 - **Defensive BS4 parsing:** bounded thread-local sessions, JSON-LD traversal, current-price detection, GBP/finite-number validation, host-allowlisted URLs, stock-aware deduplication, and card fallbacks.
-- **Current-offer SQL:** correlated subqueries select the newest row for every `(game, store)` pair in one query, avoiding N+1 lookups and expired-sale mistakes.
-- **Compact history:** unchanged snapshots are coalesced for 20 hours while price/stock/condition changes and a daily heartbeat remain available.
-- **Aligned graph algorithm:** independently sampled sellers share an event timeline; quotes carry forward for at most seven days, observed checks remain marked, and fresh best/average lines are calculated in GBP.
-- **Bounded concurrency:** store calls run in small pools with whole-batch deadlines and soft failure, so one blocked retailer does not prevent the page rendering.
+- **Current-offer SQL:** correlated subqueries select the newest row for every `(game, store)` pair in one query, avoiding N+1 lookups; quotes expire from current-deal surfaces after seven days without a confirmed check.
+- **All-store compact history:** one refresh stores the best validated Steam, PSN, Xbox, Nintendo, Amazon, UK-retailer, and bounded per-retailer CheapShark offer. Price/stock/URL/condition changes are immediate; unchanged rows get one 72-hour freshness checkpoint.
+- **Aligned graph algorithm:** independently sampled sellers share a real-time-spaced event timeline; quotes carry forward for at most seven days, observed checks remain marked, and fresh best/average lines are calculated in GBP.
+- **Hard concurrency budget:** three process-wide pools cap page, bundle, and UK work at 17 lazy threads by default. Deadlines cancel queued work, while one blocked retailer soft-fails without multiplying threads per request.
+
+## Low-resource deployment
+
+SQLite stays the zero-service default and uses WAL, normal synchronisation, persistent connections, and immediate write transactions. The local cache is capped at 800 entries. For multiple web workers, set `DATABASE_URL` to PostgreSQL and `CACHE_BACKEND`/`CACHE_LOCATION` to Django's Redis cache; the required drivers are already in `requirements.txt`. Worker and cache limits are documented in `.env.example` and can be lowered on a small machine.
 
 ## Data-source policy
 
@@ -77,4 +85,4 @@ Public APIs are preferred. BS4 clients read public product-search fields only an
 
 Read [DEVELOPER.md](DEVELOPER.md) for the file map, request flows, extension contracts, and test commands. See [CHANGELOG.md](CHANGELOG.md) for newest-first implementation notes.
 
-Stack: Django 5, requests, BeautifulSoup/lxml, optional Celery/Redis, Django templates, and Chart.js.
+Stack: Django 5.1+, SQLite or PostgreSQL, requests, BeautifulSoup/lxml, optional Celery/Redis, Django templates, and Chart.js.

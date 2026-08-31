@@ -6,11 +6,11 @@ This file documents **all legitimate stores, aggregators, public APIs, domains a
 
 **Philosophy**: Prefer official / public APIs + reputable aggregators. Be extremely careful with any internal/unofficial endpoints (e.g. CeX). Store secrets in environment variables only.
 
-## Current implemented coverage (2026-08-28)
+## Current implemented coverage (2026-08-30)
 
 - **Official/platform results:** Steam, PlayStation Store UK, Xbox/Microsoft Store UK, and Nintendo eShop UK.
 - **Aggregated PC deals:** CheapShark, with keyshop/marketplace risk labels.
-- **Automatic UK product search:** CeX, MusicMagpie, eBay UK, GAME, Argos, Currys, Smyths, The Game Collection, Hit, ShopTo, SimplyGames, plus a separate best-effort Amazon UK client.
+- **Automatic UK product search:** CeX (unofficial JSON endpoint first, public BS4 fallback), plus public HTML for MusicMagpie, eBay UK, GAME, Argos, Currys, Smyths, The Game Collection, Hit, ShopTo, and SimplyGames. Amazon UK is a separate best-effort public-page client.
 - **Browser fallbacks:** all automatic sources plus official stores, Humble, Fanatical, Green Man Gaming, GOG, Epic, Loaded/CDKeys, Eneba, GG.deals, IsThereAnyDeal, AllKeyShop, Cash Converters, Facebook Marketplace, Gumtree, Vinted, and PriceRunner.
 - **Social/classified policy:** link-only; no login, seller-profile collection, or personal seller data.
 
@@ -28,13 +28,13 @@ Retail HTML can change or be blocked at any time. Empty automated results theref
   ```
 - **Rate limit**: ~200 requests / 5 minutes
 - **Notes**: Best starting point for PC. Returns `price_overview` with final/initial price in cents + discount %.
-- **Env placeholder**: `STEAM_API_KEY=` (optional)
+- **Credentials:** none used for Store API pricing.
 
 ### PlayStation Store (PSN)
 - **Website**: https://store.playstation.com/en-gb/
-- **Access**: No simple free public price API. Community wrappers and third-party services (PlatPrices, PSprices) exist.
+- **Access**: The app uses the public Chihiro storefront search endpoint; it is not a guaranteed/stable official developer API.
 - **Notes**: Primary digital source for PS4/PS5. Region = GB for UK.
-- **Status**: Track via aggregators / community tools first.
+- **Status**: Implemented with strict title/full-game metadata filtering and direct Store links.
 
 ### Epic Games Store
 - **Website**: https://store.epicgames.com
@@ -50,14 +50,12 @@ Retail HTML can change or be blocked at any time. Empty automated results theref
 ### GG.deals
 - **Website**: https://gg.deals
 - **API**: https://gg.deals/api/
-- **Env**: `GGDEALS_API_KEY=`
-- **Status**: ✅ Top priority
+- **Status**: Browser fallback only; no API credential is read by the app.
 
 ### IsThereAnyDeal (ITAD)
 - **Website**: https://isthereanydeal.com
 - **Docs**: https://docs.isthereanydeal.com
-- **Env**: `ITAD_API_KEY=`
-- **Status**: ✅ Strongly recommended
+- **Status**: Browser fallback only; no API credential is read by the app.
 
 ### Other
 - **CheapShark: implemented.** PSprices, PlatPrices, and Hot.Game remain possible future sources.
@@ -66,7 +64,7 @@ Retail HTML can change or be blocked at any time. Empty automated results theref
 
 ## 3. UK Physical Resellers (New Focus)
 
-We are starting with **physical discs** in the UK, especially PlayStation.
+The implemented bundle covers **physical discs/cartridges** across the UK platforms.
 
 ### CeX (uk.webuy.com)
 - **Website**: https://uk.webuy.com
@@ -76,14 +74,14 @@ We are starting with **physical discs** in the UK, especially PlayStation.
   - Search example: `/boxes?q=God+of+War&firstRecord=1&count=20`
   - Returns sellPrice, cashPrice (trade-in), exchangePrice, stock, images, category.
 - **Important**: This is **not an official public API**. It can change or be restricted at any time. Use very politely (low volume, heavy caching, delays).
-- **Status**: Pilot target for God of War PS4.
+- **Status**: Implemented API-first with a public-page BS4 fallback and direct browser fallback.
 - **Risk**: Medium (unofficial endpoint). Do not hammer it.
 
 ### Amazon UK
 - **Website**: https://www.amazon.co.uk
 - **Access**: Official Product Advertising API (PA-API) requires Amazon Associates account with sales. Alternatives: Keepa API (paid), or careful public-page approaches.
 - **Notes**: New + used + renewed discs. Strong for comparison.
-- **Status**: Later (after CeX pilot).
+- **Status**: Implemented as a best-effort public-page BS4 client; WAF blocks soft-fail to search.
 
 ### Other major UK physical / retail
 | Shop              | URL                          | Notes                              |
@@ -118,25 +116,9 @@ Steam, Epic, Humble, Fanatical, GG.deals, ITAD, r/GameDeals, r/FreeGameFindings,
 
 ---
 
-## 7. Environment Variables Template
+## 7. Environment configuration
 
-```env
-# Official / Aggregators
-STEAM_API_KEY=
-GGDEALS_API_KEY=
-ITAD_API_KEY=
-
-# Optional later
-EPIC_API_KEY=
-KEEP A_API_KEY=          # for Amazon price history if used
-
-# Notifications
-DISCORD_WEBHOOK_URL=
-TELEGRAM_BOT_TOKEN=
-TELEGRAM_CHAT_ID=
-EMAIL_HOST_USER=
-EMAIL_HOST_PASSWORD=
-```
+`.env.example` is the authoritative template and contains only settings the current code reads: Django security/hosts, region, SQLite/PostgreSQL, bounded cache and I/O pools, Redis/Celery scheduling, and email backend/from-address. The project does not currently read Steam, GG.deals, ITAD, Epic, Keepa, Discord, or Telegram credentials.
 
 ---
 
@@ -159,6 +141,6 @@ This was the initial pilot plan and is retained for reference; the current imple
 - Any unofficial endpoint (CeX internal) = low volume + heavy caching + easy to disable
 - Never commit secrets
 - Clearly label physical vs digital and risk level in the UI
-- Start UK + PlayStation, expand later
+- Keep the product UK-first while treating every supported platform consistently
 
 This keeps the project focused, legal, and sustainable.

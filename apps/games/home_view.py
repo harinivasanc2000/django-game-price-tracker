@@ -4,22 +4,23 @@ Tracked list stays in the side drawer (not on the main screen).
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import wait
 from collections import defaultdict
 
 from django.contrib import messages
-from django.core.cache import cache
 from django.db.models import Count, Max, Q
 from django.shortcuts import render
 from django.utils import timezone
 
 from .cache_keys import HOME_CARDS
+from .cache import cached
 from .clients.public_deals import steam_featured
 from .clients.steam import get_app_details
 from .constants import POPULAR_APP_IDS
 from .fx import to_gbp_or_zero
 from .models import Game
 from .price_queries import latest_store_snapshots
+from .executors import PAGE_EXECUTOR, cancel_pending
 
 HOME_CACHE_KEY = HOME_CARDS
 HOME_CACHE_TTL = 180  # 3 minutes — balances freshness vs Steam rate limits
@@ -190,15 +191,14 @@ def _build_home_payload() -> dict:
 
     # Cap workers and the *whole* batch. A context-manager would wait for every
     # slow socket on exit even after a timeout, defeating graceful degradation.
-    pool = ThreadPoolExecutor(max_workers=6)
-    try:
-        futs = [pool.submit(fetch, aid) for aid in app_ids]
-        completed, _ = wait(futs, timeout=9)
-        for fut in completed:
-            aid, det = fut.result()
-            details[aid] = det
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+    # The shared page pool keeps this responsive without allocating a thread
+    # per card or per incoming request; warm Steam-client hits are immediate.
+    futs = [PAGE_EXECUTOR.submit(fetch, aid) for aid in app_ids]
+    completed, _ = wait(futs, timeout=9)
+    cancel_pending(futs)
+    for fut in completed:
+        aid, det = fut.result()
+        details[aid] = det
 
     cards = [
         _card_from_detail(
@@ -220,19 +220,24 @@ def _build_home_payload() -> dict:
         "hot_deals": hot,
         "public_specials": public_specials,
         "seasonal_window_days": SEASONAL_SALE_WINDOW_DAYS,
+        "_cache_incomplete": len(completed) < len(futs),
     }
 
 
 def home(request):
     list(messages.get_messages(request))
 
-    payload = cache.get(HOME_CACHE_KEY)
-    if payload is None:
-        try:
-            payload = _build_home_payload()
-        except Exception:
-            payload = {"popular_cards": [], "hot_deals": [], "public_specials": []}
-        cache.set(HOME_CACHE_KEY, payload, HOME_CACHE_TTL)
+    try:
+        # Single-flight caching prevents a cold home-page traffic burst from
+        # launching the same twelve Steam detail lookups multiple times.
+        payload = cached(
+            HOME_CACHE_KEY,
+            _build_home_payload,
+            HOME_CACHE_TTL,
+            empty_timeout=15,
+        )
+    except Exception:
+        payload = {"popular_cards": [], "hot_deals": [], "public_specials": []}
 
     return render(
         request,

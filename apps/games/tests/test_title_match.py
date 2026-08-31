@@ -53,3 +53,24 @@ class TitleMatchTests(SimpleTestCase):
 
     def test_cyberpunk_accepts_editions(self):
         self.assertTrue(titles_match("Cyberpunk 2077 Ultimate Edition", "Cyberpunk 2077"))
+
+    def test_numeric_sequels_and_years_are_required(self):
+        cases = (
+            ("Red Dead Redemption", "Red Dead Redemption 2"),
+            ("Resident Evil Remake", "Resident Evil 4 Remake"),
+            ("Grand Theft Auto", "Grand Theft Auto 5"),
+            ("Football Manager 2023", "Football Manager 2024"),
+            ("Cyberpunk", "Cyberpunk 2077"),
+        )
+        for listing, query in cases:
+            with self.subTest(listing=listing, query=query):
+                self.assertFalse(titles_match(listing, query))
+
+        self.assertTrue(titles_match("Red Dead Redemption 2 PS4", "Red Dead Redemption 2"))
+        self.assertTrue(titles_match("Football Manager 2024", "Football Manager 2024"))
+
+    def test_roman_numeral_sequels_are_required(self):
+        self.assertFalse(titles_match("Final Fantasy Remake", "Final Fantasy VII Remake"))
+        self.assertFalse(titles_match("Resident Evil", "Resident Evil II"))
+        self.assertTrue(titles_match("Final Fantasy VII Remake PS5", "Final Fantasy VII Remake"))
+        self.assertTrue(titles_match("Resident Evil II", "Resident Evil II"))

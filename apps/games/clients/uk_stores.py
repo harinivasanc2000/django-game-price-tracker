@@ -13,12 +13,13 @@ Strict title_match filters franchise bleed.
 from __future__ import annotations
 
 import re
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import wait
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 from urllib.parse import quote_plus, quote, urlsplit
 
 from apps.games.cache import cached
+from apps.games.executors import UK_EXECUTOR, cancel_pending
 from apps.games.clients.cex import search_cex_products
 from apps.games.clients.musicmagpie import try_musicmagpie
 from apps.games.clients.scrape_filters import filter_source_dict, parse_price_bound
@@ -775,66 +776,61 @@ def fetch_uk_physical_bundle(
 
         return run
 
-    pool = ThreadPoolExecutor(max_workers=11)
-    try:
-        f_cex = pool.submit(safe("CeX", lambda: try_cex_search(title, platform, limit)))
-        f_mm = pool.submit(
-            safe("MusicMagpie", lambda: try_musicmagpie(title, platform, limit))
-        )
-        f_ebay = pool.submit(
-            safe(
-                "eBay UK",
-                lambda: try_ebay_uk(
-                    title, platform, limit,
-                    min_price=min_price, max_price=max_price, condition=cond,
-                ),
-            )
-        )
-        f_game = pool.submit(safe("GAME UK", lambda: try_game_uk(title, platform, limit)))
-        f_argos = pool.submit(safe("Argos", lambda: try_argos(title, platform, limit)))
-        f_currys = pool.submit(safe("Currys", lambda: try_currys(title, platform, limit)))
-        f_smyths = pool.submit(safe("Smyths Toys", lambda: try_smyths(title, platform, limit)))
-        f_tgc = pool.submit(
-            safe(
-                "The Game Collection",
-                lambda: try_the_game_collection(title, platform, limit),
-            )
-        )
-        f_hit = pool.submit(safe("Hit", lambda: try_hit(title, platform, limit)))
-        f_shopto = pool.submit(safe("ShopTo", lambda: try_shopto(title, platform, limit)))
-        f_simply = pool.submit(
-            safe("SimplyGames", lambda: try_simplygames(title, platform, limit))
-        )
-
-        done, _ = wait(
-            (
-                f_cex, f_mm, f_ebay, f_game, f_argos, f_currys, f_smyths,
-                f_tgc, f_hit, f_shopto, f_simply,
+    f_cex = UK_EXECUTOR.submit(safe("CeX", lambda: try_cex_search(title, platform, limit)))
+    f_mm = UK_EXECUTOR.submit(
+        safe("MusicMagpie", lambda: try_musicmagpie(title, platform, limit))
+    )
+    f_ebay = UK_EXECUTOR.submit(
+        safe(
+            "eBay UK",
+            lambda: try_ebay_uk(
+                title, platform, limit,
+                min_price=min_price, max_price=max_price, condition=cond,
             ),
-            timeout=_BUNDLE_TIMEOUT,
         )
+    )
+    f_game = UK_EXECUTOR.submit(safe("GAME UK", lambda: try_game_uk(title, platform, limit)))
+    f_argos = UK_EXECUTOR.submit(safe("Argos", lambda: try_argos(title, platform, limit)))
+    f_currys = UK_EXECUTOR.submit(safe("Currys", lambda: try_currys(title, platform, limit)))
+    f_smyths = UK_EXECUTOR.submit(safe("Smyths Toys", lambda: try_smyths(title, platform, limit)))
+    f_tgc = UK_EXECUTOR.submit(
+        safe(
+            "The Game Collection",
+            lambda: try_the_game_collection(title, platform, limit),
+        )
+    )
+    f_hit = UK_EXECUTOR.submit(safe("Hit", lambda: try_hit(title, platform, limit)))
+    f_shopto = UK_EXECUTOR.submit(safe("ShopTo", lambda: try_shopto(title, platform, limit)))
+    f_simply = UK_EXECUTOR.submit(
+        safe("SimplyGames", lambda: try_simplygames(title, platform, limit))
+    )
 
-        def take(fut, name):
-            if fut not in done:
-                return _empty(fallback.get(name, ""))
-            try:
-                return fut.result() or _empty(fallback.get(name, ""))
-            except Exception:
-                return _empty(fallback.get(name, ""))
+    futures = (
+        f_cex, f_mm, f_ebay, f_game, f_argos, f_currys, f_smyths,
+        f_tgc, f_hit, f_shopto, f_simply,
+    )
+    done, _ = wait(futures, timeout=_BUNDLE_TIMEOUT)
+    cancel_pending(futures)
 
-        cex = take(f_cex, "CeX")
-        mm = take(f_mm, "MusicMagpie")
-        ebay = take(f_ebay, "eBay UK")
-        game = take(f_game, "GAME UK")
-        argos = take(f_argos, "Argos")
-        currys = take(f_currys, "Currys")
-        smyths = take(f_smyths, "Smyths Toys")
-        tgc = take(f_tgc, "The Game Collection")
-        hit = take(f_hit, "Hit")
-        shopto = take(f_shopto, "ShopTo")
-        simplygames = take(f_simply, "SimplyGames")
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+    def take(fut, name):
+        if fut not in done:
+            return _empty(fallback.get(name, ""))
+        try:
+            return fut.result() or _empty(fallback.get(name, ""))
+        except Exception:
+            return _empty(fallback.get(name, ""))
+
+    cex = take(f_cex, "CeX")
+    mm = take(f_mm, "MusicMagpie")
+    ebay = take(f_ebay, "eBay UK")
+    game = take(f_game, "GAME UK")
+    argos = take(f_argos, "Argos")
+    currys = take(f_currys, "Currys")
+    smyths = take(f_smyths, "Smyths Toys")
+    tgc = take(f_tgc, "The Game Collection")
+    hit = take(f_hit, "Hit")
+    shopto = take(f_shopto, "ShopTo")
+    simplygames = take(f_simply, "SimplyGames")
 
     def finalize(src):
         matched = _keep_matching_rows(src, title)

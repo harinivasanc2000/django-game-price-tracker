@@ -35,3 +35,14 @@ class LatestStoreSnapshotTests(TestCase):
     def test_empty_game_list_does_not_hit_database(self):
         with self.assertNumQueries(0):
             self.assertEqual(list(latest_store_snapshots([])), [])
+
+    def test_expired_latest_quote_is_not_current(self):
+        game = Game.objects.create(title="Stale offers", slug="stale-offers")
+        store = Store.objects.create(name="Old shop", slug="old-shop")
+        stale = PriceRecord.objects.create(game=game, store=store, price=Decimal("9.99"))
+        PriceRecord.objects.filter(pk=stale.pk).update(
+            recorded_at=timezone.now() - timedelta(days=8)
+        )
+
+        self.assertEqual(list(latest_store_snapshots([game.pk])), [])
+        self.assertEqual(list(latest_store_snapshots([game.pk], max_age=None)), [stale])

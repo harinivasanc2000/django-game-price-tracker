@@ -6,19 +6,18 @@ Order philosophy:
   2. UK physical + local retailers (public-search scrapes)
   3. Marketplaces
 
-Cached ~3 minutes so AJAX platform switches and reloads stay cheap.
+Cached ~3 minutes so filtered navigation and reloads stay cheap.
 """
 
 from __future__ import annotations
 
 import hashlib
 import math
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import wait
 from decimal import Decimal
 from typing import Any
 
-from django.core.cache import cache
-
+from .cache import cached
 from .clients.amazon_uk import search_amazon_uk
 from .clients.nintendo import search_nintendo
 from .clients.psn import search_psn
@@ -27,6 +26,7 @@ from .clients.uk_stores import fetch_uk_physical_bundle, platform_query, uk_sear
 from .clients.xbox import search_xbox
 from .detail_helpers import empty_platform_bundle
 from .constants import STORE_PLATFORMS
+from .executors import BUNDLE_EXECUTOR, cancel_pending
 
 BUNDLE_TTL = 180
 BUNDLE_TIMEOUT = 9.0
@@ -52,7 +52,7 @@ def _ser(row: dict) -> dict:
     return out
 
 
-def platform_bundle(
+def _platform_bundle_impl(
     title: str,
     platform: str = "",
     *,
@@ -78,11 +78,6 @@ def platform_bundle(
 
     lo_s = str(lo) if lo is not None else ""
     hi_s = str(hi) if hi is not None else ""
-    cache_key = _bundle_cache_key(title, platform, lo_s, hi_s, cond)
-    hit = cache.get(cache_key)
-    if hit is not None:
-        return hit
-
     want_psn = platform in ("", "ps4", "ps5")
     want_xbox = platform in ("", "xbox")
     want_switch = platform in ("", "switch")
@@ -158,29 +153,27 @@ def platform_bundle(
     if want_physical:
         jobs.append(("uk", run_uk))
 
-    pool = ThreadPoolExecutor(max_workers=min(len(jobs) or 1, 5))
-    try:
-        futures = {pool.submit(fn): name for name, fn in jobs}
-        completed, _ = wait(futures.keys(), timeout=BUNDLE_TIMEOUT)
+    futures = {BUNDLE_EXECUTOR.submit(fn): name for name, fn in jobs}
+    completed, _ = wait(futures.keys(), timeout=BUNDLE_TIMEOUT)
+    cancel_pending(futures)
+    base["_cache_incomplete"] = len(completed) < len(futures)
 
-        for fut in completed:
-            name = futures[fut]
-            try:
-                result = fut.result()
-            except Exception:
-                continue
-            if name == "psn":
-                psn_rows = result or []
-            elif name == "xbox":
-                xbox_rows = result or []
-            elif name == "nint":
-                nint = result or nint
-            elif name == "amz":
-                amazon = result or amazon
-            elif name == "uk":
-                uk = result or {}
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+    for fut in completed:
+        name = futures[fut]
+        try:
+            result = fut.result()
+        except Exception:
+            continue
+        if name == "psn":
+            psn_rows = result or []
+        elif name == "xbox":
+            xbox_rows = result or []
+        elif name == "nint":
+            nint = result or nint
+        elif name == "amz":
+            amazon = result or amazon
+        elif name == "uk":
+            uk = result or {}
 
     def price_ok(row: dict) -> bool:
         raw_price = row.get("price")
@@ -283,5 +276,45 @@ def platform_bundle(
             },
         }
     )
-    cache.set(cache_key, base, BUNDLE_TTL)
     return base
+
+
+def platform_bundle(
+    title: str,
+    platform: str = "",
+    *,
+    min_price: Decimal | str | None = None,
+    max_price: Decimal | str | None = None,
+    condition: str = "",
+) -> dict[str, Any]:
+    """Collapse concurrent identical bundle misses into one network fan-out."""
+    clean_title = (title or "").strip()[:160]
+    clean_platform = (platform or "").strip().lower()
+    if clean_platform not in _PLATFORM_VALUES:
+        clean_platform = ""
+    lo = parse_price_bound(str(min_price) if min_price is not None else None)
+    hi = parse_price_bound(str(max_price) if max_price is not None else None)
+    if lo is not None and hi is not None and lo > hi:
+        lo, hi = hi, lo
+    clean_condition = (condition or "").strip().lower()
+    if clean_condition not in _CONDITION_VALUES:
+        clean_condition = ""
+    key = _bundle_cache_key(
+        clean_title,
+        clean_platform,
+        str(lo) if lo is not None else "",
+        str(hi) if hi is not None else "",
+        clean_condition,
+    )
+    return cached(
+        key,
+        lambda: _platform_bundle_impl(
+            clean_title,
+            clean_platform,
+            min_price=lo,
+            max_price=hi,
+            condition=clean_condition,
+        ),
+        BUNDLE_TTL,
+        empty_timeout=15,
+    )

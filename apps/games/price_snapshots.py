@@ -1,9 +1,9 @@
-"""Create compact price history without losing daily freshness.
+"""Create compact price history without losing recent-check freshness.
 
 Refresh jobs may run repeatedly with an unchanged price. Keeping every identical
 row wastes storage and makes historical queries slower, so equal snapshots are
-coalesced for a short window. A daily heartbeat is still retained so users can
-see that an unchanged offer was checked recently.
+coalesced for a short window. A periodic heartbeat is still retained so users
+can see that an unchanged offer was checked recently.
 """
 
 from __future__ import annotations
@@ -18,7 +18,10 @@ from django.utils import timezone
 from .clients.scrape_utils import normalise_public_url
 from .models import Game, PriceRecord, Store
 
-SNAPSHOT_HEARTBEAT = timedelta(hours=20)
+# Actual price/stock/URL changes are always stored immediately. An unchanged
+# offer needs only a three-day freshness checkpoint, which remains comfortably
+# inside the graph's seven-day quote lifetime while cutting steady-state rows.
+SNAPSHOT_HEARTBEAT = timedelta(hours=72)
 MAX_STORED_PRICE = Decimal("99999999.99")
 
 

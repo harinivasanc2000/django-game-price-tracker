@@ -1,7 +1,7 @@
 """Detail page — official storefronts first, then local UK scrapes + filters."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import wait
 import math
 
 from django.http import JsonResponse
@@ -18,6 +18,7 @@ from .detail_helpers import empty_platform_bundle, similar_steam_titles
 from .fx import to_gbp_or_zero
 from .models import Game, Watch
 from .platform_bundle import platform_bundle
+from .executors import PAGE_EXECUTOR, cancel_pending
 
 _OFFICIAL_FOR_PLATFORM = {
     "pc": ("Steam",),
@@ -133,47 +134,41 @@ def steam_detail(request, app_id: int):
     plat = empty_platform_bundle(detail["name"], platform)
     similar = []
 
-    workers = 2 + (1 if want_pc_deals else 0) + 1  # plat + news + optional deals + similar
-    pool = ThreadPoolExecutor(max_workers=min(workers, 4))
-    try:
-        f_plat = pool.submit(
-            platform_bundle,
-            detail["name"],
-            platform,
-            min_price=min_price,
-            max_price=max_price,
-            condition=condition,
-        )
-        f_news = pool.submit(steam_news, app_id, 4)
-        f_deals = pool.submit(deals_for_title, detail["name"], 8) if want_pc_deals else None
-        f_sim = pool.submit(similar_steam_titles, detail["name"], app_id, country, 4)
-        completed, _ = wait(
-            [future for future in (f_plat, f_news, f_deals, f_sim) if future],
-            timeout=DETAIL_POOL_TIMEOUT,
-        )
+    f_plat = PAGE_EXECUTOR.submit(
+        platform_bundle,
+        detail["name"],
+        platform,
+        min_price=min_price,
+        max_price=max_price,
+        condition=condition,
+    )
+    f_news = PAGE_EXECUTOR.submit(steam_news, app_id, 4)
+    f_deals = PAGE_EXECUTOR.submit(deals_for_title, detail["name"], 8) if want_pc_deals else None
+    f_sim = PAGE_EXECUTOR.submit(similar_steam_titles, detail["name"], app_id, country, 4)
+    detail_futures = [future for future in (f_plat, f_news, f_deals, f_sim) if future]
+    completed, _ = wait(detail_futures, timeout=DETAIL_POOL_TIMEOUT)
+    cancel_pending(detail_futures)
 
-        if f_plat in completed:
-            try:
-                plat = f_plat.result() or plat
-            except Exception:
-                pass
-        if f_news in completed:
-            try:
-                news_items = f_news.result() or []
-            except Exception:
-                pass
-        if f_deals and f_deals in completed:
-            try:
-                store_deals = f_deals.result() or []
-            except Exception:
-                pass
-        if f_sim in completed:
-            try:
-                similar = f_sim.result() or []
-            except Exception:
-                pass
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+    if f_plat in completed:
+        try:
+            plat = f_plat.result() or plat
+        except Exception:
+            pass
+    if f_news in completed:
+        try:
+            news_items = f_news.result() or []
+        except Exception:
+            pass
+    if f_deals and f_deals in completed:
+        try:
+            store_deals = f_deals.result() or []
+        except Exception:
+            pass
+    if f_sim in completed:
+        try:
+            similar = f_sim.result() or []
+        except Exception:
+            pass
 
     if store_deals and (min_price is not None or max_price is not None):
         filtered = []

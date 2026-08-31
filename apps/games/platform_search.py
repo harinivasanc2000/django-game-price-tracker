@@ -15,7 +15,7 @@ import hashlib
 import math
 import re
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from decimal import Decimal
 from typing import Any
 from urllib.parse import quote, quote_plus
@@ -30,6 +30,7 @@ from .clients.title_match import filter_by_title
 from .clients.uk_stores import platform_query, uk_search_links
 from .clients.xbox import microsoft_store_search_url, search_xbox, xbox_search_url
 from .fx import to_gbp_or_zero
+from .executors import PAGE_EXECUTOR, cancel_pending
 
 MPS_TTL = 240  # 4 min — search is hot path
 POOL_TIMEOUT = 6.0
@@ -380,39 +381,38 @@ def multi_platform_search(
                     "search_url": nintendo_search_url(q),
                 }
 
-        workers = sum([want_steam, want_psn, want_xbox, want_switch]) or 1
         futures = {}
-        pool = ThreadPoolExecutor(max_workers=min(workers, 4))
-        try:
-            if want_steam:
-                futures[pool.submit(run_steam)] = "steam"
-            if want_psn:
-                futures[pool.submit(run_psn)] = "psn"
-            if want_xbox:
-                futures[pool.submit(run_xbox)] = "xbox"
-            if want_switch:
-                futures[pool.submit(run_nint)] = "nint"
+        if want_steam:
+            futures[PAGE_EXECUTOR.submit(run_steam)] = "steam"
+        if want_psn:
+            futures[PAGE_EXECUTOR.submit(run_psn)] = "psn"
+        if want_xbox:
+            futures[PAGE_EXECUTOR.submit(run_xbox)] = "xbox"
+        if want_switch:
+            futures[PAGE_EXECUTOR.submit(run_nint)] = "nint"
 
-            try:
-                for future in as_completed(futures, timeout=POOL_TIMEOUT):
-                    kind = futures[future]
-                    try:
-                        result = future.result()
-                    except Exception:
-                        continue
-                    if kind == "steam":
-                        steam_rows = result or []
-                    elif kind == "psn":
-                        psn_rows = result or []
-                    elif kind == "xbox":
-                        xbox_rows = result or []
-                    elif kind == "nint":
-                        nint_block = result or nint_block
-            except TimeoutError:
-                # Completed platforms are still useful; slow clients soft-fail.
-                pass
+        completed_count = 0
+        try:
+            for future in as_completed(futures, timeout=POOL_TIMEOUT):
+                completed_count += 1
+                kind = futures[future]
+                try:
+                    result = future.result()
+                except Exception:
+                    continue
+                if kind == "steam":
+                    steam_rows = result or []
+                elif kind == "psn":
+                    psn_rows = result or []
+                elif kind == "xbox":
+                    xbox_rows = result or []
+                elif kind == "nint":
+                    nint_block = result or nint_block
+        except TimeoutError:
+            # Completed platforms are still useful; slow clients soft-fail.
+            pass
         finally:
-            pool.shutdown(wait=False, cancel_futures=True)
+            cancel_pending(futures)
 
         raw = {
             "steam": [_ser(row) for row in steam_rows],
@@ -424,7 +424,10 @@ def multi_platform_search(
         }
         # Only network/title inputs belong in this cache. Price, condition and
         # display filters are inexpensive and now reuse the same raw response.
-        cache.set(cache_key, raw, MPS_TTL)
+        # A saturated shared pool is not evidence of zero search results: keep
+        # that partial response for only a few seconds so the next request can
+        # retry after queue pressure clears.
+        cache.set(cache_key, raw, 15 if completed_count < len(futures) else MPS_TTL)
 
     steam_rows = _dedupe_rows(filter_by_title(raw.get("steam") or [], q, min_score=0.67))
     if hide_dlc:

@@ -2,14 +2,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
-
 from django.shortcuts import render
 
 from .clients.public_deals import buy_recommendations
 from .fx import to_gbp_or_zero
 from .models import Game
 from .price_queries import latest_store_snapshots
+from .executors import PAGE_EXECUTOR
 
 
 def buy_guide(request):
@@ -24,17 +23,13 @@ def buy_guide(request):
         "free_picks": [],
         "country": country,
     }
-    pool = ThreadPoolExecutor(max_workers=1)
+    future = PAGE_EXECUTOR.submit(buy_recommendations, country)
     try:
-        future = pool.submit(buy_recommendations, country)
-        try:
-            public = future.result(timeout=15)
-        except Exception:
-            # Keep rendering from tracked snapshots; slow feeds may finish and
-            # warm their caches for the next request.
-            pass
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+        public = future.result(timeout=15)
+    except Exception:
+        # Keep rendering from tracked snapshots; cancel work that has not yet
+        # started, while an already-running bounded request may warm its cache.
+        future.cancel()
 
     games = list(
         Game.objects.filter(is_active=True)

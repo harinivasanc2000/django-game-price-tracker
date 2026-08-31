@@ -1,5 +1,5 @@
 """
-Refresh tracked game prices (Steam + best third-party via CheapShark).
+Refresh tracked game prices across official, PC, and UK physical stores.
 
 Works without Redis/Celery — useful for local testing:
 
@@ -13,7 +13,7 @@ from apps.games.tasks import refresh_one_game, refresh_all_tracked_prices
 
 
 class Command(BaseCommand):
-    help = "Refresh tracked Steam + third-party price snapshots"
+    help = "Refresh compact cross-platform and UK per-store price snapshots"
 
     def add_arguments(self, parser):
         parser.add_argument("--game-id", type=int, default=None)

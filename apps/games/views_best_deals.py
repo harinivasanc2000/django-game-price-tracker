@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import wait
 
 from django.shortcuts import render
 from django.utils import timezone
@@ -11,6 +11,7 @@ from .clients.public_deals import cheapshark_top_deals, steam_featured
 from .fx import to_gbp_or_zero
 from .models import Game
 from .price_queries import latest_store_snapshots
+from .executors import PAGE_EXECUTOR, cancel_pending
 
 
 def best_deals(request):
@@ -65,23 +66,21 @@ def best_deals(request):
     rows.sort(key=lambda r: r["price_gbp"])
 
     public_cs, steam_specials = [], []
-    pool = ThreadPoolExecutor(max_workers=2)
-    try:
-        f_cs = pool.submit(cheapshark_top_deals, limit=18, upper_price=50)
-        f_steam = pool.submit(steam_featured, "GB")
-        completed, _ = wait((f_cs, f_steam), timeout=12)
-        if f_cs in completed:
-            try:
-                public_cs = f_cs.result() or []
-            except Exception:
-                pass
-        if f_steam in completed:
-            try:
-                steam_specials = (f_steam.result().get("specials") or [])[:10]
-            except Exception:
-                pass
-    finally:
-        pool.shutdown(wait=False, cancel_futures=True)
+    f_cs = PAGE_EXECUTOR.submit(cheapshark_top_deals, limit=18, upper_price=50)
+    f_steam = PAGE_EXECUTOR.submit(steam_featured, "GB")
+    feed_futures = (f_cs, f_steam)
+    completed, _ = wait(feed_futures, timeout=12)
+    cancel_pending(feed_futures)
+    if f_cs in completed:
+        try:
+            public_cs = f_cs.result() or []
+        except Exception:
+            pass
+    if f_steam in completed:
+        try:
+            steam_specials = (f_steam.result().get("specials") or [])[:10]
+        except Exception:
+            pass
 
     return render(
         request,

@@ -8,13 +8,21 @@ an arbitrary newest store can be presented as the current best deal.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import timedelta
 
 from django.db.models import OuterRef, QuerySet, Subquery
+from django.utils import timezone
 
 from .models import PriceRecord
 
+CURRENT_QUOTE_MAX_AGE = timedelta(days=7)
 
-def latest_store_snapshots(game_ids: Iterable[int]) -> QuerySet[PriceRecord]:
+
+def latest_store_snapshots(
+    game_ids: Iterable[int],
+    *,
+    max_age: timedelta | None = CURRENT_QUOTE_MAX_AGE,
+) -> QuerySet[PriceRecord]:
     """Return one newest PriceRecord per game/store for the supplied games.
 
     The correlated subquery runs in SQL and avoids the classic N+1 loop where
@@ -31,7 +39,12 @@ def latest_store_snapshots(game_ids: Iterable[int]) -> QuerySet[PriceRecord]:
         .order_by("-recorded_at", "-pk")
         .values("pk")[:1]
     )
-    return PriceRecord.objects.filter(
+    current = PriceRecord.objects.filter(
         game_id__in=ids,
         pk=Subquery(newest_for_store),
-    ).select_related("game", "store")
+    )
+    # A disappeared or blocked listing cannot prove a sold-out transition.
+    # Expire its last quote instead of presenting it as a live deal forever.
+    if max_age is not None:
+        current = current.filter(recorded_at__gte=timezone.now() - max_age)
+    return current.select_related("game", "store")

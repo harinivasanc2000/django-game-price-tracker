@@ -33,7 +33,7 @@ class PriceSnapshotTests(TestCase):
         self.assertEqual(PriceRecord.objects.count(), 2)
 
     def test_invalid_price_is_rejected_before_it_reaches_database(self):
-        for value in (None, "not-a-number", "NaN", "Infinity", "-1"):
+        for value in (None, "not-a-number", "NaN", "Infinity", "-1", "1e100"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 record_snapshot(game=self.game, store=self.store, price=value)
 
@@ -54,3 +54,13 @@ class PriceSnapshotTests(TestCase):
         )
 
         self.assertEqual(record.url, url)
+
+    def test_unsafe_persistent_link_scheme_is_removed(self):
+        record, _ = record_snapshot(
+            game=self.game,
+            store=self.store,
+            price="9.99",
+            url="javascript:alert(1)",
+        )
+
+        self.assertEqual(record.url, "")

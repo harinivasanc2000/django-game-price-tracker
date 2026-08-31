@@ -48,3 +48,33 @@ class PlatformBundleTests(SimpleTestCase):
         self.assertEqual(specialist["label"], "The Game Collection")
         self.assertEqual(specialist["rows"][0]["price"], 19.99)
         self.assertEqual(payload["stores_total"], 11)
+
+    @patch("apps.games.platform_bundle.search_amazon_uk")
+    @patch("apps.games.platform_bundle.fetch_uk_physical_bundle")
+    def test_reversed_bounds_are_swapped_and_require_known_in_range_prices(
+        self, fetch_uk, amazon
+    ):
+        fetch_uk.return_value = {"stores_total": 11, "uk_links": []}
+        amazon.return_value = {
+            "results": [
+                {"name": "Unknown", "price": None},
+                {"name": "Free", "price": Decimal("0")},
+                {"name": "In range", "price": Decimal("15")},
+                {"name": "Too high", "price": Decimal("25")},
+            ],
+            "blocked": False,
+            "search_url": "https://www.amazon.co.uk/s?k=bounds",
+        }
+
+        payload = platform_bundle(
+            "Bounds regression unique",
+            "pc",
+            min_price=Decimal("20"),
+            max_price=Decimal("10"),
+            condition="invalid-condition",
+        )
+
+        self.assertEqual([row["name"] for row in payload["amazon_rows"]], ["In range"])
+        self.assertEqual(payload["active_filters"]["min_price"], "10")
+        self.assertEqual(payload["active_filters"]["max_price"], "20")
+        self.assertEqual(payload["active_filters"]["condition"], "")

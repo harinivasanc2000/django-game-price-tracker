@@ -58,18 +58,36 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "config.wsgi.application"
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-        # Reuse the same connection across requests within a thread — big
-        # win for SQLite (avoids re-opening the file per request).
-        "CONN_MAX_AGE": int(os.getenv("DB_CONN_MAX_AGE", "60")),
-        "OPTIONS": {
-            "timeout": 20,
-        },
+_DB_CONN_MAX_AGE = int(os.getenv("DB_CONN_MAX_AGE", "60"))
+_DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if _DATABASE_URL:
+    # django-environ is already a project dependency. A single setting enables
+    # PostgreSQL for larger deployments while zero-config local runs stay on
+    # the much lighter SQLite database.
+    import environ
+
+    database_config = environ.Env.db_url_config(_DATABASE_URL)
+    # ``db_url_config`` intentionally accepts only URL/engine arguments across
+    # supported django-environ versions; Django's persistence option belongs
+    # on the resulting database dictionary.
+    database_config["CONN_MAX_AGE"] = _DB_CONN_MAX_AGE
+    DATABASES = {"default": database_config}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+            # Reuse connections, allow readers during background writes, and
+            # acquire SQLite write locks at transaction start instead of after
+            # work has been done. This keeps snapshot coalescing deterministic.
+            "CONN_MAX_AGE": _DB_CONN_MAX_AGE,
+            "OPTIONS": {
+                "timeout": 20,
+                "transaction_mode": os.getenv("SQLITE_TRANSACTION_MODE", "IMMEDIATE"),
+                "init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL",
+            },
+        }
     }
-}
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -97,14 +115,24 @@ DEFAULT_REGION = os.getenv("DEFAULT_REGION", "GB")
 # ---------------------------------------------------------------------------
 # LocMem by default — zero external deps. Swap to Redis in production:
 #   CACHES + REDIS_URL -> "django.core.cache.backends.redis.RedisCache"
+_CACHE_BACKEND = os.getenv(
+    "CACHE_BACKEND", "django.core.cache.backends.locmem.LocMemCache"
+)
+_CACHE_OPTIONS = {}
+if _CACHE_BACKEND.endswith("LocMemCache"):
+    # A bounded cache trades a small, predictable amount of RAM for far fewer
+    # retailer requests. Redis deployments manage their own eviction policy.
+    _CACHE_OPTIONS = {
+        "MAX_ENTRIES": int(os.getenv("CACHE_MAX_ENTRIES", "800")),
+        "CULL_FREQUENCY": 3,
+    }
+
 CACHES = {
     "default": {
-        "BACKEND": os.getenv(
-            "CACHE_BACKEND",
-            "django.core.cache.backends.locmem.LocMemCache",
-        ),
+        "BACKEND": _CACHE_BACKEND,
         "LOCATION": os.getenv("CACHE_LOCATION", "game-price-tracker"),
         "TIMEOUT": int(os.getenv("CACHE_TIMEOUT", "300")),
+        "OPTIONS": _CACHE_OPTIONS,
     }
 }
 
@@ -130,7 +158,30 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TRACK_STARTED = False
+CELERY_TASK_IGNORE_RESULT = os.getenv("CELERY_TASK_IGNORE_RESULT", "True").lower() in (
+    "true",
+    "1",
+    "yes",
+)
+CELERY_RESULT_EXPIRES = int(os.getenv("CELERY_RESULT_EXPIRES", "3600"))
+CELERY_WORKER_CONCURRENCY = int(os.getenv("CELERY_WORKER_CONCURRENCY", "2"))
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.getenv("CELERY_MAX_TASKS_PER_CHILD", "100"))
+_PRICE_REFRESH_INTERVAL = int(os.getenv("PRICE_REFRESH_INTERVAL_SECONDS", "43200"))
+CELERY_BEAT_SCHEDULE = {
+    "compact-cross-platform-price-refresh": {
+        "task": "apps.games.tasks.refresh_all_tracked_prices",
+        "schedule": _PRICE_REFRESH_INTERVAL,
+        # If a worker was offline, do not replay an obsolete retailer sweep.
+        "options": {"expires": max(60, _PRICE_REFRESH_INTERVAL - 60)},
+    },
+    "send-pending-price-alerts": {
+        "task": "apps.games.tasks.send_pending_alerts",
+        "schedule": 900,
+        "options": {"expires": 840},
+    },
+}
 # If Redis is down, tasks can still be run via manage.py refresh_prices
 CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "False").lower() in (
     "true",
