@@ -1,6 +1,11 @@
 from django.contrib import admin
 from django.core.cache import cache
-from .cache_keys import HOME_CARDS, SITE_SETTINGS, TRACKED_DRAWER
+from .cache_keys import (
+    HOME_CARDS,
+    HOME_PLATFORM_CARD_KEYS,
+    SITE_SETTINGS,
+    TRACKED_DRAWER,
+)
 from .models import (
     Game,
     Store,
@@ -47,7 +52,7 @@ class GameAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         # Admin edits can change both navigation cards and seasonal ranking.
-        cache.delete_many([TRACKED_DRAWER, HOME_CARDS])
+        cache.delete_many([TRACKED_DRAWER, HOME_CARDS, *HOME_PLATFORM_CARD_KEYS])
         AdminChangeLog.objects.create(
             actor=getattr(request.user, "username", "admin") or "admin",
             action="game_save" if change else "game_create",

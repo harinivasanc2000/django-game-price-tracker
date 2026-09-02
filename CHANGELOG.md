@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-09-02 — Dynamic platform home feeds and motion polish
+
+- Made the home platform selector update the page in place: PS4, PS5, Xbox, and Switch now render their own UK deals and discounts, while `?platform=` remains a server-rendered progressive fallback and `/api/home-deals/` serves the same escaped HTML fragment
+- Added bounded BeautifulSoup home-feed providers for PSNDeal GB (PS4/PS5), the official Xbox UK sales page, and NTPrices (Switch); numeric deal fields are finite-checked, links/images are host-allowlisted, and cards are de-duplicated, capped, and clearly attributed
+- Kept platform changes low-resource with one compact cached payload per provider family, shared PlayStation fetching, single-flight cache production, separate three-minute home keys, fresh local snapshot merging, and official browse links whenever a public page is empty, changed, slow, or blocked
+- Isolated background refreshes by catalogue platform: console games no longer run Steam/CheapShark work, PC games no longer store console offers, and PlayStation bundle rows respect PS4/PS5 generation metadata
+- Added a responsive sticky search surface, lazy images, mobile horizontal snap cards, scroll progress, and viewport reveal transitions using passive/requestAnimationFrame work; reduced-motion visitors get immediate static content and animated wallpapers stop as their system preference changes
+- Added offline parser, platform-isolation, progressive-rendering, fragment-escaping, cache, and motion-accessibility regressions
+
+---
+
 ## 2026-09-02 — Price insights, smarter watches, and focused exports
 
 - Added a zero-query price-insight panel that reuses graph data to show the current best, 30-day low, daily recorded median, deal verdict, and evidence confidence without claiming a market-wide all-time low; the deal outlook now reuses the same summary instead of issuing a second history query

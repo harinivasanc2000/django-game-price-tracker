@@ -43,6 +43,10 @@
     #bg-layer, #bg-canvas {
       position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; pointer-events: none;
     }
+    /* Never expose an animated canvas when the visitor requests less motion. */
+    @media (prefers-reduced-motion: reduce) {
+      #bg-canvas { display: none !important; }
+    }
     #bg-layer { z-index: -3; }
     .bg-gradient {
       background: radial-gradient(ellipse 70% 45% at 15% 30%, rgba(100,15,15,0.28), transparent 55%), #080404;
@@ -364,6 +368,13 @@
     var animId = null;
     var mode = 'comet';
     var visible = true;
+    var motionPreference = window.matchMedia
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+
+    function motionIsReduced() {
+      return Boolean(motionPreference && motionPreference.matches);
+    }
 
     document.addEventListener('visibilitychange', function () {
       visible = document.visibilityState === 'visible';
@@ -381,7 +392,7 @@
     }
 
     function startComet() {
-      if (!canvas || !visible) return;
+      if (!canvas || !visible || motionIsReduced()) return;
       canvas.style.display = 'block';
       var ctx = canvas.getContext('2d');
       var w, h, comets = [], last = 0;
@@ -400,7 +411,7 @@
       }
       for (var i = 0; i < 5; i++) comets.push(spawn());
       function frame(t) {
-        if (mode !== 'comet' || !visible) return;
+        if (mode !== 'comet' || !visible || motionIsReduced()) return;
         if (t - last < 50) { animId = requestAnimationFrame(frame); return; }
         last = t; ctx.clearRect(0, 0, w, h);
         for (var j = 0; j < comets.length; j++) {
@@ -420,7 +431,7 @@
     }
 
     function startStars() {
-      if (!canvas || !visible) return;
+      if (!canvas || !visible || motionIsReduced()) return;
       canvas.style.display = 'block';
       var ctx = canvas.getContext('2d');
       var w, h, stars = [], last = 0;
@@ -435,7 +446,7 @@
       }
       resize();
       function frame(t) {
-        if (mode !== 'stars' || !visible) return;
+        if (mode !== 'stars' || !visible || motionIsReduced()) return;
         if (t - last < 60) { animId = requestAnimationFrame(frame); return; }
         last = t;
         ctx.fillStyle = '#020208';
@@ -454,7 +465,7 @@
     }
 
     function startAurora() {
-      if (!canvas || !visible) return;
+      if (!canvas || !visible || motionIsReduced()) return;
       canvas.style.display = 'block';
       var ctx = canvas.getContext('2d');
       var w, h, t0 = 0;
@@ -465,7 +476,7 @@
       }
       resize();
       function frame(t) {
-        if (mode !== 'aurora' || !visible) return;
+        if (mode !== 'aurora' || !visible || motionIsReduced()) return;
         if (t - t0 < 70) { animId = requestAnimationFrame(frame); return; }
         t0 = t;
         var phase = t * 0.00025;
@@ -501,7 +512,11 @@
         if (layer) layer.style.display = 'none';
         return;
       }
-      if (wall === 'game') wall = 'comet';
+      if (wall === 'game') {
+        // Pages without game artwork fall back to comet mode consistently.
+        wall = 'comet';
+        mode = wall;
+      }
       if (wall === 'comet') { if (layer) layer.style.display = 'none'; startComet(); }
       else if (wall === 'stars') { if (layer) layer.style.display = 'none'; startStars(); }
       else if (wall === 'aurora') { if (layer) layer.style.display = 'none'; startAurora(); }
@@ -515,6 +530,19 @@
     };
 
     window.applyAppearance();
+
+    // Apply preference changes immediately without leaving a canvas loop alive.
+    if (motionPreference) {
+      var updateMotion = function () {
+        stopAnim();
+        if (!motionIsReduced() && visible) window.applyAppearance();
+      };
+      if (motionPreference.addEventListener) {
+        motionPreference.addEventListener('change', updateMotion);
+      } else if (motionPreference.addListener) {
+        motionPreference.addListener(updateMotion);
+      }
+    }
   })();
   </script>
   {% block extra_js %}{% endblock %}

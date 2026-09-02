@@ -1,0 +1,134 @@
+<div data-home-feed-fragment data-platform="{{ current_platform }}">
+  {% if console_feed %}
+    <section class="platform-feature" data-reveal>
+      <div class="sec-head">
+        <div>
+          <span class="platform-kicker">Live UK feed</span>
+          <h2>{{ feed_heading }}</h2>
+        </div>
+        <a href="{{ browse_url }}" target="_blank" rel="noopener">Official {{ platform_label }} deals ↗</a>
+      </div>
+      <p class="feed-explainer">{{ feed_intro }}</p>
+
+      {% if console_deals %}
+        <div class="game-grid platform-game-grid">
+          {% for deal in console_deals %}
+            <a class="game-card" href="{{ deal.url }}"{% if deal.is_external %} target="_blank" rel="noopener"{% endif %} data-reveal>
+              <div class="cover{% if not deal.image %} cover-placeholder{% endif %}">
+                {% if deal.image %}
+                  <img src="{{ deal.image }}" alt="" loading="lazy" decoding="async" width="340" height="460">
+                {% else %}
+                  <span aria-hidden="true">{{ platform_label }}</span>
+                {% endif %}
+                {% if deal.discount %}<span class="discount-pill">-{{ deal.discount }}%</span>{% endif %}
+              </div>
+              <div class="body">
+                <div class="title">{{ deal.title }}</div>
+                <div class="meta">
+                  {{ deal.store_name }}
+                  {% if deal.source_kind == "tracker" %} · public price tracker{% elif deal.source_kind == "tracked" %} · tracked offer{% else %} · official store{% endif %}
+                </div>
+                <div class="price-row">
+                  <div>
+                    {% if deal.price_gbp == 0 %}<span class="now">Free</span>{% else %}<span class="now">£{{ deal.price_gbp|floatformat:2 }}</span>{% endif %}
+                    {% if deal.original_gbp is not None %}<span class="was">£{{ deal.original_gbp|floatformat:2 }}</span>{% endif %}
+                  </div>
+                  <span class="store-tag">{{ platform_label }}</span>
+                </div>
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+        <p class="source-disclaimer">Public tracker cards open their price-history page; official-store cards open the seller directly. Always confirm region, edition and checkout price.</p>
+      {% else %}
+        <div class="feed-empty" role="status">
+          <strong>No verified {{ platform_label }} cards are available right now.</strong>
+          <span>The source may be refreshing or blocked. You can still browse the official sale page.</span>
+          <a class="feed-empty-action" href="{{ browse_url }}" target="_blank" rel="noopener">Open official {{ platform_label }} deals ↗</a>
+        </div>
+      {% endif %}
+    </section>
+  {% else %}
+    {% if public_specials %}
+      <section data-reveal>
+        <div class="sec-head">
+          <h2>Steam specials right now</h2>
+          <a href="{% url 'games:buy_guide' %}">What to buy & where →</a>
+        </div>
+        <div class="hot-strip">
+          {% for d in public_specials %}
+            <a class="hot-chip" href="{{ d.detail_path }}" data-reveal>
+              {% if d.image %}<img class="ghost-image" src="{{ d.image }}" alt="" loading="lazy" decoding="async" width="460" height="215">{% endif %}
+              <div class="inner">
+                <div class="ht">{{ d.title }}</div>
+                <div class="hp">{% if d.price is not None %}{{ d.price }} {{ d.currency }}{% else %}See price{% endif %}</div>
+                <div class="hs">{% if d.discount %}-{{ d.discount }}% Steam{% else %}Steam special{% endif %}</div>
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    {% if hot_deals %}
+      <section data-reveal>
+        <div class="sec-head">
+          <h2>On sale vs launch</h2>
+          <a href="{% url 'games:best_deals' %}">All deals →</a>
+        </div>
+        <div class="hot-strip">
+          {% for c in hot_deals %}
+            <a class="hot-chip" href="{% url 'games:steam_detail' c.app_id %}" data-reveal>
+              {% if c.image %}<img class="ghost-image" src="{{ c.image }}" alt="" loading="lazy" decoding="async" width="460" height="215">{% endif %}
+              <div class="inner">
+                <div class="ht">{{ c.title }}</div>
+                <div class="hp">
+                  {% if c.lowest_gbp is not None %}£{{ c.lowest_gbp|floatformat:2 }}{% elif c.price_status == 'free' %}Free{% else %}See price{% endif %}
+                </div>
+                <div class="hs">
+                  {% if c.savings %}{{ c.savings }}% under launch{% elif c.discount %}-{{ c.discount }}% Steam{% else %}{{ c.lowest_label }}{% endif %}
+                </div>
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    <section data-reveal>
+      <div class="sec-head">
+        <h2>{% if current_platform == "pc" %}PC sale signals{% else %}Seasonal sale signals{% endif %}</h2>
+        <a href="{% url 'games:steam_search' %}?platform=pc">Browse more →</a>
+      </div>
+      {% if popular_cards %}
+        <p class="feed-explainer">Ranked from tracked discounted snapshots in the past {{ seasonal_window_days }} days, then current Steam specials. This measures sale activity, not unit sales.</p>
+        <div class="game-grid">
+          {% for c in popular_cards %}
+            <a class="game-card" href="{% url 'games:steam_detail' c.app_id %}" data-reveal>
+              <div class="cover">
+                <img src="{{ c.image }}" alt="" loading="lazy" decoding="async" width="460" height="215">
+                {% if c.discount %}<span class="discount-pill">-{{ c.discount }}%</span>{% elif c.savings and c.savings > 0 %}<span class="discount-pill">-{{ c.savings }}%</span>{% endif %}
+              </div>
+              <div class="body">
+                <div class="title">{{ c.title }}</div>
+                <div class="meta">{{ c.lowest_label|default:"Steam" }}{% if c.sale_source %} · {{ c.sale_source }}{% endif %}</div>
+                <div class="price-row">
+                  <div>
+                    {% if c.price_status == 'free' %}<span class="now">Free</span>
+                    {% elif c.lowest_gbp is not None %}<span class="now">£{{ c.lowest_gbp|floatformat:2 }}</span>
+                    {% elif c.price_status == 'paid' and c.price is not None %}<span class="now">{{ c.price }} {{ c.currency }}</span>
+                    {% else %}<span class="now unknown-price">See deals</span>{% endif %}
+                    {% if c.original and c.discount %}<span class="was">{{ c.original }}</span>{% endif %}
+                  </div>
+                  <span class="store-tag">UK</span>
+                </div>
+              </div>
+            </a>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="feed-empty" role="status">No PC sale cards are available just now. Try again shortly or use search.</div>
+      {% endif %}
+    </section>
+  {% endif %}
+</div>

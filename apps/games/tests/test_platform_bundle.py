@@ -6,7 +6,11 @@ from unittest.mock import patch
 from django.core.cache import cache
 from django.test import SimpleTestCase
 
-from apps.games.platform_bundle import _bundle_cache_key, platform_bundle
+from apps.games.platform_bundle import (
+    _bundle_cache_key,
+    _filter_psn_generation,
+    platform_bundle,
+)
 
 
 class PlatformBundleTests(SimpleTestCase):
@@ -18,6 +22,26 @@ class PlatformBundleTests(SimpleTestCase):
         self.assertLess(len(key), 50)
         self.assertNotIn(" ", key)
         self.assertNotIn("Pokémon", key)
+
+    def test_playstation_generation_filter_drops_only_explicit_mismatches(self):
+        rows = [
+            {"name": "PS4 edition", "platforms": ["PS4"]},
+            {"name": "PS5 edition", "platforms": ["PlayStation 5"]},
+            {"name": "Cross-gen edition", "platforms": ["PS4", "PS5"]},
+            {"name": "Metadata unavailable", "platforms": []},
+        ]
+
+        ps4 = _filter_psn_generation(rows, "ps4")
+        ps5 = _filter_psn_generation(rows, "ps5")
+
+        self.assertEqual(
+            [row["name"] for row in ps4],
+            ["PS4 edition", "Cross-gen edition", "Metadata unavailable"],
+        )
+        self.assertEqual(
+            [row["name"] for row in ps5],
+            ["PS5 edition", "Cross-gen edition", "Metadata unavailable"],
+        )
 
     @patch("apps.games.platform_bundle.search_amazon_uk")
     @patch("apps.games.platform_bundle.fetch_uk_physical_bundle")

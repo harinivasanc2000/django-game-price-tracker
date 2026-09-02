@@ -1,4 +1,4 @@
-"""Low-overhead background refreshes for every supported price source.
+"""Low-overhead background refreshes for each game's relevant price sources.
 
 Steam is fetched directly because it is identified by app id.  Every other
 official/UK source is obtained through one cached :func:`platform_bundle`
@@ -29,8 +29,9 @@ from .price_snapshots import record_snapshot
 from .executors import PAGE_EXECUTOR
 
 
-# Each refresh submits exactly two secondary jobs to the shared page pool
-# (platform bundle + CheapShark) while its current thread handles Steam.
+# A refresh always submits one platform-specific bundle. PC games additionally
+# reuse CheapShark while their current thread handles Steam; console refreshes
+# avoid those irrelevant requests entirely.
 MAX_REFRESH_PRICE = Decimal("99999999.99")
 
 
@@ -318,13 +319,15 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
     }
     watch_state = _watch_state(game)
 
-    # Start the two broad secondary lookups, then use this worker's current
-    # thread for Steam. This overlaps all network work with only two extra
-    # outer threads; each client and inner bundle applies its own short timeout.
-    bundle_future = PAGE_EXECUTOR.submit(platform_bundle, game.title, "")
-    deals_future = PAGE_EXECUTOR.submit(deals_for_title, game.title, limit=12)
+    is_pc = game.platform == Game.Platform.PC
+    # Pass the catalogue platform through to every retailer search. This keeps
+    # PS4/PS5 editions separate and stops console rows contaminating PC history.
+    bundle_future = PAGE_EXECUTOR.submit(platform_bundle, game.title, game.platform)
+    deals_future = (
+        PAGE_EXECUTOR.submit(deals_for_title, game.title, limit=12) if is_pc else None
+    )
     detail = None
-    if game.steam_app_id:
+    if is_pc and game.steam_app_id:
         try:
             detail = get_app_details(game.steam_app_id, country=country)
         except Exception as exc:  # noqa: BLE001 — one source must not abort the batch
@@ -335,11 +338,12 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
     except Exception as exc:  # noqa: BLE001
         bundle = {}
         result["errors"].append(f"platform bundle: {exc}")
-    try:
-        deals = deals_future.result() or []
-    except Exception as exc:  # noqa: BLE001
-        deals = []
-        result["errors"].append(f"cheapshark: {exc}")
+    deals = []
+    if deals_future is not None:
+        try:
+            deals = deals_future.result() or []
+        except Exception as exc:  # noqa: BLE001
+            result["errors"].append(f"cheapshark: {exc}")
 
     def count_record(outcome: tuple[bool, bool, int], store_name: str) -> None:
         observed, created, alerts = outcome
@@ -374,10 +378,16 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
         if header and not game.cover_url:
             game.cover_url = header
             game.save(update_fields=["cover_url", "updated_at"])
-    elif game.steam_app_id:
+    elif is_pc and game.steam_app_id:
         result["errors"].append("steam fetch failed")
 
     for key, spec in _BUNDLE_SOURCES.items():
+        if key == "psn_rows" and game.platform not in {Game.Platform.PS4, Game.Platform.PS5}:
+            continue
+        if key == "xbox_rows" and game.platform != Game.Platform.XBOX:
+            continue
+        if key == "nintendo_rows" and game.platform != Game.Platform.SWITCH:
+            continue
         row = _best_offer(bundle.get(key) or [])
         if row is None:
             continue
@@ -420,7 +430,7 @@ def refresh_one_game(game: Game, country: str = "GB") -> dict:
 @shared_task(name="apps.games.tasks.refresh_all_tracked_prices")
 def refresh_all_tracked_prices(country: str = "GB") -> dict:
     # Console/manual entries have useful title/platform data even without a
-    # Steam app id, so refresh them through the all-platform bundle as well.
+    # Steam app id, so refresh them through their platform-specific bundle.
     games = Game.objects.filter(is_active=True).order_by("pk")
     summary = {
         "count": games.count(),

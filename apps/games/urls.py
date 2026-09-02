@@ -39,7 +39,8 @@ urlpatterns = [
         views_export.export_game_prices_csv,
         name="export_game_prices",
     ),
-    # --- JSON APIs ---
+    # --- Lightweight asynchronous endpoints ---
+    path("api/home-deals/", home_view.home_deals_fragment, name="home_deals_fragment"),
     path("api/suggest/", views.steam_suggest, name="steam_suggest"),
     path("api/platform/<int:app_id>/", views_steam_detail.platform_deals_api, name="platform_deals"),
     # --- game detail & tracking ---

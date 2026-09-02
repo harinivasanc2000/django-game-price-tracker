@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from concurrent.futures import wait
 from decimal import Decimal
 from typing import Any
@@ -50,6 +51,30 @@ def _ser(row: dict) -> dict:
     for k, v in row.items():
         out[k] = float(v) if isinstance(v, Decimal) else v
     return out
+
+
+def _filter_psn_generation(rows: list[dict], platform: str) -> list[dict]:
+    """Drop an explicitly wrong PlayStation generation, retaining unknowns."""
+    if platform not in {"ps4", "ps5"}:
+        return rows
+    wanted = platform[-1]
+    filtered = []
+    for row in rows:
+        labels = " ".join(str(value) for value in (row.get("platforms") or []))
+        compact = re.sub(r"[^a-z0-9]", "", labels.casefold())
+        # Store metadata varies between compact (``PS5``) and long
+        # (``PlayStation 5``) labels. Recognise both before deciding that a
+        # row is generation-neutral.
+        generations = {
+            generation
+            for generation in ("4", "5")
+            if f"ps{generation}" in compact or f"playstation{generation}" in compact
+        }
+        mentions_generation = bool(generations)
+        matches = wanted in generations
+        if not mentions_generation or matches:
+            filtered.append(row)
+    return filtered
 
 
 def _platform_bundle_impl(
@@ -192,7 +217,9 @@ def _platform_bundle_impl(
             return False
         return True
 
-    psn_rows = [r for r in psn_rows if price_ok(r)]
+    psn_rows = _filter_psn_generation(
+        [r for r in psn_rows if price_ok(r)], platform
+    )
     xbox_rows = [r for r in xbox_rows if price_ok(r)]
     nint_results = [r for r in (nint.get("results") or []) if price_ok(r)]
 

@@ -21,7 +21,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_POST
 
 from .cache import bust
-from .cache_keys import HOME_CARDS, TRACKED_DRAWER
+from .cache_keys import HOME_CARDS, HOME_PLATFORM_CARD_KEYS, TRACKED_DRAWER
 from .clients.external_stores import ensure_uk_stores
 from .clients.steam import get_app_details, suggest_store
 from .fx import to_gbp, to_gbp_or_zero
@@ -89,6 +89,8 @@ def _log_history(request, action, query="", steam_app_id=None, title="", detail_
 def _bust_ui_caches():
     bust(TRACKED_DRAWER)
     bust(HOME_CARDS)
+    for key in HOME_PLATFORM_CARD_KEYS:
+        bust(key)
 
 
 def _unique_slug(name: str, app_id: int) -> str:

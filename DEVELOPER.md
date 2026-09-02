@@ -34,13 +34,14 @@ django-game-price-tracker/
 ├── templates/
 │   ├── base.html              # navigation, drawer, themes, wallpapers
 │   └── games/
+│       ├── _home_feed.html    # escaped dynamic platform-feed fragment
 │       ├── steam_detail.html  # comparison page + atomic filtered navigation
 │       ├── steam_search.html  # advanced cross-platform search/filter UI
 │       └── _price_chart.html  # reusable safe Chart.js component
 └── apps/games/
     ├── models.py              # Game, Store, PriceRecord, Watch, Alert, history
     ├── urls.py                # application routes
-    ├── home_view.py           # 90-day sale-signal home ranking
+    ├── home_view.py           # dynamic platform home feeds + 90-day PC signals
     ├── search_view.py         # query validation and search-page context
     ├── platform_search.py     # parallel platform search, filters, raw cache
     ├── search_sort.py         # deterministic ranking and smart-value score
@@ -59,6 +60,7 @@ django-game-price-tracker/
     ├── fx.py                  # currency to GBP
     ├── tasks.py               # refreshes and target-price email alerts
     ├── clients/
+    │   ├── platform_deals.py  # cached PSNDeal/Xbox/NTPrices home providers
     │   ├── title_match.py     # strict cross-store title relevance
     │   ├── scrape_utils.py    # HTTP/BS4/JSON-LD/money/URL primitives
     │   ├── scrape_filters.py  # platform, condition, accessory, price filters
@@ -72,7 +74,7 @@ django-game-price-tracker/
 
 | Goal | Main files |
 |---|---|
-| Seasonal home order | `home_view.py`; edit `constants.py` only for final fallback IDs |
+| Home platform feeds/order | `home_view.py`, `clients/platform_deals.py`, `home.html`, `_home_feed.html`; edit `constants.py` only for final PC fallback IDs |
 | Search controls | `search_view.py`, `steam_search.html` |
 | Search fetching/filtering | `platform_search.py` |
 | Ranking formula | `search_sort.py` |
@@ -91,6 +93,17 @@ django-game-price-tracker/
 | Admin behaviour | `admin.py` |
 
 ## Request flows
+
+### Home platform feed
+
+1. `/` validates `platform` against the fixed PC/PS4/PS5/Xbox/Switch choices; the query-string response is the no-JavaScript fallback.
+2. The browser intercepts selector changes and requests `/api/home-deals/?platform=…`, an escaped HTML fragment built from the same context as a full render. Abort/version guards stop late responses replacing a newer selection, and history state keeps the selected URL shareable.
+3. PC/All reuse the cached 90-day sale-signal and Steam feed. Console choices merge fresh indexed local snapshots with at most 12 normalized public cards, then rank by verified discount, price, and title.
+4. `clients/platform_deals.py` parses PSNDeal GB, the official Xbox UK sales page, or NTPrices with BeautifulSoup. Each provider family has one compact 15-minute cached payload; PS4 and PS5 share one download, and empty/blocked results retry sooner.
+5. Every remote numeric field is finite/bounded, while links and images are restricted to source host allowlists. A provider failure returns an empty list, leaving the official platform browse link and previously rendered cards usable.
+6. Console home payloads have separate three-minute platform cache keys; PC/All reuse the original Steam key. Tracking and admin changes invalidate all of them explicitly because not every cache backend supports prefix deletion.
+
+The home reveal observer only watches newly inserted cards and then unobserves them. Scroll progress uses a passive listener plus one animation-frame update, mobile grids use CSS scroll snap, and every motion path has a `prefers-reduced-motion` static fallback.
 
 ### Search
 
@@ -112,10 +125,10 @@ django-game-price-tracker/
 
 ### Price refresh
 
-1. `refresh_one_game` overlaps Steam with one cached all-platform/UK bundle and a bounded CheapShark lookup.
+1. `refresh_one_game` always requests one platform-specific/UK bundle. PC games overlap it with Steam and a bounded CheapShark lookup; console games skip both PC-only sources.
 2. It selects one best finite offer per official/UK source and one per CheapShark retailer; explicit sold-out rows are stored as state and never alerted as deals.
 3. `record_snapshot` validates prices/HTTP(S) links and coalesces unchanged rows for 72 hours. Every successful confirmation advances `last_checked_at`; price, URL, stock, condition, or discount changes are stored immediately.
-4. All source writes use the same indexed `PriceRecord` history, including console-only tracked `Game` rows; no parallel history table is required.
+4. All source writes use the same indexed `PriceRecord` history, including console-only tracked `Game` rows; source rows are accepted only for the game's matching platform, with PS4/PS5 metadata checked separately.
 5. Watches and existing alert keys are loaded once per game refresh, then trustworthy GBP targets create de-duplicated `PriceAlert` rows.
 6. Run synchronously, queue through Celery, or use the default 12-hour Celery Beat entry.
 
@@ -154,6 +167,8 @@ The graph accepts the newest 300 in-stock observations plus live quotes, convert
 
 `scrape_utils.py` supplies one pooled session per worker thread, bounded response size/time, block-page detection, GBP-aware price parsing, nested JSON-LD Product/ItemList traversal, finite rating/price validation, and HTTP(S) URL normalisation with optional retailer host allowlists. Prefer structured data, then narrowly scoped card selectors. Never collect seller PII or attempt login/captcha bypasses.
 
+`platform_deals.py` has a narrower home-card contract: `title`, `platform`, JSON-safe `price_gbp`/`original_gbp`, `discount`, `image`, `url`, `store_name`, and `source_kind`. Preserve the source's DOM order inside each parser, de-duplicate by normalized title, and keep the hard 12-card/provider cap. PSNDeal and NTPrices must remain labelled aggregators; Xbox is the official source.
+
 ## Client contract
 
 Clients return plain serialisable dictionaries/lists, not Django models. A priced product normally looks like:
@@ -187,7 +202,7 @@ Scraper and Nintendo clients that expose blocked-state metadata return:
 
 ## Cache invalidation
 
-Shared UI keys live in `cache_keys.py`. Tracking and admin saves must invalidate the home-card and tracked-drawer keys. Bump a versioned network/bundle key whenever a cached payload shape changes.
+Shared UI keys live in `cache_keys.py`. Tracking and admin saves must invalidate the PC home, every console home, and tracked-drawer keys. Bump both the versioned provider-family key and home payload key whenever either cached shape changes.
 
 `cache.cached()` uses backend-safe keys, short empty-result TTLs, and per-process single-flight locks. `executors.py` owns the only long-lived request I/O pools: page-level (6), platform-bundle (5), and UK stores (6). Do not introduce a per-request executor; tune the three `*_IO_WORKERS` variables instead. SQLite uses WAL/`BEGIN IMMEDIATE`; use `DATABASE_URL` + Redis cache for multiple web processes.
 

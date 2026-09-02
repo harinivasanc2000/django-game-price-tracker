@@ -1,4 +1,4 @@
-"""Every supported platform shares one compact per-store price history."""
+"""Refreshes keep a compact history without mixing platform-specific offers."""
 
 from copy import deepcopy
 from decimal import Decimal
@@ -59,7 +59,7 @@ class CrossPlatformRefreshTests(TestCase):
     @patch("apps.games.tasks.get_app_details")
     @patch("apps.games.tasks.deals_for_title")
     @patch("apps.games.tasks.platform_bundle")
-    def test_console_only_game_records_all_sources_and_only_real_changes(
+    def test_ps5_game_records_psn_and_uk_sources_without_other_platforms(
         self, bundle, deals, get_detail, _to_gbp
     ):
         bundle.return_value = deepcopy(self.bundle)
@@ -68,38 +68,49 @@ class CrossPlatformRefreshTests(TestCase):
         first = refresh_one_game(self.game)
 
         get_detail.assert_not_called()
+        deals.assert_not_called()
+        bundle.assert_called_once_with(self.game.title, Game.Platform.PS5)
         self.assertTrue(first["psn"])
-        self.assertTrue(first["xbox"])
-        self.assertTrue(first["nintendo"])
+        self.assertFalse(first["xbox"])
+        self.assertFalse(first["nintendo"])
         self.assertTrue(first["uk"])
-        self.assertTrue(first["third_party"])
-        self.assertEqual(first["sources_observed"], 6)
-        self.assertEqual(first["snapshots_created"], 6)
-        self.assertEqual(PriceRecord.objects.count(), 6)
+        self.assertFalse(first["third_party"])
+        self.assertEqual(first["sources_observed"], 3)
+        self.assertEqual(first["snapshots_created"], 3)
+        self.assertEqual(PriceRecord.objects.count(), 3)
         self.assertFalse(PriceRecord.objects.filter(price=Decimal("1.00")).exists())
         self.assertEqual(
             set(PriceRecord.objects.values_list("store__slug", flat=True)),
-            {"psn-uk", "xbox-uk", "nintendo-eshop-uk", "game-uk", "shopto-uk", "cs-fanatical"},
+            {"psn-uk", "game-uk", "shopto-uk"},
         )
 
         second = refresh_one_game(self.game)
         self.assertEqual(second["snapshots_created"], 0)
-        self.assertEqual(PriceRecord.objects.count(), 6)
+        self.assertEqual(PriceRecord.objects.count(), 3)
 
+        # An irrelevant Xbox price change must not leak into PS5 history.
         changed = deepcopy(self.bundle)
         changed["xbox_rows"][0]["price"] = "19.99"
         bundle.return_value = changed
         third = refresh_one_game(self.game)
 
-        self.assertEqual(third["snapshots_created"], 1)
-        self.assertEqual(PriceRecord.objects.count(), 7)
+        self.assertEqual(third["snapshots_created"], 0)
+        self.assertEqual(PriceRecord.objects.count(), 3)
+        self.assertFalse(PriceRecord.objects.filter(store__slug="xbox-uk").exists())
+
+        # A real PSN change remains append-only history for the selected platform.
+        changed["psn_rows"][0]["price"] = "19.99"
+        fourth = refresh_one_game(self.game)
+
+        self.assertEqual(fourth["snapshots_created"], 1)
+        self.assertEqual(PriceRecord.objects.count(), 4)
         self.assertEqual(
             list(
-                PriceRecord.objects.filter(store__slug="xbox-uk")
+                PriceRecord.objects.filter(store__slug="psn-uk")
                 .order_by("recorded_at", "pk")
                 .values_list("price", flat=True)
             ),
-            [Decimal("34.99"), Decimal("19.99")],
+            [Decimal("39.99"), Decimal("19.99")],
         )
 
         sold_out = deepcopy(changed)
@@ -108,8 +119,8 @@ class CrossPlatformRefreshTests(TestCase):
              "url": "https://www.game.co.uk/everywhere-game"}
         ]
         bundle.return_value = sold_out
-        fourth = refresh_one_game(self.game)
+        fifth = refresh_one_game(self.game)
 
-        self.assertEqual(fourth["snapshots_created"], 1)
+        self.assertEqual(fifth["snapshots_created"], 1)
         latest_game = PriceRecord.objects.filter(store__slug="game-uk").latest("recorded_at", "pk")
         self.assertFalse(latest_game.in_stock)

@@ -36,7 +36,8 @@ celery -A config worker --beat --loglevel=INFO --concurrency=2
 
 | URL | Purpose |
 |---|---|
-| `/` | 90-day sale signals, current Steam specials, and stable fallbacks |
+| `/` | Dynamic PC/PS4/PS5/Xbox/Switch UK deal feeds (`?platform=ps4` works without JavaScript) |
+| `/api/home-deals/?platform=ps4` | Cached, server-escaped HTML fragment used by the home platform selector |
 | `/search/` | Cross-platform results plus 32 encoded UK/direct store links |
 | `/steam/<app_id>/` | Live multi-store comparison, filters, graph, and tracking |
 | `/guide/` | Public deal feeds and buying guidance |
@@ -61,6 +62,8 @@ Search supports:
 
 The 11-source UK bundle uses CeX's unofficial JSON endpoint first with a public BS4 fallback; MusicMagpie, eBay UK, GAME, Argos, Currys, Smyths, The Game Collection, Hit, ShopTo, and SimplyGames use public HTML. Amazon UK is attempted separately. Every source soft-fails to a clickable search link when a site blocks automated access.
 
+The home console feed combines fresh tracked snapshots with small public sale-page feeds: PSNDeal GB for PS4/PS5, the official Xbox UK sales page, and NTPrices for Switch. PSNDeal and NTPrices are independent price trackers, not platform stores. Their cards open the tracker page; an official platform browse link remains available when parsing is blocked or markup changes.
+
 The all-platform directory currently exposes 32 encoded destinations: official platform stores, authorised PC sellers, comparison services, UK retail, used shops, marketplaces, and social/classified fallbacks. Facebook Marketplace, Gumtree, Vinted, and similar services are link-only; the app does not log in or collect seller personal information.
 
 ## Techniques used
@@ -69,13 +72,17 @@ The all-platform directory currently exposes 32 encoded destinations: official p
 - **Smart-value ranking:** `160 × title match + 0.35 × discount + 0.12 × capped cash saving − 2 × ln(1 + price)`. Relevance deliberately dominates a suspiciously cheap loose match; unknown/NaN/infinite prices sort last.
 - **Reusable raw search cache:** canonical NFKC queries and fixed-length BLAKE2 keys let price/filter/sort changes reuse one four-platform result bundle; single-flight locks collapse simultaneous misses into one producer.
 - **Defensive BS4 parsing:** bounded thread-local sessions, JSON-LD traversal, current-price detection, GBP/finite-number validation, host-allowlisted URLs, stock-aware deduplication, and card fallbacks.
+- **Low-resource platform feeds:** one capped, parsed payload is cached per console provider family; PS4 and PS5 share a single PlayStation-page request, simultaneous misses are collapsed, and separate home keys prevent one platform's cards leaking into another.
 - **Current-offer SQL:** correlated subqueries select the newest row for every `(game, store)` pair in one query, avoiding N+1 lookups; quotes expire from current-deal surfaces after seven days without a confirmed check.
 - **All-store compact history:** one refresh stores the best validated Steam, PSN, Xbox, Nintendo, Amazon, UK-retailer, and bounded per-retailer CheapShark offer. Price/stock/URL/condition changes are immediate; unchanged checks update `last_checked_at` in place and add a graph checkpoint only after 72 hours.
+- **Platform-isolated refresh:** every catalogue game passes its platform to the store bundle; Steam and CheapShark run only for PC, while PSN/Xbox/Nintendo rows are retained only for their matching console.
 - **Aligned graph algorithm:** independently sampled sellers share a real-time-spaced event timeline; quotes carry forward for at most seven days, observed checks remain marked, and fresh best/average lines are calculated in GBP.
 - **Recorded-price insight:** the existing bounded graph payload is reduced to one market-low observation per local day, then used for its lowest shown value, median, 30-day sample low, confidence level, and plain-language verdict without another query.
 - **Hard concurrency budget:** three process-wide pools cap page, bundle, and UK work at 17 lazy threads by default. Deadlines cancel queued work, while one blocked retailer soft-fails without multiplying threads per request.
 
 Signed-in profiles also show each watch's cheapest fresh offer and distance from its target. Targets can be edited inline, including a £0 target for verified free-game alerts. Quotes older than 24 hours are visibly marked for refresh and disappear from current-deal surfaces after seven days.
+
+Home transitions use browser-native scrolling, `IntersectionObserver`, passive events, and animation-frame throttling rather than a UI framework. Mobile cards use horizontal scroll snapping, and `prefers-reduced-motion` disables reveals, smooth scrolling, progress animation, and animated wallpapers.
 
 ## Low-resource deployment
 

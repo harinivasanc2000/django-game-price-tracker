@@ -6,10 +6,11 @@ This file documents **all legitimate stores, aggregators, public APIs, domains a
 
 **Philosophy**: Prefer official / public APIs + reputable aggregators. Be extremely careful with any internal/unofficial endpoints (e.g. CeX). Store secrets in environment variables only.
 
-## Current implemented coverage (2026-08-30)
+## Current implemented coverage (2026-09-02)
 
 - **Official/platform results:** Steam, PlayStation Store UK, Xbox/Microsoft Store UK, and Nintendo eShop UK.
 - **Aggregated PC deals:** CheapShark, with keyshop/marketplace risk labels.
+- **Dynamic console home deals:** PSNDeal GB for PS4/PS5, the official Xbox UK sales page, and NTPrices for Switch, merged with fresh locally tracked offers.
 - **Automatic UK product search:** CeX (unofficial JSON endpoint first, public BS4 fallback), plus public HTML for MusicMagpie, eBay UK, GAME, Argos, Currys, Smyths, The Game Collection, Hit, ShopTo, and SimplyGames. Amazon UK is a separate best-effort public-page client.
 - **Browser fallbacks:** all automatic sources plus official stores, Humble, Fanatical, Green Man Gaming, GOG, Epic, Loaded/CDKeys, Eneba, GG.deals, IsThereAnyDeal, AllKeyShop, Cash Converters, Facebook Marketplace, Gumtree, Vinted, and PriceRunner.
 - **Social/classified policy:** link-only; no login, seller-profile collection, or personal seller data.
@@ -36,6 +37,15 @@ Retail HTML can change or be blocked at any time. Empty automated results theref
 - **Notes**: Primary digital source for PS4/PS5. Region = GB for UK.
 - **Status**: Implemented with strict title/full-game metadata filtering and direct Store links.
 
+### Xbox / Microsoft Store UK
+- **Website**: https://www.xbox.com/en-gb/
+- **Home sale page**: https://www.xbox.com/en-gb/promotions/sales/sales-and-specials
+- **Status**: The official public sale page supplies Xbox home cards; only finite GBP game offers with Xbox-hosted links are retained.
+
+### Nintendo eShop UK
+- **Website**: https://www.nintendo.com/en-gb/
+- **Status**: Official browser/search links remain the purchase destination. The dynamic home summary uses the independent NTPrices tracker described below because Nintendo does not provide this project with a stable public sale API.
+
 ### Epic Games Store
 - **Website**: https://store.epicgames.com
 - **Status**: Planned – use carefully / via aggregators.
@@ -58,7 +68,13 @@ Retail HTML can change or be blocked at any time. Empty automated results theref
 - **Status**: Browser fallback only; no API credential is read by the app.
 
 ### Other
-- **CheapShark: implemented.** PSprices, PlatPrices, and Hot.Game remain possible future sources.
+- **CheapShark: implemented** for aggregated PC offers.
+- **PSNDeal: implemented** as a public HTML price-tracker feed for PS4/PS5 home cards: https://psndeal.com/gb
+- **NTPrices: implemented** as a public HTML price-tracker feed for Switch home cards: https://ntprices.com/
+- PSNDeal and NTPrices are independent aggregators, not Sony/Nintendo stores; their cards link to price-history pages and the UI separately retains official storefront browse links.
+- PSprices, other PlatPrices properties, and Hot.Game remain possible future sources.
+
+The three console home providers are parsed with bounded BeautifulSoup selectors. Results are restricted to finite GBP sale/current values, source-host-allowlisted product and image URLs, stable title de-duplication, and 12 cards. One compact payload is cached per provider family for 15 minutes (PS4/PS5 share it), while blocked/empty results use a shorter retry cache and soft-fail to official browse links.
 
 ---
 
@@ -141,6 +157,7 @@ This was the initial pilot plan and is retained for reference; the current imple
 - Any unofficial endpoint (CeX internal) = low volume + heavy caching + easy to disable
 - Never commit secrets
 - Clearly label physical vs digital and risk level in the UI
+- Attribute official sale pages separately from independent price trackers, and keep an official browse fallback when an automated home feed is unavailable
 - Keep the product UK-first while treating every supported platform consistently
 
 This keeps the project focused, legal, and sustainable.
