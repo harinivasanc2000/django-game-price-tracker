@@ -16,6 +16,15 @@ from django.utils import timezone
 from .models import PriceRecord
 
 CURRENT_QUOTE_MAX_AGE = timedelta(days=7)
+CURRENT_QUOTE_WARNING_AGE = timedelta(hours=24)
+
+
+def quote_needs_refresh(recorded_at, *, now=None) -> bool:
+    """Flag an aging quote before it reaches the seven-day hard expiry."""
+    if recorded_at is None:
+        return True
+    reference = now or timezone.now()
+    return recorded_at <= reference - CURRENT_QUOTE_WARNING_AGE
 
 
 def latest_store_snapshots(
@@ -46,5 +55,5 @@ def latest_store_snapshots(
     # A disappeared or blocked listing cannot prove a sold-out transition.
     # Expire its last quote instead of presenting it as a live deal forever.
     if max_age is not None:
-        current = current.filter(recorded_at__gte=timezone.now() - max_age)
+        current = current.filter(last_checked_at__gte=timezone.now() - max_age)
     return current.select_related("game", "store")

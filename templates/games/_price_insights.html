@@ -1,0 +1,38 @@
+{% comment %}
+This summary reuses the graph payload and therefore adds no database or store
+requests. "Recorded" is intentional: this tracker cannot claim a market-wide
+all-time low when a retailer was unavailable or blocked.
+{% endcomment %}
+{% if price_insights.has_data %}
+<section class="insight-panel" aria-labelledby="priceInsightTitle">
+  <h2 id="priceInsightTitle" class="ico ico-chart" style="font-size:0.95rem;">Price insight</h2>
+  <div class="insight-grid">
+    <div class="insight-card">
+      <div class="insight-label">Current best</div>
+      <div class="insight-value">£{{ price_insights.current|floatformat:2 }}</div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-label">Lowest shown</div>
+      <div class="insight-value">£{{ price_insights.recorded_low|floatformat:2 }}</div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-label">30-day sample low</div>
+      <div class="insight-value">{% if price_insights.low_30d is not None %}£{{ price_insights.low_30d|floatformat:2 }}{% else %}Not enough data{% endif %}</div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-label">Typical recorded</div>
+      <div class="insight-value">£{{ price_insights.typical|floatformat:2 }}</div>
+    </div>
+    <div class="insight-card">
+      <div class="insight-label">Verdict</div>
+      <div class="insight-value {{ price_insights.tone }}">{{ price_insights.verdict }}</div>
+    </div>
+  </div>
+  <p style="color:var(--muted);font-size:0.73rem;margin-top:0.55rem;">
+    {% if price_insights.vs_typical_percent is not None %}
+      {% if price_insights.vs_typical_percent > 0 %}{{ price_insights.vs_typical_percent }}% below{% elif price_insights.vs_typical_percent < 0 %}{{ price_insights.vs_typical_percent|cut:"-" }}% above{% else %}At{% endif %} the median shown price ·
+    {% endif %}
+    {{ price_insights.confidence|lower }} confidence from {{ price_insights.day_count }} day{{ price_insights.day_count|pluralize }}, {{ price_insights.snapshot_count }} stored check{{ price_insights.snapshot_count|pluralize }}, and {{ price_insights.seller_count }} seller{{ price_insights.seller_count|pluralize }}.
+  </p>
+</section>
+{% endif %}

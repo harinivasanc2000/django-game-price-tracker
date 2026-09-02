@@ -5,18 +5,14 @@ Not financial advice. Heuristic scores from:
   - % under launch / list
   - Steam discount %
   - gap between official and third-party
-  - recent PriceRecord trend if tracked
+  - daily market-low insight already calculated for the price graph
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Any
 
-from django.utils import timezone
-
-from .fx import to_gbp_or_zero
-from .models import Game, PriceRecord
+from .models import Game
 
 
 def _pct_under(current: float | None, baseline: float | None) -> int | None:
@@ -34,12 +30,14 @@ def predict_deal(
     best_offer_gbp: float | None = None,
     best_offer_kind: str | None = None,
     game: Game | None = None,
+    price_insights: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     signals: list[str] = []
     drop_score = 0
     buy_score = 50
 
-    under_launch = _pct_under(best_offer_gbp or steam_price_gbp, launch_gbp)
+    current_offer = best_offer_gbp if best_offer_gbp is not None else steam_price_gbp
+    under_launch = _pct_under(current_offer, launch_gbp)
     if under_launch is not None:
         if under_launch >= 50:
             buy_score += 25
@@ -72,7 +70,12 @@ def predict_deal(
         drop_score += 18
         signals.append("Near full price on Steam — waiting for a sale is often rewarded.")
 
-    if best_offer_kind == "third-party" and best_offer_gbp and steam_price_gbp:
+    if (
+        best_offer_kind == "third-party"
+        and best_offer_gbp is not None
+        and steam_price_gbp is not None
+        and steam_price_gbp > 0
+    ):
         gap = steam_price_gbp - best_offer_gbp
         if gap > 5:
             signals.append(
@@ -82,26 +85,22 @@ def predict_deal(
         elif gap > 0:
             signals.append("Keyshop only slightly cheaper than official — official often safer.")
 
-    if game:
-        since = timezone.now() - timedelta(days=14)
-        rows = list(
-            PriceRecord.objects.filter(game=game, recorded_at__gte=since)
-            .order_by("recorded_at")[:40]
-        )
-        if len(rows) >= 3:
-            first = float(to_gbp_or_zero(rows[0].price, rows[0].currency))
-            last = float(to_gbp_or_zero(rows[-1].price, rows[-1].currency))
-            if first > 0 and last > 0:
-                change = (last - first) / first * 100
-                if change <= -8:
-                    buy_score += 10
-                    signals.append(f"Tracked price fell ~{abs(int(change))}% in 2 weeks.")
-                elif change >= 8:
-                    drop_score -= 5
-                    signals.append("Tracked price rose recently — may re-discount later.")
-                else:
-                    drop_score += 5
-                    signals.append("Tracked price mostly flat recently.")
+    # Reuse the query-free, daily-debiased graph summary. The previous version
+    # performed a second history query and could compare two different stores.
+    insight = price_insights or {}
+    versus_typical = insight.get("vs_typical_percent") if insight.get("has_data") else None
+    if isinstance(versus_typical, (int, float)):
+        if versus_typical >= 15:
+            buy_score += 10
+            drop_score -= 5
+            signals.append(f"Current best is ~{versus_typical}% below the recorded median.")
+        elif versus_typical <= -10:
+            buy_score -= 5
+            drop_score += 10
+            signals.append(f"Current best is ~{abs(versus_typical)}% above the recorded median.")
+        else:
+            drop_score += 5
+            signals.append("Current best is close to the recorded median.")
 
     drop_score = max(0, min(100, drop_score + 40))
     buy_score = max(0, min(100, buy_score))

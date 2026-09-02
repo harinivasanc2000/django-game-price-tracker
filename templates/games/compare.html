@@ -89,7 +89,10 @@
     {% csrf_token %}
     <button type="submit" style="background:transparent; border:1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 0.4rem 0.75rem; cursor: pointer;">Untrack</button>
   </form>
+  <p style="margin-top:0.65rem;font-size:0.84rem;"><a href="{% url 'games:export_game_prices' game.slug %}">Export this price history (CSV) →</a></p>
 </div>
+
+{% include "games/_price_insights.html" %}
 
 {% if has_chart %}
 <div class="chart-wrap">
@@ -110,7 +113,10 @@
           {% if p.discount_percent %}<span class="badge lowest" style="margin-left:0.3rem;">-{{ p.discount_percent }}%</span>{% endif %}
         </div>
         {% if p.url %}<div style="margin-top:0.35rem;font-size:0.85rem;"><a href="{{ p.url }}" target="_blank" rel="noopener">View →</a></div>{% endif %}
-        <div style="margin-top:0.25rem;font-size:0.75rem;color:var(--muted);">{{ p.recorded_at|date:"d M Y H:i" }}</div>
+        <div style="margin-top:0.25rem;font-size:0.75rem;color:var(--muted);">
+          <time datetime="{{ p.last_checked_at|date:'c' }}">Checked {{ p.last_checked_at|timesince }} ago</time>
+          {% if p.needs_refresh %} · <span style="color:#fbbf24;" role="status">Needs refresh</span>{% endif %}
+        </div>
       </div>
       <div style="text-align:right;">
         {% if p.original_price and p.original_price > p.price %}

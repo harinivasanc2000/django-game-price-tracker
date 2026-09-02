@@ -4,6 +4,17 @@
 
 ---
 
+## 2026-09-02 — Price insights, smarter watches, and focused exports
+
+- Added a zero-query price-insight panel that reuses graph data to show the current best, 30-day low, daily recorded median, deal verdict, and evidence confidence without claiming a market-wide all-time low; the deal outlook now reuses the same summary instead of issuing a second history query
+- Upgraded the profile watchlist with each game's cheapest fresh offer, target gap/reached state, and inline target editing; verified free offers now appear on current-deal surfaces and can trigger a £0 target alert
+- Added a bounded streaming CSV export for each active game's history with constant-memory iteration and spreadsheet-formula protection
+- Added a 24-hour “Needs refresh” warning with semantic check times while retaining the seven-day hard expiry for unconfirmed current offers
+- Added `last_checked_at` to compact snapshots: unchanged refreshes update one timestamp in place, preserving the original graph event while preventing fresh confirmations from looking stale
+- Added offline regression coverage for daily insight sampling, stale/free prices, watch updates, quote warnings, and isolated per-game exports
+
+---
+
 ## 2026-08-31 — Small reliability follow-up
 
 - Prevented busy shared worker pools from caching partial search, bundle, or home results for the normal full lifetime

@@ -44,10 +44,10 @@ def buy_guide(request):
     for g in games:
         candidates = []
         for record in current_by_game.get(g.id, []):
-            if not record.in_stock or float(record.price) <= 0:
+            if not record.in_stock or float(record.price) < 0:
                 continue
             gbp = to_gbp_or_zero(record.price, record.currency)
-            if gbp > 0:
+            if gbp > 0 or record.price == 0:
                 candidates.append((gbp, record))
         if not candidates:
             continue

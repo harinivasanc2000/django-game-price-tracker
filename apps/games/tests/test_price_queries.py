@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from apps.games.models import Game, PriceRecord, Store
-from apps.games.price_queries import latest_store_snapshots
+from apps.games.price_queries import latest_store_snapshots, quote_needs_refresh
 
 
 class LatestStoreSnapshotTests(TestCase):
@@ -40,9 +40,17 @@ class LatestStoreSnapshotTests(TestCase):
         game = Game.objects.create(title="Stale offers", slug="stale-offers")
         store = Store.objects.create(name="Old shop", slug="old-shop")
         stale = PriceRecord.objects.create(game=game, store=store, price=Decimal("9.99"))
+        stale_at = timezone.now() - timedelta(days=8)
         PriceRecord.objects.filter(pk=stale.pk).update(
-            recorded_at=timezone.now() - timedelta(days=8)
+            recorded_at=stale_at,
+            last_checked_at=stale_at,
         )
 
         self.assertEqual(list(latest_store_snapshots([game.pk])), [])
         self.assertEqual(list(latest_store_snapshots([game.pk], max_age=None)), [stale])
+
+    def test_quote_warning_starts_after_twenty_four_hours(self):
+        now = timezone.now()
+
+        self.assertFalse(quote_needs_refresh(now - timedelta(hours=23), now=now))
+        self.assertTrue(quote_needs_refresh(now - timedelta(hours=25), now=now))

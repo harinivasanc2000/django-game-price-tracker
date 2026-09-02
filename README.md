@@ -46,6 +46,7 @@ celery -A config worker --beat --loglevel=INFO --concurrency=2
 | `/settings/` | Themes and wallpapers stored in the browser |
 | `/export/tracked.json` | Current per-store offers for tracked games |
 | `/export/training.csv` | Historical price snapshots for offline analysis |
+| `/export/game/<slug>/prices.csv` | Bounded streaming history for one tracked game |
 | `/health/` | Database/cache health (`?stores=1` adds shallow store checks) |
 
 ## Search and UK coverage
@@ -69,9 +70,12 @@ The all-platform directory currently exposes 32 encoded destinations: official p
 - **Reusable raw search cache:** canonical NFKC queries and fixed-length BLAKE2 keys let price/filter/sort changes reuse one four-platform result bundle; single-flight locks collapse simultaneous misses into one producer.
 - **Defensive BS4 parsing:** bounded thread-local sessions, JSON-LD traversal, current-price detection, GBP/finite-number validation, host-allowlisted URLs, stock-aware deduplication, and card fallbacks.
 - **Current-offer SQL:** correlated subqueries select the newest row for every `(game, store)` pair in one query, avoiding N+1 lookups; quotes expire from current-deal surfaces after seven days without a confirmed check.
-- **All-store compact history:** one refresh stores the best validated Steam, PSN, Xbox, Nintendo, Amazon, UK-retailer, and bounded per-retailer CheapShark offer. Price/stock/URL/condition changes are immediate; unchanged rows get one 72-hour freshness checkpoint.
+- **All-store compact history:** one refresh stores the best validated Steam, PSN, Xbox, Nintendo, Amazon, UK-retailer, and bounded per-retailer CheapShark offer. Price/stock/URL/condition changes are immediate; unchanged checks update `last_checked_at` in place and add a graph checkpoint only after 72 hours.
 - **Aligned graph algorithm:** independently sampled sellers share a real-time-spaced event timeline; quotes carry forward for at most seven days, observed checks remain marked, and fresh best/average lines are calculated in GBP.
+- **Recorded-price insight:** the existing bounded graph payload is reduced to one market-low observation per local day, then used for its lowest shown value, median, 30-day sample low, confidence level, and plain-language verdict without another query.
 - **Hard concurrency budget:** three process-wide pools cap page, bundle, and UK work at 17 lazy threads by default. Deadlines cancel queued work, while one blocked retailer soft-fails without multiplying threads per request.
+
+Signed-in profiles also show each watch's cheapest fresh offer and distance from its target. Targets can be edited inline, including a £0 target for verified free-game alerts. Quotes older than 24 hours are visibly marked for refresh and disappear from current-deal surfaces after seven days.
 
 ## Low-resource deployment
 

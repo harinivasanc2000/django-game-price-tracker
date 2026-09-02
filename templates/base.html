@@ -132,6 +132,19 @@
     .price-now { font-weight: 700; color: var(--accent2); cursor: pointer; }
     .price-now:hover { text-decoration: underline; }
     .price-was { text-decoration: line-through; color: var(--muted); font-size: 0.85em; margin-right: 0.35rem; }
+    .insight-panel {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 0.9rem; margin: 0.85rem 0;
+    }
+    .insight-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(125px, 1fr));
+      gap: 0.5rem; margin-top: 0.65rem;
+    }
+    .insight-card { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; padding: 0.6rem; }
+    .insight-label { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .insight-value { font-size: 1.05rem; font-weight: 700; margin-top: 0.12rem; }
+    .insight-value.excellent, .insight-value.good { color: var(--good); }
+    .insight-value.caution { color: #fbbf24; }
     footer {
       margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--border);
       color: var(--muted); font-size: 0.8rem;

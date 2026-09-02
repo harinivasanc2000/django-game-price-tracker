@@ -59,7 +59,7 @@ class GameAdmin(admin.ModelAdmin):
 class PriceRecordAdmin(admin.ModelAdmin):
     list_display = (
         "game", "store", "price", "original_price", "currency",
-        "is_physical", "is_used", "in_stock", "recorded_at",
+        "is_physical", "is_used", "in_stock", "recorded_at", "last_checked_at",
     )
     list_filter = ("store", "is_physical", "is_used", "currency", "in_stock")
     search_fields = ("game__title", "store__name")

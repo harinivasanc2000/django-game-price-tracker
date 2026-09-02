@@ -18,6 +18,7 @@ from .detail_helpers import empty_platform_bundle, similar_steam_titles
 from .fx import to_gbp_or_zero
 from .models import Game, Watch
 from .platform_bundle import platform_bundle
+from .price_insights import build_price_insights
 from .executors import PAGE_EXECUTOR, cancel_pending
 
 _OFFICIAL_FOR_PLATFORM = {
@@ -225,6 +226,7 @@ def steam_detail(request, app_id: int):
             ],
         ],
     )
+    price_insights = build_price_insights(chart)
 
     live_offers: list[dict] = []
 
@@ -392,6 +394,7 @@ def steam_detail(request, app_id: int):
             # Pass structured data through Django's json_script filter in the
             # template so store names cannot break out of an inline script.
             "chart_data": chart,
+            "price_insights": price_insights,
             "has_chart": bool(chart.get("has_data")),
             "watched": watched,
             "is_watched": watched is not None,

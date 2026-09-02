@@ -1,8 +1,11 @@
 """Compact history must preserve changes while coalescing repeat refreshes."""
 
 from decimal import Decimal
+from datetime import timedelta
+from unittest.mock import patch
 
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.games.models import Game, PriceRecord, Store
 from apps.games.price_snapshots import record_snapshot
@@ -25,6 +28,18 @@ class PriceSnapshotTests(TestCase):
         self.assertFalse(created_second)
         self.assertEqual(first.pk, second.pk)
         self.assertEqual(PriceRecord.objects.count(), 1)
+
+    def test_coalesced_snapshot_updates_last_confirmation_time(self):
+        first_check = timezone.now() - timedelta(hours=2)
+        second_check = timezone.now()
+        with patch("apps.games.price_snapshots.timezone.now", return_value=first_check):
+            first, _ = record_snapshot(game=self.game, store=self.store, price="9.99")
+        with patch("apps.games.price_snapshots.timezone.now", return_value=second_check):
+            second, created = record_snapshot(game=self.game, store=self.store, price="9.99")
+
+        self.assertFalse(created)
+        self.assertEqual(first.recorded_at, second.recorded_at)
+        self.assertEqual(second.last_checked_at, second_check)
 
     def test_changed_price_creates_a_new_history_point(self):
         record_snapshot(game=self.game, store=self.store, price="9.99")

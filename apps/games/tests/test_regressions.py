@@ -207,6 +207,25 @@ class TrackingRegressionTests(TestCase):
         self.assertFalse(chart["has_data"])
         self.assertNotIn("Sold out shop", chart["sellers"])
 
+    def test_sold_out_snapshot_ends_an_older_graph_quote(self):
+        game = Game.objects.create(title="Ended quote", slug="ended-quote")
+        store = Store.objects.create(name="Tombstone shop", slug="tombstone-shop")
+        available = PriceRecord.objects.create(
+            game=game, store=store, price=Decimal("12.00"), in_stock=True
+        )
+        unavailable = PriceRecord.objects.create(
+            game=game, store=store, price=Decimal("12.00"), in_stock=False
+        )
+        PriceRecord.objects.filter(pk=available.pk).update(
+            recorded_at=timezone.now() - timedelta(days=1)
+        )
+
+        chart = _build_chart_payload(game, {}, [], None, [], [], [], [])
+
+        self.assertEqual(chart["series"]["Tombstone shop"], [12.0, None])
+        self.assertEqual(chart["observed"]["Tombstone shop"], [True, True])
+        self.assertIsNone(chart["latest_best"])
+
     def test_compare_uses_latest_in_stock_offer_per_store(self):
         game = Game.objects.create(title="Current only", slug="current-only", platform=Game.Platform.PS5)
         first_store = Store.objects.create(name="First", slug="current-first")

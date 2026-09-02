@@ -62,11 +62,11 @@ def _card_from_detail(
     lowest_label = None
     if catalog and catalog.id in latest_by_game:
         for r in latest_by_game[catalog.id]:
-            if not r.in_stock or float(r.price) <= 0:
+            if not r.in_stock or float(r.price) < 0:
                 continue
             gbp = float(to_gbp_or_zero(r.price, r.currency))
             # Unknown currencies resolve to zero; never advertise those as free.
-            if gbp > 0 and (lowest_gbp is None or gbp < lowest_gbp):
+            if (gbp > 0 or r.price == 0) and (lowest_gbp is None or gbp < lowest_gbp):
                 lowest_gbp = gbp
                 lowest_label = r.store.name
 

@@ -37,6 +37,18 @@ class SeasonalHomeTests(TestCase):
         self.assertEqual(card["lowest_label"], "Steam")
         self.assertEqual(card["savings"], 100)
 
+    def test_stored_verified_free_offer_is_used_when_live_detail_is_missing(self):
+        game = Game.objects.create(
+            title="Stored free", slug="stored-free", steam_app_id=405
+        )
+        store = Store.objects.create(name="Steam free", slug="steam-free")
+        free = PriceRecord.objects.create(game=game, store=store, price=Decimal("0"))
+
+        card = _card_from_detail(405, None, game, {game.id: [free]}, "Recorded sale")
+
+        self.assertEqual(card["lowest_gbp"], 0.0)
+        self.assertEqual(card["lowest_label"], "Steam free")
+
     def test_recent_discount_frequency_ranks_before_current_specials(self):
         store = Store.objects.create(name="Steam", slug="steam")
         frequent = Game.objects.create(title="Frequent", slug="frequent", steam_app_id=101)

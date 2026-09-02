@@ -5,12 +5,11 @@ from collections import defaultdict
 from concurrent.futures import wait
 
 from django.shortcuts import render
-from django.utils import timezone
 
 from .clients.public_deals import cheapshark_top_deals, steam_featured
 from .fx import to_gbp_or_zero
 from .models import Game
-from .price_queries import latest_store_snapshots
+from .price_queries import latest_store_snapshots, quote_needs_refresh
 from .executors import PAGE_EXECUTOR, cancel_pending
 
 
@@ -29,16 +28,15 @@ def best_deals(request):
             current_by_game[record.game_id].append(record)
 
     rows = []
-    stale_before = timezone.now() - timezone.timedelta(days=7)
     for records in current_by_game.values():
         # Unknown currencies deliberately become zero in the FX helper, so
         # exclude them rather than presenting an untrustworthy bargain.
         priced = [
             (to_gbp_or_zero(rec.price, rec.currency), rec)
             for rec in records
-            if rec.in_stock and float(rec.price) > 0
+            if rec.in_stock and float(rec.price) >= 0
         ]
-        priced = [(gbp, rec) for gbp, rec in priced if gbp > 0]
+        priced = [(gbp, rec) for gbp, rec in priced if gbp > 0 or rec.price == 0]
         if not priced:
             continue
         gbp, rec = min(priced, key=lambda pair: pair[0])
@@ -57,9 +55,10 @@ def best_deals(request):
                 "store": rec.store.name,
                 "url": rec.url,
                 "recorded_at": rec.recorded_at,
+                "last_checked_at": rec.last_checked_at,
                 # A price can remain useful, but users should know it has not
                 # been checked recently before treating it as actionable.
-                "is_stale": rec.recorded_at < stale_before,
+                "needs_refresh": quote_needs_refresh(rec.last_checked_at),
                 "vs_launch_pct": vs,
             }
         )

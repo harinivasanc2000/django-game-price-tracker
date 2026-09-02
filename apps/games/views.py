@@ -33,7 +33,8 @@ from .models import (
     Store,
     Watch,
 )
-from .price_queries import latest_store_snapshots
+from .price_queries import latest_store_snapshots, quote_needs_refresh
+from .price_insights import build_price_insights
 from .views_best_deals import best_deals  # noqa: F401
 from .price_snapshots import record_snapshot
 
@@ -173,6 +174,7 @@ def _build_chart_payload(
     cheapest value.
     """
     point_maps: dict[str, dict[str, float]] = defaultdict(dict)
+    unavailable_at: dict[str, set[str]] = defaultdict(set)
     historical_count = 0
     live_count = 0
 
@@ -211,9 +213,15 @@ def _build_chart_payload(
         )
         history.reverse()
         for h in history:
+            seller = str(h.store.name or "").strip()[:120]
+            label = h.recorded_at.isoformat()
             if not h.in_stock:
+                if seller:
+                    # A sold-out check is a tombstone: retain the event so an
+                    # earlier price cannot carry through it on the graph.
+                    unavailable_at[seller].add(label)
                 continue
-            if add_point(h.store.name, h.recorded_at.isoformat(), h.price, h.currency):
+            if add_point(seller, label, h.price, h.currency):
                 historical_count += 1
 
     # Every live quote belongs to the same final point on the chart.
@@ -256,6 +264,8 @@ def _build_chart_payload(
         if by_label
     }
     observed_timestamps = {label for pairs in points.values() for label, _ in pairs}
+    for seller in points:
+        observed_timestamps.update(unavailable_at.get(seller) or ())
     # Add an explicit boundary when a quote expires. Without this point a
     # stepped line would visually carry a seven-day quote all the way to the
     # next check, even when that check happened months later.
@@ -279,13 +289,18 @@ def _build_chart_payload(
     observed: dict[str, list[bool]] = {}
     for seller, pairs in points.items():
         by_label = dict(pairs)
+        seller_unavailable = unavailable_at.get(seller) or set()
         latest = None
         latest_at = None
         seller_values = []
         seller_observed = []
         for label in timestamps:
-            is_observed = label in by_label
-            if is_observed:
+            is_tombstone = label in seller_unavailable
+            is_observed = label in by_label or is_tombstone
+            if is_tombstone:
+                latest = None
+                latest_at = None
+            elif label in by_label:
                 latest = by_label[label]
                 latest_at = datetime.fromisoformat(label)
             event_at = datetime.fromisoformat(label)
@@ -344,7 +359,7 @@ def _build_chart_payload(
         "live_quote_count": live_count,
         "quote_max_age_days": CHART_QUOTE_MAX_AGE.days,
         "lowest": min(valid_best) if valid_best else None,
-        "latest_best": valid_best[-1] if valid_best else None,
+        "latest_best": best[-1] if best else None,
         "has_data": bool(timestamps),
     }
 
@@ -457,6 +472,31 @@ def profile(request):
     watches = list(
         Watch.objects.filter(user=request.user).select_related("game").order_by("-created_at")
     )
+    current_by_game = defaultdict(list)
+    for offer in latest_store_snapshots(watch.game_id for watch in watches):
+        if not offer.in_stock:
+            continue
+        gbp = to_gbp_or_zero(offer.price, offer.currency)
+        # A stored zero is a verified free offer; a positive amount converting
+        # to zero means its currency is unknown and must not look like a deal.
+        if gbp > 0 or offer.price == 0:
+            current_by_game[offer.game_id].append((gbp, offer))
+    for watch in watches:
+        candidates = current_by_game.get(watch.game_id) or []
+        best = min(candidates, key=lambda pair: pair[0]) if candidates else None
+        watch.current_price_gbp = best[0] if best else None
+        watch.current_offer = best[1] if best else None
+        watch.offer_needs_refresh = bool(
+            best and quote_needs_refresh(best[1].last_checked_at)
+        )
+        watch.target_hit = bool(
+            best and watch.target_price is not None and best[0] <= watch.target_price
+        )
+        watch.target_gap = (
+            best[0] - watch.target_price
+            if best and watch.target_price is not None and best[0] > watch.target_price
+            else None
+        )
     tracked = list(Game.objects.filter(is_active=True).only("title", "slug", "steam_app_id", "cover_url").order_by("title")[:50])
     alerts = list(
         PriceAlert.objects.filter(watch__user=request.user)
@@ -487,6 +527,10 @@ def game_compare(request, slug):
         for price in latest_store_snapshots([game.id])
         if price.in_stock and _gbp_point(price.price, price.currency) is not None
     ]
+    for price in prices:
+        # Model instances can safely carry presentation-only metadata; this
+        # avoids another query and keeps the 24-hour warning logic shared.
+        price.needs_refresh = quote_needs_refresh(price.last_checked_at)
     prices.sort(
         key=lambda price: (
             _gbp_point(price.price, price.currency),
@@ -505,6 +549,7 @@ def game_compare(request, slug):
         [],
         launch_currency=game.launch_currency or "GBP",
     )
+    price_insights = build_price_insights(chart)
     return render(
         request,
         "games/compare.html",
@@ -517,13 +562,16 @@ def game_compare(request, slug):
             "siblings": [],
             "history_count": chart["snapshot_count"],
             "chart_data": chart,
+            "price_insights": price_insights,
             "has_chart": chart["has_data"],
             "watched": None,
         },
     )
 
 
-def _redirect_after_watch(game: Game):
+def _redirect_after_watch(game: Game, destination: str = ""):
+    if destination == "profile":
+        return redirect("games:profile")
     if game.steam_app_id:
         return redirect("games:steam_detail", app_id=game.steam_app_id)
     return redirect("games:compare", slug=game.slug)
@@ -533,6 +581,7 @@ def _redirect_after_watch(game: Game):
 @require_POST
 def watch_game(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
+    destination = (request.POST.get("next") or "").strip().lower()
     target_raw = (request.POST.get("target_price") or "").strip()
     target = None
     if target_raw:
@@ -544,7 +593,7 @@ def watch_game(request, slug):
                 raise ValueError
         except Exception:
             messages.error(request, "Target price must be a finite zero or positive number.")
-            return _redirect_after_watch(game)
+            return _redirect_after_watch(game, destination)
     Watch.objects.update_or_create(
         user=request.user,
         game=game,
@@ -554,7 +603,7 @@ def watch_game(request, slug):
         messages.success(request, f"Watching {game.title}.")
     else:
         messages.success(request, f"Watching {game.title} — alert under £{target}.")
-    return _redirect_after_watch(game)
+    return _redirect_after_watch(game, destination)
 
 
 @login_required
@@ -563,7 +612,8 @@ def unwatch_game(request, slug):
     game = get_object_or_404(Game, slug=slug, is_active=True)
     Watch.objects.filter(user=request.user, game=game).delete()
     messages.info(request, f"Stopped watching {game.title}.")
-    return _redirect_after_watch(game)
+    destination = (request.POST.get("next") or "").strip().lower()
+    return _redirect_after_watch(game, destination)
 
 
 @login_required

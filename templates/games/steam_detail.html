@@ -178,7 +178,7 @@
         {% if user.is_authenticated and already_tracked %}
           <div class="watch-box">
             {% if is_watched %}
-              <p style="font-size:0.86rem;margin-bottom:0.35rem;" class="ico ico-track">Watching{% if watched.target_price %} · under <strong>£{{ watched.target_price }}</strong>{% endif %}</p>
+              <p style="font-size:0.86rem;margin-bottom:0.35rem;" class="ico ico-track">Watching{% if watched.target_price is not None %} · under <strong>£{{ watched.target_price }}</strong>{% endif %}</p>
               <form method="post" action="{% url 'games:unwatch' already_tracked.slug %}">{% csrf_token %}<button type="submit" class="btn btn-ghost">Unwatch</button></form>
             {% else %}
               <form method="post" action="{% url 'games:watch' already_tracked.slug %}" style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;">
@@ -194,6 +194,8 @@
     </div>
 
     {% deal_prediction_panel %}
+
+    {% include "games/_price_insights.html" %}
 
     {% if has_chart %}
     <div class="panel" style="padding: 0.8rem 0.9rem;">

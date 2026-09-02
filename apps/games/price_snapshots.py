@@ -101,7 +101,8 @@ def record_snapshot(
             .order_by("-recorded_at", "-pk")
             .first()
         )
-        if latest and latest.recorded_at >= timezone.now() - SNAPSHOT_HEARTBEAT:
+        checked_at = timezone.now()
+        if latest and latest.recorded_at >= checked_at - SNAPSHOT_HEARTBEAT:
             comparable = (
                 latest.price == normalized["price"]
                 and latest.currency == normalized["currency"]
@@ -114,6 +115,15 @@ def record_snapshot(
                 and latest.in_stock == normalized["in_stock"]
             )
             if comparable:
+                # Preserve the historical event timestamp but record that this
+                # quote was successfully confirmed during the current sweep.
+                PriceRecord.objects.filter(pk=latest.pk).update(last_checked_at=checked_at)
+                latest.last_checked_at = checked_at
                 return latest, False
 
-        return PriceRecord.objects.create(game=game, store=store, **normalized), True
+        return PriceRecord.objects.create(
+            game=game,
+            store=store,
+            last_checked_at=checked_at,
+            **normalized,
+        ), True

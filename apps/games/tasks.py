@@ -161,9 +161,18 @@ def _check_watch_targets(
     watches, existing = state if state is not None else _watch_state(game)
     hits = 0
     gbp = to_gbp_or_zero(price, currency)
+    try:
+        source_price = Decimal(str(price))
+        verified_free = source_price.is_finite() and source_price == 0
+    except (InvalidOperation, TypeError, ValueError):
+        verified_free = False
+    # Unknown currencies also convert to zero. Only an explicitly stored zero
+    # is a real free-game event that should satisfy a £0 target.
+    if gbp <= 0 and not verified_free:
+        return 0
     alert_currency = settings.DEFAULT_CURRENCY
     for watch in watches:
-        if gbp <= 0 or gbp > watch.target_price:
+        if gbp < 0 or gbp > watch.target_price:
             continue
         key = (watch.pk, gbp, alert_currency)
         if key in existing:

@@ -22,7 +22,8 @@ def deal_prediction_panel(context):
         best_kind = "official"
         if live:
             try:
-                best_gbp = float(live[0].get("price_gbp") or steam_gbp or 0)
+                raw_best = live[0].get("price_gbp")
+                best_gbp = float(raw_best if raw_best is not None else (steam_gbp or 0))
                 best_kind = live[0].get("kind") or "official"
             except (TypeError, ValueError, KeyError, IndexError):
                 pass
@@ -35,6 +36,7 @@ def deal_prediction_panel(context):
             best_offer_gbp=best_gbp,
             best_offer_kind=best_kind,
             game=catalog,
+            price_insights=context.get("price_insights"),
         )
         return {"pred": pred}
     except Exception:

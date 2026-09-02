@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 from django.utils.text import slugify
 
 
@@ -94,6 +95,9 @@ class PriceRecord(models.Model):
     condition = models.CharField(max_length=50, blank=True)
     in_stock = models.BooleanField(default=True)
     recorded_at = models.DateTimeField(auto_now_add=True)
+    # Unchanged checks update this field in place. ``recorded_at`` remains the
+    # historical event time, while this timestamp powers honest freshness UI.
+    last_checked_at = models.DateTimeField(default=timezone.now)
     notes = models.CharField(max_length=255, blank=True)
 
     class Meta:

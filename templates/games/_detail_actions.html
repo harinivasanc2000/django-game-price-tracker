@@ -17,6 +17,7 @@
       {% csrf_token %}
       <button type="submit" class="btn btn-ghost">Untrack</button>
     </form>
+    <a class="btn btn-ghost" href="{% url 'games:export_game_prices' already_tracked.slug %}">Export history</a>
   {% else %}
     <form method="post" action="{% url 'games:track_steam' d.app_id %}?cc={{ country }}">
       {% csrf_token %}

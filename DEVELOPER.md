@@ -51,6 +51,7 @@ django-game-price-tracker/
     ├── buy_guide_view.py      # public recommendation feeds
     ├── views_export.py        # current-offer JSON + historical CSV
     ├── price_queries.py       # newest row per game/store in one SQL query
+    ├── price_insights.py      # query-free daily-low/median deal summary
     ├── price_snapshots.py     # validation and unchanged-snapshot coalescing
     ├── cache.py               # safe keys, normal/empty-result TTLs
     ├── cache_keys.py          # shared UI cache identities
@@ -113,7 +114,7 @@ django-game-price-tracker/
 
 1. `refresh_one_game` overlaps Steam with one cached all-platform/UK bundle and a bounded CheapShark lookup.
 2. It selects one best finite offer per official/UK source and one per CheapShark retailer; explicit sold-out rows are stored as state and never alerted as deals.
-3. `record_snapshot` validates prices/HTTP(S) links and coalesces unchanged rows for 72 hours. Price, URL, stock, condition, or discount changes are stored immediately.
+3. `record_snapshot` validates prices/HTTP(S) links and coalesces unchanged rows for 72 hours. Every successful confirmation advances `last_checked_at`; price, URL, stock, condition, or discount changes are stored immediately.
 4. All source writes use the same indexed `PriceRecord` history, including console-only tracked `Game` rows; no parallel history table is required.
 5. Watches and existing alert keys are loaded once per game refresh, then trustworthy GBP targets create de-duplicated `PriceAlert` rows.
 6. Run synchronously, queue through Celery, or use the default 12-hour Celery Beat entry.
@@ -139,7 +140,11 @@ Title match has the dominant weight by design. All numeric inputs are finite-che
 
 ### Latest current offers
 
-`PriceRecord` is append-only history. A current-price page must not use an arbitrary recent row. `latest_store_snapshots()` uses a correlated SQL subquery to return exactly one newest row per `(game, store)`, expires quotes after seven unconfirmed days, and uses `select_related` to prevent N+1 store/game queries. Pass `max_age=None` only for archival/reporting code that explicitly wants stale latest rows.
+`PriceRecord` is append-only history. A current-price page must not use an arbitrary recent row. `latest_store_snapshots()` uses a correlated SQL subquery to return exactly one newest row per `(game, store)`, expires quotes after seven unconfirmed days, and uses `select_related` to prevent N+1 store/game queries. Current-offer views call `quote_needs_refresh()` to warn after 24 hours. Pass `max_age=None` only for archival/reporting code that explicitly wants stale latest rows.
+
+`build_price_insights()` consumes the already-built bounded chart payload, groups real observed seller prices into one market low per local day, and returns display-only lowest-shown/median/confidence fields. Keep this calculation query-free and use “shown” or “sample” wording so sparse, capped, or blocked retailer coverage is not presented as a universal all-time low.
+
+`export_game_prices_csv()` streams at most 5,000 rows with queryset iteration. Keep future per-game export fields scalar and spreadsheet-safe; do not materialise the full history in memory.
 
 ### Graph alignment
 

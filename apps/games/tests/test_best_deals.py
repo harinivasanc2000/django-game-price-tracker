@@ -39,3 +39,15 @@ class BestDealsTests(TestCase):
         self.assertEqual(rows[0]["price_gbp"], Decimal("15.00"))
         self.assertEqual(rows[0]["url"], current_steam.url)
         self.assertContains(response, current_steam.url)
+
+    @patch("apps.games.views_best_deals.steam_featured", return_value={"specials": []})
+    @patch("apps.games.views_best_deals.cheapshark_top_deals", return_value=[])
+    def test_verified_free_tracked_offer_is_a_deal(self, _cheapshark, _steam):
+        game = Game.objects.create(title="Free tracked", slug="free-tracked")
+        store = Store.objects.create(name="Free store", slug="free-store")
+        PriceRecord.objects.create(game=game, store=store, price=Decimal("0"))
+
+        response = self.client.get("/deals/")
+
+        self.assertEqual(response.context["rows"][0]["price_gbp"], Decimal("0"))
+        self.assertContains(response, "£0.00")

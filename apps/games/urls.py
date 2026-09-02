@@ -34,6 +34,11 @@ urlpatterns = [
     path("health/", health_view.health, name="health"),
     path("export/tracked.json", views_export.export_tracked_json, name="export_tracked"),
     path("export/training.csv", views_export.export_training_csv, name="export_training_csv"),
+    path(
+        "export/game/<slug:slug>/prices.csv",
+        views_export.export_game_prices_csv,
+        name="export_game_prices",
+    ),
     # --- JSON APIs ---
     path("api/suggest/", views.steam_suggest, name="steam_suggest"),
     path("api/platform/<int:app_id>/", views_steam_detail.platform_deals_api, name="platform_deals"),
