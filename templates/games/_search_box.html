@@ -15,7 +15,7 @@
       aria-haspopup="listbox"
       {% if autofocus %}autofocus{% endif %}
     >
-    <select name="platform" id="platformSelect" title="Platform">
+    <select name="platform" id="platformSelect" title="Platform" aria-label="Choose platform">
       <option value="" {% if not current_platform %}selected{% endif %}>All</option>
       <option value="pc" {% if current_platform == 'pc' %}selected{% endif %}>PC</option>
       <option value="ps4" {% if current_platform == 'ps4' %}selected{% endif %}>PS4</option>
@@ -76,6 +76,11 @@
   let active = -1;
   let requestController = null;
   let requestVersion = 0;
+
+  function steamSuggestionsEnabled() {
+    const value = (document.getElementById('platformSelect') || {}).value || '';
+    return value === '' || value === 'pc';
+  }
 
   function suggestionHref(appId) {
     const platform = (document.getElementById('platformSelect') || {}).value || '';
@@ -177,7 +182,13 @@
   }
 
   function fetchSuggest(q) {
-    if (q.length < 2) { invalidatePendingRequest(); hide(); return; }
+    // Console searches use the multi-store results page; do not present a
+    // misleading Steam-only shortcut after a console platform is selected.
+    if (!steamSuggestionsEnabled() || q.length < 2) {
+      invalidatePendingRequest();
+      hide();
+      return;
+    }
     if (requestController) requestController.abort();
     requestController = typeof AbortController === 'undefined' ? null : new AbortController();
     const version = ++requestVersion;
@@ -206,7 +217,7 @@
     invalidatePendingRequest();
     hide();
     const q = input.value.trim();
-    if (q.length < 2) return;
+    if (!steamSuggestionsEnabled() || q.length < 2) return;
     timer = setTimeout(() => fetchSuggest(q), 220);
   });
 
@@ -228,7 +239,11 @@
   });
 
   const platform = document.getElementById('platformSelect');
-  if (platform) platform.addEventListener('change', updateSuggestionLinks);
+  if (platform) platform.addEventListener('change', () => {
+    invalidatePendingRequest();
+    hide();
+    if (steamSuggestionsEnabled()) updateSuggestionLinks();
+  });
 
   document.addEventListener('click', (e) => {
     if (!e.target.closest('.search-wrap')) {

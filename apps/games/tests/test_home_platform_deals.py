@@ -275,3 +275,31 @@ class HomeEnhancementSourceTests(SimpleTestCase):
         self.assertIn('aria-live="polite"', html)
         self.assertIn("IntersectionObserver", html)
         self.assertIn("@media (prefers-reduced-motion: reduce)", html)
+        self.assertIn('aria-label="Choose platform"', html)
+        self.assertIn("steamSuggestionsEnabled", html)
+
+    def test_aggregator_cards_are_not_described_as_official_stores(self):
+        html = render_to_string(
+            "games/_home_feed.html",
+            {
+                "console_feed": True,
+                "current_platform": "ps4",
+                "platform_label": "PS4",
+                "feed_heading": "PS4 deals and discounts",
+                "feed_intro": "Current offers.",
+                "browse_url": "https://store.playstation.com/en-gb/pages/deals",
+                "console_deals": [
+                    {
+                        "title": "Example",
+                        "price_gbp": 9.99,
+                        "url": "https://psndeal.com/gb/game/example",
+                        "store_name": "PSNDeal",
+                        "source_kind": "aggregator",
+                        "is_external": True,
+                    }
+                ],
+            },
+        )
+
+        self.assertIn("public price tracker", html)
+        self.assertNotIn("PSNDeal · official store", html)

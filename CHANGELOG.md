@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-09-05 — Experimental home-feed follow-up
+
+- Corrected public price-tracker attribution on PlayStation and Switch home cards
+- Disabled Steam-only autocomplete shortcuts for console searches, while preserving full multi-store form search
+- Added an accessible platform label and solid colour fallbacks for browsers without `color-mix()` support
+
 ## 2026-09-02 — Dynamic platform home feeds and motion polish
 
 - Made the home platform selector update the page in place: PS4, PS5, Xbox, and Switch now render their own UK deals and discounts, while `?platform=` remains a server-rendered progressive fallback and `/api/home-deals/` serves the same escaped HTML fragment
