@@ -214,10 +214,12 @@
         <a class="ico ico-hist" href="{% url 'games:history' %}">History</a>
         <a class="ico ico-gear" href="{% url 'games:appearance' %}">Settings</a>
         {% if user.is_authenticated %}
+          <a class="ico ico-track" href="{% url 'games:library' %}">Library</a>
           <a class="ico ico-user" href="{% url 'games:profile' %}">Profile</a>
           {% if user.is_staff %}<a class="ico ico-admin" href="/admin/">Admin</a>{% endif %}
         {% else %}
           <a class="ico ico-login" href="{% url 'login' %}">Log in</a>
+          <a class="ico ico-user" href="{% url 'games:signup' %}">Sign up</a>
         {% endif %}
       </nav>
     </header>

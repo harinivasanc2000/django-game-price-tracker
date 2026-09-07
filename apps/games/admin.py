@@ -15,6 +15,7 @@ from .models import (
     AdminChangeLog,
     Watch,
     PriceAlert,
+    OwnedGame,
 )
 
 
@@ -89,6 +90,17 @@ class PriceAlertAdmin(admin.ModelAdmin):
     search_fields = ("watch__user__username", "watch__game__title", "store")
     date_hierarchy = "created_at"
     list_select_related = ("watch__user", "watch__game")
+
+
+@admin.register(OwnedGame)
+class OwnedGameAdmin(admin.ModelAdmin):
+    list_display = (
+        "title", "platform", "user", "purchase_price", "retailer", "location", "completed"
+    )
+    list_filter = ("platform", "completed", "retailer")
+    search_fields = ("title", "user__username", "retailer", "location")
+    raw_id_fields = ("user",)
+    list_select_related = ("user",)
 
 
 @admin.register(BrowseHistory)

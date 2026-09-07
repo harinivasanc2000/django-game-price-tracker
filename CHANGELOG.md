@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-07 — Private PS4 purchase checklist
+
+- Added a signed-in owned-game library with purchase price, retailer, location, date, notes, and a playable/completed checklist state
+- Added a one-click starter import for the three CeX Glasgow purchases: God of War (2018) at £8, Batman: Arkham Knight at £6, and Assassin's Creed Valhalla at £6
+- Added a cached PS4 deal shortlist that removes matching owned titles plus a direct pre-owned UK shop search; local branch stock is clearly presented as requiring confirmation
+- Kept ownership separate from append-only market history so personal purchases cannot distort graphs, deal rankings, or alerts
+- Added a lightweight local sign-up route so a fresh installation can use private libraries and watches without first creating an account from the command line
+
 ## 2026-09-05 — Experimental home-feed follow-up
 
 - Corrected public price-tracker attribution on PlayStation and Switch home cards

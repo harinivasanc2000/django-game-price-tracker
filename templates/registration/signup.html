@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Create account{% endblock %}
+{% block content %}
+<section style="max-width:430px;margin:2rem auto;padding:1.2rem;border:1px solid var(--border);border-radius:16px;background:var(--card);">
+  <h1 style="font-size:1.3rem;margin-bottom:.4rem;">Create a local account</h1>
+  <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem;">Keeps your PS4 checklist and watches private to your login.</p>
+  <form method="post" style="display:grid;gap:.75rem;">
+    {% csrf_token %}
+    {% for field in form %}
+      <label style="display:grid;gap:.25rem;font-size:.82rem;">{{ field.label }} {{ field }}</label>
+      {% if field.errors %}<div style="color:#f87171;font-size:.78rem;">{{ field.errors }}</div>{% endif %}
+      {% if field.help_text %}<div style="color:var(--muted);font-size:.72rem;">{{ field.help_text|safe }}</div>{% endif %}
+    {% endfor %}
+    {% if form.non_field_errors %}<div style="color:#f87171;">{{ form.non_field_errors }}</div>{% endif %}
+    <button type="submit" style="padding:.7rem;border:0;border-radius:9px;background:var(--accent);color:#fff;font-weight:650;cursor:pointer;">Create account</button>
+  </form>
+  <p style="color:var(--muted);font-size:.8rem;margin-top:.8rem;">Already registered? <a href="{% url 'login' %}">Log in</a>.</p>
+</section>
+{% endblock %}

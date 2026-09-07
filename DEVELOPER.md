@@ -37,11 +37,14 @@ django-game-price-tracker/
 │       ├── _home_feed.html    # escaped dynamic platform-feed fragment
 │       ├── steam_detail.html  # comparison page + atomic filtered navigation
 │       ├── steam_search.html  # advanced cross-platform search/filter UI
+│       ├── library.html       # private PS4 purchases + deal checklist
 │       └── _price_chart.html  # reusable safe Chart.js component
 └── apps/games/
-    ├── models.py              # Game, Store, PriceRecord, Watch, Alert, history
+    ├── models.py              # prices, watches, alerts, owned games, history
     ├── urls.py                # application routes
     ├── home_view.py           # dynamic platform home feeds + 90-day PC signals
+    ├── auth_view.py           # minimal local account registration
+    ├── library_view.py        # owned PS4 CRUD, starter import, recommendations
     ├── search_view.py         # query validation and search-page context
     ├── platform_search.py     # parallel platform search, filters, raw cache
     ├── search_sort.py         # deterministic ranking and smart-value score
@@ -89,6 +92,7 @@ django-game-price-tracker/
 | History-write policy | `price_snapshots.py` |
 | Background refresh | `tasks.py`, `management/commands/refresh_prices.py` |
 | Themes/wallpapers | `templates/base.html`, `templates/games/settings.html` |
+| Owned-game checklist | `library_view.py`, `library.html`, `OwnedGame` |
 | Database fields/indexes | `models.py`, then create and test a migration |
 | Admin behaviour | `admin.py` |
 
