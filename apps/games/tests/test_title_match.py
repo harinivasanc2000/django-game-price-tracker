@@ -14,7 +14,9 @@ class TitleMatchTests(SimpleTestCase):
 
     def test_accepts_real_arkham_knight_listings(self):
         self.assertTrue(titles_match("Batman Arkham Knight PS4", self.QUERY))
-        self.assertTrue(titles_match("Batman: Arkham Knight Game of the Year Edition", self.QUERY))
+        self.assertTrue(
+            titles_match("Batman: Arkham Knight Game of the Year Edition", self.QUERY)
+        )
         self.assertGreaterEqual(
             title_match_score("Batman Arkham Knight GOTY", self.QUERY), 0.67
         )
@@ -46,10 +48,19 @@ class TitleMatchTests(SimpleTestCase):
         self.assertTrue(all("lego" not in n.lower() for n in names))
 
     def test_god_of_war_not_confused_with_ragnarok(self):
-        # Query is the 2018 God of War — Ragnarök has an extra discriminator token
         self.assertFalse(titles_match("God of War Ragnarök", "God of War"))
         score = title_match_score("God of War Ragnarök", "God of War")
         self.assertLess(score, 0.67)
 
+    def test_spider_man_not_miles(self):
+        self.assertFalse(
+            titles_match("Marvel's Spider-Man: Miles Morales", "Marvel's Spider-Man")
+        )
+
+    def test_horizon_not_forbidden_west(self):
+        self.assertFalse(titles_match("Horizon Forbidden West", "Horizon Zero Dawn"))
+
     def test_cyberpunk_accepts_editions(self):
-        self.assertTrue(titles_match("Cyberpunk 2077 Ultimate Edition", "Cyberpunk 2077"))
+        self.assertTrue(
+            titles_match("Cyberpunk 2077 Ultimate Edition", "Cyberpunk 2077")
+        )
