@@ -7,6 +7,9 @@
     <div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.55rem;font-size:0.8rem;">
       <span>Buy-now score <strong style="color:var(--accent2);">{{ pred.buy_score }}</strong>/100</span>
       <span>Further-drop chance <strong style="color:var(--muted);">{{ pred.drop_likelihood }}</strong>/100</span>
+      {% if pred.drop_probability is not None %}
+        <span>History model <strong>{{ pred.drop_probability }}%</strong></span>
+      {% endif %}
       {% if pred.under_launch_pct is not None %}
         <span>{{ pred.under_launch_pct }}% vs launch</span>
       {% endif %}
@@ -15,6 +18,9 @@
       <ul style="margin:0 0 0.5rem 1.1rem;font-size:0.82rem;color:var(--muted);">
         {% for s in pred.signals %}<li style="margin-bottom:0.25rem;">{{ s }}</li>{% endfor %}
       </ul>
+    {% endif %}
+    {% if pred.model_label %}
+      <p style="font-size:0.75rem;color:var(--muted);margin:0 0 0.45rem;">{{ pred.model_label }}</p>
     {% endif %}
     <p style="font-size:0.72rem;color:var(--muted);">{{ pred.disclaimer }}</p>
   </div>

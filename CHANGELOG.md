@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-11-23 — Depth-1 gradient booster on tracked history
+
+- New `apps/games/ml/` package: promo calendar, numeric feature rows, and a product-agnostic depth-1 gradient booster (same loop as LightGBM/XGBoost, no native dependency).
+- Deal outlook now names the next Steam/Black Friday/Boxing Day window and, when a tracked game has enough up-and-down history, fits the booster on that game only.
+- Research page notes the live scorer. Rare shocks (studio shutdowns) stay manual; the model does not invent them.
+
+---
+
 ## 2026-10-05 — Fix Celery refresh + stronger franchise guards
 
 ### Bug fix (critical)

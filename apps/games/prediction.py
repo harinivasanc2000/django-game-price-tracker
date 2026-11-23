@@ -6,6 +6,8 @@ Not financial advice. Heuristic scores from:
   - Steam discount %
   - gap between official and third-party
   - recent PriceRecord trend if tracked
+  - next known promo window
+  - a depth-1 gradient booster when this game has enough history
 """
 
 from __future__ import annotations
@@ -16,6 +18,9 @@ from typing import Any
 from django.utils import timezone
 
 from .fx import to_gbp_or_zero
+from .ml.booster import FEATURE_NAMES
+from .ml.calendar_events import next_promo
+from .ml.series import fit_drop_model
 from .models import Game, PriceRecord
 
 
@@ -103,6 +108,14 @@ def predict_deal(
                     drop_score += 5
                     signals.append("Tracked price mostly flat recently.")
 
+    model_note = _apply_promo_and_history(
+        signals=signals,
+        game=game,
+        launch_gbp=launch_gbp,
+    )
+    if model_note.get("drop_boost"):
+        drop_score += model_note["drop_boost"]
+
     drop_score = max(0, min(100, drop_score + 40))
     buy_score = max(0, min(100, buy_score))
 
@@ -127,8 +140,69 @@ def predict_deal(
         "drop_likelihood": drop_score,
         "under_launch_pct": under_launch,
         "signals": signals[:6],
+        "model_label": model_note.get("label") or "",
+        "drop_probability": model_note.get("probability"),
+        "promo_label": model_note.get("promo_label") or "",
         "disclaimer": (
-            "Heuristic only from public prices — not a guarantee. "
-            "Always confirm on the store before buying."
+            "Heuristic plus a small gradient booster when this title has enough "
+            "tracked history. Not a guarantee — confirm on the store before buying."
         ),
     }
+
+
+def _history_points(game: Game, launch_gbp: float | None) -> list[dict]:
+    records = list(
+        PriceRecord.objects.filter(game=game).order_by("-recorded_at")[:80]
+    )
+    records.reverse()
+    points = []
+    for row in records:
+        gbp = float(to_gbp_or_zero(row.price, row.currency))
+        if gbp <= 0 or row.recorded_at is None:
+            continue
+        points.append(
+            {
+                "date": row.recorded_at.date(),
+                "price": gbp,
+                "reference": launch_gbp,
+                "stock_trend": -1.0 if row.is_physical and not row.in_stock else 0.0,
+            }
+        )
+    return points
+
+
+def _apply_promo_and_history(*, signals: list[str], game: Game | None, launch_gbp: float | None) -> dict:
+    """Calendar is global. The booster only runs for one tracked product."""
+    note: dict[str, Any] = {"drop_boost": 0}
+    promo = next_promo(timezone.localdate())
+    if promo and promo["days_until"] <= 21:
+        note["promo_label"] = promo["label"]
+        if promo["inside"]:
+            note["drop_boost"] = 8
+            signals.append(f"Inside {promo['label']} — planned sales are already running.")
+        else:
+            note["drop_boost"] = 12
+            signals.append(
+                f"{promo['label']} in {promo['days_until']} days — digital prices often fall in that window."
+            )
+    if game is None:
+        note["label"] = "Calendar prior only — track this game to fit a history model."
+        return note
+    try:
+        points = _history_points(game, launch_gbp)
+        model, today = fit_drop_model(points)
+    except Exception:
+        return note
+    if model is None or today is None or not model.stumps:
+        note["label"] = "Not enough price movement yet to fit a booster."
+        return note
+    probability = model.predict_proba(today)
+    percent = int(round(probability * 100))
+    note["probability"] = percent
+    note["label"] = (
+        f"Depth-1 gradient booster on {model.n_rows} past points "
+        f"({len(model.stumps)} stumps, features: {', '.join(FEATURE_NAMES[:4])}…)."
+    )
+    signals.insert(0, f"History model: about {percent}% chance of a 20%+ drop within 30 days.")
+    note["drop_boost"] = note["drop_boost"] + int(round((percent - 50) / 5))
+    return note
