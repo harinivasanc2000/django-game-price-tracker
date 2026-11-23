@@ -52,6 +52,21 @@
   </p>
 
   <section>
+    <h2>Live scorer (on the detail page)</h2>
+    <p>
+      <span class="pill ok">Shipped</span>
+      A depth-1 gradient booster in <code>apps/games/ml/booster.py</code>.
+      Same idea as LightGBM: start from the base rate, then add small if/else trees fit to the residual <code>y − p</code>.
+    </p>
+    <ul>
+      <li>Features: discount, days since last drop, days until the next promo, 14-day price change, stock flag.</li>
+      <li>Label: price fell at least 20% inside 30 days.</li>
+      <li>It fits on <strong>that game's tracked rows only</strong>, and only when both outcomes appear. Otherwise the page keeps the heuristic plus the sale calendar.</li>
+      <li>The booster takes a numeric matrix, so the same class can score another catalogue later.</li>
+    </ul>
+  </section>
+
+  <section>
     <h2>Download your data (live)</h2>
     <p>Use these for Jupyter / pandas offline. Product + price fields only.</p>
     <div class="dl-row">
@@ -148,7 +163,7 @@
   <p style="font-size:0.82rem;color:var(--muted);margin-top:0.5rem;">
     <span class="pill later">ML training offline only</span>
     <span class="pill ok">CSV export live</span>
-    <span class="pill ok">Heuristics on detail pages</span>
+    <span class="pill ok">Booster on detail pages</span>
   </p>
 </div>
 {% endblock %}
