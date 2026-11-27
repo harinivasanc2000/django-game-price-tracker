@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}My PS4 Library{% endblock %}
+
+{% block extra_css %}
+<style>
+  .library-hero { display:grid;grid-template-columns:1.4fr 1fr;gap:1rem;align-items:start;margin-bottom:1.5rem; }
+  .library-panel { background:rgba(18,8,8,.88);border:1px solid var(--border);border-radius:16px;padding:1rem; }
+  .library-stats { display:flex;gap:.6rem;flex-wrap:wrap;margin:.8rem 0; }
+  .library-stat { padding:.5rem .7rem;border-radius:10px;background:var(--bg);color:var(--muted);font-size:.8rem; }
+  .library-stat strong { display:block;color:var(--text);font-size:1.05rem; }
+  .owned-row { display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:.75rem;align-items:center;padding:.75rem 0;border-bottom:1px solid var(--border); }
+  .owned-row.done .owned-title { text-decoration:line-through;color:var(--muted); }
+  .owned-title { font-weight:650; }
+  .owned-meta { color:var(--muted);font-size:.78rem;margin-top:.15rem; }
+  .icon-button { border:1px solid var(--border);background:transparent;color:var(--muted);border-radius:8px;padding:.35rem .55rem;cursor:pointer; }
+  .library-form { display:grid;grid-template-columns:2fr repeat(3,1fr);gap:.55rem; }
+  .library-form input { min-width:0;padding:.62rem;border:1px solid var(--border);border-radius:9px;background:var(--bg);color:var(--text); }
+  .library-form .wide { grid-column:span 2; }
+  .library-form button { border:0;border-radius:9px;background:var(--accent);color:#fff;font-weight:650;cursor:pointer;padding:.65rem; }
+  .deal-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:.75rem; }
+  .deal-card { display:flex;flex-direction:column;gap:.35rem;padding:.8rem;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--text);text-decoration:none!important; }
+  .deal-card:hover { border-color:var(--accent2);transform:translateY(-2px); }
+  .deal-price { color:var(--accent2);font-size:1.05rem;font-weight:700; }
+  .local-note { color:var(--muted);font-size:.82rem;line-height:1.5; }
+  @media (max-width:760px) { .library-hero{grid-template-columns:1fr}.library-form{grid-template-columns:1fr 1fr}.library-form .wide{grid-column:span 2} }
+  @media (prefers-reduced-motion:reduce) { .deal-card{transition:none}.deal-card:hover{transform:none} }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="library-hero">
+  <section>
+    <h1 style="font-size:1.45rem;margin-bottom:.35rem;">My PS4 checklist</h1>
+    <p class="local-note">Your private local library, purchase costs, and a UK deal shortlist that excludes matching games you already own.</p>
+    <div class="library-stats">
+      <div class="library-stat"><strong>{{ owned_count }}</strong>owned</div>
+      <div class="library-stat"><strong>{{ completed_count }}</strong>completed</div>
+      <div class="library-stat"><strong>£{{ spent_total|floatformat:2 }}</strong>spent</div>
+    </div>
+    <p class="local-note">Glasgow note: online prices do not prove branch stock. Confirm the edition, disc condition, collection branch, and final price before travelling.</p>
+  </section>
+
+  <section class="library-panel">
+    <h2 style="font-size:.9rem;margin-bottom:.65rem;">Add a PS4 purchase</h2>
+    <form class="library-form" method="post" action="{% url 'games:library_add' %}">
+      {% csrf_token %}
+      <input class="wide" name="title" maxlength="255" required placeholder="Game title" aria-label="Game title">
+      <input name="purchase_price" type="number" min="0" max="99999999.99" step="0.01" required placeholder="Price £" aria-label="Purchase price in pounds">
+      <input name="retailer" maxlength="120" placeholder="Retailer, e.g. CeX" aria-label="Retailer">
+      <input name="location" maxlength="120" value="{{ default_location }}" placeholder="Location" aria-label="Purchase location">
+      <input name="purchased_on" type="date" aria-label="Purchase date">
+      <input class="wide" name="notes" maxlength="255" placeholder="Condition or notes (optional)" aria-label="Purchase notes">
+      <button type="submit">Add to checklist</button>
+    </form>
+    {% if not owned_games %}
+      <form method="post" action="{% url 'games:library_starter' %}" style="margin-top:.7rem;">
+        {% csrf_token %}
+        <button class="icon-button" type="submit">Add my 3 CeX Glasgow purchases</button>
+      </form>
+    {% endif %}
+  </section>
+</div>
+
+<section class="library-panel" style="margin-bottom:1.5rem;">
+  <h2 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);">Owned games</h2>
+  {% for item in owned_games %}
+    <div class="owned-row{% if item.completed %} done{% endif %}">
+      <form method="post" action="{% url 'games:library_toggle' item.pk %}">
+        {% csrf_token %}
+        <button class="icon-button" type="submit" aria-label="Mark {{ item.title }} {% if item.completed %}not completed{% else %}completed{% endif %}">{% if item.completed %}✓{% else %}○{% endif %}</button>
+      </form>
+      <div>
+        <div class="owned-title">{{ item.title }} <span class="badge">PS4</span></div>
+        <div class="owned-meta">£{{ item.purchase_price|floatformat:2 }}{% if item.retailer %} · {{ item.retailer }}{% endif %}{% if item.location %} · {{ item.location }}{% endif %}{% if item.purchased_on %} · {{ item.purchased_on|date:"d M Y" }}{% endif %}</div>
+        {% if item.notes %}<div class="owned-meta">{{ item.notes }}</div>{% endif %}
+        <a class="owned-meta" href="{% url 'games:steam_search' %}?q={{ item.title|urlencode }}&platform=ps4&condition=used">Compare today's UK price →</a>
+      </div>
+      <form method="post" action="{% url 'games:library_delete' item.pk %}">
+        {% csrf_token %}
+        <button class="icon-button" type="submit" aria-label="Remove {{ item.title }}">Remove</button>
+      </form>
+    </div>
+  {% empty %}
+    <p class="local-note" style="margin-top:.7rem;">No purchases saved yet. Use the starter button for your three CeX games.</p>
+  {% endfor %}
+</section>
+
+<section>
+  <div style="display:flex;justify-content:space-between;gap:1rem;align-items:end;margin-bottom:.75rem;">
+    <div><h2 style="font-size:1rem;">PS4 deals to consider next</h2><p class="local-note">Current cached UK cards, with owned titles removed.</p></div>
+    <a href="{% url 'games:steam_search' %}?platform=ps4&condition=used">Search used UK shops →</a>
+  </div>
+  {% if recommendations %}
+    <div class="deal-grid">
+      {% for deal in recommendations %}
+        <a class="deal-card" href="{{ deal.url }}"{% if deal.is_external %} target="_blank" rel="noopener"{% endif %}>
+          <strong>{{ deal.title }}</strong>
+          <span class="deal-price">{% if deal.price_gbp == 0 %}Free{% else %}£{{ deal.price_gbp|floatformat:2 }}{% endif %}</span>
+          <span class="owned-meta">{{ deal.store_name }}{% if deal.discount %} · {{ deal.discount }}% off{% endif %}</span>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="library-panel local-note">No verified PS4 recommendations are cached right now. Use the UK shop search above and retry later.</div>
+  {% endif %}
+</section>
+{% endblock %}

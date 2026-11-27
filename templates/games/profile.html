@@ -5,6 +5,8 @@
 <h1 style="font-size: 1.35rem; margin-bottom: 0.5rem;">Profile</h1>
 <p style="color: var(--muted); margin-bottom: 1.25rem;">Signed in as <strong style="color: var(--text);">{{ user.username }}</strong></p>
 
+<p style="margin-bottom:1rem;"><a href="{% url 'games:library' %}">Open my owned-game checklist →</a></p>
+
 {% if user.is_staff %}
   <p style="margin-bottom: 1rem;">
     <a href="/admin/">Open admin (wallpaper, launch prices, product notes)</a>

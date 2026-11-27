@@ -43,6 +43,8 @@ celery -A config worker --beat --loglevel=INFO --concurrency=2
 | `/guide/` | Public deal feeds and buying guidance |
 | `/deals/` | Lowest current tracked offers plus public deals |
 | `/history/` | Recent searches, views, and tracking actions |
+| `/library/` | Private PS4 purchase checklist, spend summary, and owned-aware UK deal shortlist |
+| `/signup/` | Create a local account for private libraries, watches, and alerts |
 | `/research/` | Offline-analysis notes and training-data export |
 | `/settings/` | Themes and wallpapers stored in the browser |
 | `/export/tracked.json` | Current per-store offers for tracked games |
@@ -81,6 +83,8 @@ The all-platform directory currently exposes 32 encoded destinations: official p
 - **Hard concurrency budget:** three process-wide pools cap page, bundle, and UK work at 17 lazy threads by default. Deadlines cancel queued work, while one blocked retailer soft-fails without multiplying threads per request.
 
 Signed-in profiles also show each watch's cheapest fresh offer and distance from its target. Targets can be edited inline, including a £0 target for verified free-game alerts. Quotes older than 24 hours are visibly marked for refresh and disappear from current-deal surfaces after seven days.
+
+The signed-in library keeps personal purchases separate from market price history. It records what you paid, retailer/location, date, notes, and completion state; its PS4 shortlist removes matching owned games. The starter button adds the documented three CeX Glasgow purchases without assuming or creating an account.
 
 Home transitions use browser-native scrolling, `IntersectionObserver`, passive events, and animation-frame throttling rather than a UI framework. Mobile cards use horizontal scroll snapping, and `prefers-reduced-motion` disables reveals, smooth scrolling, progress animation, and animated wallpapers.
 

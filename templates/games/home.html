@@ -15,8 +15,10 @@
   }
   .hero-search .search-wrap {
     position: sticky !important; top: 0.55rem; z-index: 45;
-    padding: 0.55rem; border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
-    border-radius: 17px; background: color-mix(in srgb, var(--card) 78%, transparent);
+    padding: 0.55rem; border: 1px solid var(--border);
+    border-color: color-mix(in srgb, var(--border) 75%, transparent);
+    border-radius: 17px; background: rgba(18, 8, 8, 0.88);
+    background: color-mix(in srgb, var(--card) 78%, transparent);
     box-shadow: 0 12px 38px rgba(0, 0, 0, 0.2);
     backdrop-filter: blur(18px) saturate(1.25); -webkit-backdrop-filter: blur(18px) saturate(1.25);
   }
@@ -160,6 +162,7 @@
   .platform-game-grid .cover { aspect-ratio: 3 / 4; }
   .cover-placeholder {
     display: grid; place-items: center;
+    background: var(--card) !important;
     background: radial-gradient(circle at 25% 20%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 55%), var(--card) !important;
   }
   .cover-placeholder > span { color: var(--muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.12em; }
@@ -167,7 +170,8 @@
   .feed-empty {
     display: grid; gap: 0.35rem; justify-items: start;
     padding: 1.2rem; border: 1px solid var(--border); border-radius: 16px;
-    color: var(--muted); background: color-mix(in srgb, var(--card) 82%, transparent);
+    color: var(--muted); background: var(--card);
+    background: color-mix(in srgb, var(--card) 82%, transparent);
   }
   .feed-empty strong { color: var(--text); }
   .feed-empty-action { margin-top: 0.35rem; font-weight: 600; }

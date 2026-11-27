@@ -141,6 +141,48 @@ class Watch(models.Model):
         return f"{self.user.username} -> {self.game.title}"
 
 
+class OwnedGame(models.Model):
+    """A private, user-maintained record of a game already purchased."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="owned_games"
+    )
+    title = models.CharField(max_length=255)
+    platform = models.CharField(
+        max_length=20, choices=Game.Platform.choices, default=Game.Platform.PS4
+    )
+    purchase_price = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=3, default="GBP")
+    retailer = models.CharField(max_length=120, blank=True)
+    location = models.CharField(max_length=120, blank=True)
+    purchased_on = models.DateField(null=True, blank=True)
+    completed = models.BooleanField(default=False)
+    notes = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["completed", "-purchased_on", "title"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "title", "platform"], name="unique_user_owned_game"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(purchase_price__gte=0),
+                name="owned_game_price_nonnegative",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["user", "platform", "completed"],
+                name="games_owned_user_id_00d38e_idx",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} owns {self.title} ({self.platform})"
+
+
 class PriceAlert(models.Model):
     """One fire-and-forget notification: emitted when a watch target is hit."""
 

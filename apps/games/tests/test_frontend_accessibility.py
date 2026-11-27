@@ -13,7 +13,8 @@ class SharedWidgetAccessibilityTests(SimpleTestCase):
         self.assertIn('role="listbox"', html)
         self.assertIn("new AbortController()", html)
         self.assertIn("version !== requestVersion", html)
-        self.assertIn("platform.addEventListener('change', updateSuggestionLinks)", html)
+        self.assertIn("platform.addEventListener('change'", html)
+        self.assertIn("steamSuggestionsEnabled", html)
         self.assertNotIn(".innerHTML", html)
 
     def test_tracked_drawer_exposes_and_manages_modal_focus(self):

@@ -7,9 +7,11 @@ Add new pages at the top of urlpatterns and wire nav in templates/base.html.
 from django.urls import path
 
 from . import about_view
+from . import auth_view
 from . import buy_guide_view
 from . import health_view
 from . import home_view
+from . import library_view
 from . import research_view
 from . import search_view
 from . import settings_view
@@ -30,6 +32,8 @@ urlpatterns = [
     path("settings/", settings_view.appearance_settings, name="appearance"),
     path("history/", views.history_page, name="history"),
     path("profile/", views.profile, name="profile"),
+    path("signup/", auth_view.signup, name="signup"),
+    path("library/", library_view.library, name="library"),
     # --- exports / health ---
     path("health/", health_view.health, name="health"),
     path("export/tracked.json", views_export.export_tracked_json, name="export_tracked"),
@@ -51,4 +55,8 @@ urlpatterns = [
     path("watch/<slug:slug>/", views.watch_game, name="watch"),
     path("unwatch/<slug:slug>/", views.unwatch_game, name="unwatch"),
     path("alerts/clear/", views.clear_alerts, name="clear_alerts"),
+    path("library/add/", library_view.add_owned_game, name="library_add"),
+    path("library/starter/", library_view.add_starter_purchases, name="library_starter"),
+    path("library/<int:pk>/toggle/", library_view.toggle_owned_game, name="library_toggle"),
+    path("library/<int:pk>/delete/", library_view.delete_owned_game, name="library_delete"),
 ]

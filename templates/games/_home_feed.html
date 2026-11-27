@@ -26,7 +26,7 @@
                 <div class="title">{{ deal.title }}</div>
                 <div class="meta">
                   {{ deal.store_name }}
-                  {% if deal.source_kind == "tracker" %} · public price tracker{% elif deal.source_kind == "tracked" %} · tracked offer{% else %} · official store{% endif %}
+                  {% if deal.source_kind == "aggregator" %} · public price tracker{% elif deal.source_kind == "tracked" %} · tracked offer{% else %} · official store{% endif %}
                 </div>
                 <div class="price-row">
                   <div>
